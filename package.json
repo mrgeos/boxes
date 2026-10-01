@@ -1,0 +1,13 @@
+{
+  "name": "box-studio-3d",
+  "private": true,
+  "type": "module",
+  "description": "Редактор 3D-мокапов упаковки",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0",
+    "three": "0.169.0"
+  }
+}
