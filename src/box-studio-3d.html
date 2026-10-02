@@ -363,6 +363,7 @@ const FINISHES = {
   kraft: { label: 'Крафт (печать по бурому)', r: .95, m: 0, cc: 0, ccr: 0, kraft: '#c49a6a' },
   metal: { label: 'Металлизированный картон', r: .3, m: .9, cc: .3, ccr: .15 },
 };
+const PET_PRINT = { label: 'Печать на ПЭТ', r: .35, m: 0, cc: 0, ccr: 0 };
 const EFFECTS = {
   none: 'Обычная печать', 'foil-gold': 'Фольга — золото', 'foil-silver': 'Фольга — серебро', 'foil-copper': 'Фольга — медь',
   'foil-holo': 'Фольга — голография', 'spot-uv': 'Выборочный УФ-лак', emboss: 'Тиснение выпуклое', deboss: 'Конгрев вдавленный',
@@ -383,6 +384,7 @@ const PRESETS = [
   { id: 'lidbase', label: 'Крышка-дно', type: 'box', dims: { w: 220, h: 90, d: 160 }, finish: 'soft', edge: '#e2ddd4', thick: 1.5, lid: { type: 'telescope', lidH: 45 } },
   { id: 'shipping', label: 'Гофрокороб', type: 'box', dims: { w: 400, h: 300, d: 300 }, finish: 'kraft', edge: '#a87f50', thick: 4 },
   { id: 'product', label: 'Коробка для продукта', type: 'box', dims: { w: 70, h: 180, d: 70 }, finish: 'gloss', edge: '#ece8e0', thick: .6 },
+  { id: 'cake', label: 'Коробка для торта (прозрачная крышка)', type: 'box', dims: { w: 230, h: 45, d: 180 }, finish: 'matte', edge: '#ece8e0', thick: .8, board: '#f7f5f0', lid: { type: 'telescope', lidH: 110, mat: 'clear' } },
   { id: 'gift', label: 'Подарочная коробка', type: 'box', dims: { w: 200, h: 120, d: 200 }, finish: 'soft', edge: '#e2ddd4', thick: 1.5, lid: { type: 'telescope', lidH: 40 } },
   { id: 'tray', label: 'Лоток без крышки', type: 'box', dims: { w: 240, h: 60, d: 160 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'none' } },
   { id: 'flat', label: 'Плоская (пицца, одежда)', type: 'box', dims: { w: 330, h: 45, d: 330 }, finish: 'kraft', edge: '#a87f50', thick: 3 },
@@ -407,10 +409,13 @@ function faceKeys(o) {
   if (lt === 'flap' && o.earsOn) k.push('earLeft', 'earRight');
   if (lt === 'telescope') k.push(...LID_WALLS);
   k.push('right', 'left', 'back', 'bottom');
-  if (lt !== 'none') k.push('inside');
+  if (lt !== 'none' && !(lt === 'telescope' && o.lidMat === 'clear')) k.push('inside');
   k.push('insideBottom');
   return k;
 }
+/* a separate lid can be clear PET (cake boxes): its faces carry only print, the rest is plastic */
+const clearLid = o => o.type === 'box' && o.lidType === 'telescope' && o.lidMat === 'clear';
+const isClearFace = (o, k) => clearLid(o) && (k === 'top' || LID_WALLS.includes(k));
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
 const FACE_LABEL = { flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
 const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : FACE_LABEL[k];
@@ -443,6 +448,7 @@ function ensureFaces(o) {
     o.flapH ??= Math.round(o.dims.h * .35);
     o.earsOn ??= true; o.earFull ??= true; o.earLen ??= o.dims.d;
     o.lidH ??= Math.round(o.dims.h * .45);
+    o.lidMat ??= 'board';
   }
   if (!o.window) o.window = { on: false, w: Math.round(o.dims.w * .68), d: Math.round(o.dims.d * .85), h: Math.round(o.dims.h * .46), r: 6 };
   o.window.place ??= 'edge'; o.window.off ??= 0; o.window.corners ??= 'round';
@@ -455,7 +461,7 @@ function newObject(presetId = 'mailer') {
   const o = { id: uid(), name: p.label, type: p.type, dims: { ...p.dims }, lid: 0, thickness: p.thick ?? 2, finish: p.finish, edge: p.edge,
     grain: p.grain ?? (p.finish === 'kraft' ? .55 : .12), dieline: null, pos: { x: 0, z: 0 }, rotY: 0, faces: {},
     board: '#ffffff', whiteInside: true, window: p.window ? { ...p.window } : null,
-    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH };
+    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board' };
   ensureFaces(o);
   if (p.board) setBoard(o, p.board);
   return o;
@@ -482,8 +488,9 @@ function faceMM(o, k) {
     return k === 'flap' ? [ld.wl, ld.fh] : k.startsWith('ear') ? [ld.el, ld.fh] : [ld.wl, ld.dl];
   }
   if (k === 'flap') return [w, clamp(o.flapH, 3, h)];
-  if (k === 'lidFront' || k === 'lidBack') return [lw, clamp(o.lidH, 3, h)];
-  if (k === 'lidLeft' || k === 'lidRight') return [ld, clamp(o.lidH, 3, h)];
+  const lh = clamp(o.lidH, 3, o.lidMat === 'clear' ? 1000 : h);
+  if (k === 'lidFront' || k === 'lidBack') return [lw, lh];
+  if (k === 'lidLeft' || k === 'lidRight') return [ld, lh];
   if (tele && (k === 'top' || k === 'inside')) return [lw, ld];
   return [w, d];
 }
@@ -703,11 +710,13 @@ function buildObject(o) {
   if (!rt) {
     rt = { group: new THREE.Group(), faces: {},
       edgeMat: new THREE.MeshStandardMaterial({ roughness: .92, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }),
+      petMat: makePetMaterial(),
+      petEdgeMat: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: .85, depthWrite: false }),
       filmMat: new THREE.MeshPhysicalMaterial({ color: 0xf2f8f8, transparent: true, opacity: .22, roughness: .04, metalness: 0, clearcoat: 1, clearcoatRoughness: .02, side: THREE.DoubleSide, depthWrite: false }),
       innerMat: new THREE.MeshStandardMaterial({ roughness: .9, shadowSide: THREE.DoubleSide }), lidPivot: null };
     RT.set(o.id, rt); world.add(rt.group);
   }
-  rt.group.traverse(m => { if (m.isMesh) m.geometry.dispose(); });
+  rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
   rt.group.clear(); rt.lidPivot = null;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else buildTube(o, rt);
@@ -715,10 +724,26 @@ function buildObject(o) {
 }
 function disposeObject(id) {
   const rt = RT.get(id); if (!rt) return;
-  rt.group.traverse(m => { if (m.isMesh) m.geometry.dispose(); });
+  rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
   world.remove(rt.group);
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
-  rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); RT.delete(id);
+  rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); RT.delete(id);
+}
+/* clear PET: black diffuse, so only reflections remain (stronger at grazing angles). The shader turns
+   their brightness into coverage, so plain plastic stays see-through even over the page background
+   (the canvas is transparent) and highlights still read as light on top. */
+function makePetMaterial() {
+  const m = new THREE.MeshPhysicalMaterial({ color: 0x000000, metalness: 0, roughness: .06, ior: 1.57, specularIntensity: 1,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  m.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
+      float petHaze = 0.045;
+      vec3 petLight = gl_FragColor.rgb + vec3(petHaze);
+      float petA = clamp(max(max(petLight.r, petLight.g), petLight.b), 0.0, 1.0);
+      gl_FragColor = vec4(petLight / max(petA, 1e-3), petA);`);
+  };
+  m.customProgramCacheKey = () => 'pet-v1';
+  return m;
 }
 /* lid outline in mm: an outer-flap lid overhangs the base by the board thickness on the sides and front */
 function lidDimsMM(o) {
@@ -741,7 +766,7 @@ const contactMat = (() => {
    or as a closed opening inside the lid */
 function windowPlace(o) {
   const lt = o.lidType || 'flat';
-  if (lt === 'none') return null;
+  if (lt === 'none' || clearLid(o)) return null;
   if (lt === 'telescope') return 'lid';
   const pl = o.window.place;
   if (pl === 'lid' || pl === 'back') return pl;
@@ -922,8 +947,28 @@ function buildBox(o, rt) {
   if (lt === 'none') return;
   if (lt === 'telescope') {
     // separate lid: a shallow box that slides over the base walls
+    if (clearLid(o)) {
+      // clear PET lid: a thin transmissive shell, print sits on a transparent overlay just outside it.
+      // A lid taller than the tray rests on the floor, a shorter one on the tray rim.
+      const G = .6 * S, TP = .3 * S, WL = W + 2 * (G + TP), DL = D + 2 * (G + TP), LH = clamp(o.lidH, 3, 1000) * S;
+      const top = Math.max(H + TP, LH), lift = .05 * S;
+      const lg = new THREE.Group(); lg.position.set(0, top, 0); g.add(lg); rt.lidGroup = lg; rt.lidBase = top;
+      const part = (key, w, h, pos, rot, n) => {
+        const shell = add(lg, w, h, rt.petMat, pos, rot); shell.castShadow = false; shell.raycast = () => {};
+        const print = add(lg, w, h, F(key), pos.map((v, i) => v + n[i] * lift), rot, { face: key }); print.castShadow = false; print.renderOrder = 3;
+      };
+      part('top', WL, DL, [0, 0, 0], [-P / 2, 0, 0], [0, 1, 0]);
+      part('lidFront', WL, LH, [0, -LH / 2, DL / 2], [0, 0, 0], [0, 0, 1]);
+      part('lidBack', WL, LH, [0, -LH / 2, -DL / 2], [0, P, 0], [0, 0, -1]);
+      part('lidRight', DL, LH, [WL / 2, -LH / 2, 0], [0, P / 2, 0], [1, 0, 0]);
+      part('lidLeft', DL, LH, [-WL / 2, -LH / 2, 0], [0, -P / 2, 0], [-1, 0, 0]);
+      // folded PET edges read as thin bright lines
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(WL, LH, DL)), rt.petEdgeMat);
+      edges.position.set(0, -LH / 2, 0); edges.raycast = () => {}; edges.renderOrder = 4; lg.add(edges);
+      return;
+    }
     const G = .5 * S, WL = W + 2 * (T + G), DL = D + 2 * (T + G), LH = clamp(o.lidH, 3, o.dims.h) * S, wy = (T - LH) / 2;
-    const lg = new THREE.Group(); lg.position.set(0, H, 0); g.add(lg); rt.lidGroup = lg;
+    const lg = new THREE.Group(); lg.position.set(0, H, 0); g.add(lg); rt.lidGroup = lg; rt.lidBase = H;
     const tHole = lidWin && rrectPts(0, -lidWin.off * S, ww, wd, wr), tHoleIn = tHole && tHole.map(v => V2(v.x, -v.y));
     addG(lg, tHole ? planeGeoHole(WL, DL, tHole) : new THREE.PlaneGeometry(WL, DL), F('top'), [0, T, 0], [-P / 2, 0, 0], { face: 'top' });
     addG(lg, tHoleIn ? planeGeoHole(WL - 2 * T, DL - 2 * T, tHoleIn) : new THREE.PlaneGeometry(WL - 2 * T, DL - 2 * T), F('inside'), [0, 0, 0], [P / 2, 0, 0], { face: 'inside' });
@@ -1051,8 +1096,8 @@ function applyLid(o) {
   for (const m of rt.contact || []) m.visible = o.lid < 1.5;
   if (rt.lidGroup) {
     // the separate lid lifts, slides back a little and tilts
-    const f = clamp(o.lid / 125, 0, 1), H = o.dims.h * S, LH = clamp(o.lidH, 3, o.dims.h) * S;
-    rt.lidGroup.position.set(0, H + f * (LH + H * .35 + .3), -f * o.dims.d * S * .18);
+    const f = clamp(o.lid / 125, 0, 1), H = o.dims.h * S, LH = clamp(o.lidH, 3, clearLid(o) ? 1000 : o.dims.h) * S;
+    rt.lidGroup.position.set(0, (rt.lidBase ?? H) + f * (Math.min(LH, (rt.lidBase ?? H)) + H * .35 + .3), -f * o.dims.d * S * .18);
     rt.lidGroup.rotation.x = -f * .32;
   }
 }
@@ -1149,10 +1194,13 @@ function renderFace(o, k) {
   const rt = RT.get(o.id); if (!rt || !faceKeys(o).includes(k)) return;
   const f = ensureFaceRT(o, k), face = o.faces[k], ctx = f.ctx;
   const W = f.canvas.width, H = f.canvas.height;
-  const fin = FINISHES[o.finish] || FINISHES.matte;
+  // print on a clear PET lid: no board colour, paper grain or kraft, only the layers
+  const clear = f.clear = isClearFace(o, k);
+  const fin = clear ? PET_PRINT : FINISHES[o.finish] || FINISHES.matte;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-  ctx.fillStyle = face.bg; ctx.fillRect(0, 0, W, H);
-  if (o.dieline && outerKeys(o).includes(k)) {
+  if (clear) ctx.clearRect(0, 0, W, H);
+  else { ctx.fillStyle = face.bg; ctx.fillRect(0, 0, W, H); }
+  if (!clear && o.dieline && outerKeys(o).includes(k)) {
     const im = getImg(o.dieline), net = netLayout(o), p = net.panels.find(p => p.key === k);
     if (im && p) drawNetPanel(ctx, im, p, 0, 0, W, H, [p.x / net.W * im.naturalWidth, p.y / net.H * im.naturalHeight, p.w / net.W * im.naturalWidth, p.h / net.H * im.naturalHeight]);
   }
@@ -1163,8 +1211,8 @@ function renderFace(o, k) {
     if (isFoil(L.effect)) fxl.push(L);
     else { drawLayer(ctx, L, W, H); if (L.effect !== 'none') fxl.push(L); }
   }
-  if (fin.kraft) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = fin.kraft; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
-  if (o.grain > 0) {
+  if (fin.kraft && !clear) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = fin.kraft; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
+  if (o.grain > 0 && !clear) {
     const grainPat = f.pat || (f.pat = ctx.createPattern(grainCanvas, 'repeat'));
     grainPat.setTransform(new DOMMatrix().scale(f.ppm * 45 / 256));
     ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = Math.min(1, o.grain * (fin.kraft ? .9 : .45));
@@ -1193,7 +1241,7 @@ function updateFaceMaterial(o, k, f, fxl, fin) {
     const c = aux(f, 'bump'), x = f.bumpCtx, W = c.width, H = c.height;
     x.filter = 'none'; x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
     x.fillStyle = '#808080'; x.fillRect(0, 0, W, H);
-    if (o.grain > 0) {
+    if (o.grain > 0 && !f.clear) {
       const p = x.createPattern(grainCanvas, 'repeat'); p.setTransform(new DOMMatrix().scale(f.ppm / 2 * 45 / 256));
       x.globalCompositeOperation = 'overlay'; x.globalAlpha = o.grain * .6; x.fillStyle = p; x.fillRect(0, 0, W, H);
       x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1;
@@ -1207,11 +1255,12 @@ function updateFaceMaterial(o, k, f, fxl, fin) {
     x.filter = 'none';
     f.bumpTex.needsUpdate = true;
     m.bumpMap = f.bumpTex; m.bumpScale = 4;
-  } else if (o.grain > 0) { m.bumpMap = f.grain; m.bumpScale = o.grain * 1.2; }
+  } else if (o.grain > 0 && !f.clear) { m.bumpMap = f.grain; m.bumpScale = o.grain * 1.2; }
   else m.bumpMap = null;
   m.clearcoat = fin.cc; m.clearcoatRoughness = fin.ccr;
   m.sheen = fin.sheen || 0; m.sheenRoughness = .8; m.sheenColor.set(0xffffff);
-  const sig = [!!m.roughnessMap, !!m.bumpMap, fin.cc > 0, !!fin.sheen].join();
+  m.transparent = !!f.clear; m.depthWrite = !f.clear;
+  const sig = [!!m.roughnessMap, !!m.bumpMap, fin.cc > 0, !!fin.sheen, !!f.clear].join();
   if (sig !== f.sig) { f.sig = sig; m.needsUpdate = true; }
 }
 
@@ -1494,9 +1543,11 @@ function renderModel() {
     ${box && o.lidType === 'flap' ? `<label class="check"><input type="checkbox" data-k="earsOn"> Боковые ушки клапана</label>` : ''}
     ${box && o.lidType === 'flap' && o.earsOn ? `<label class="check"><input type="checkbox" data-k="earFull"> Ушки на всю глубину коробки</label>` : ''}
     ${box && o.lidType === 'flap' && o.earsOn && !o.earFull ? rangeField('Длина ушек, мм', 'earLen', 5, 800, 1) : ''}
-    ${box && o.lidType === 'telescope' ? rangeField('Высота крышки, мм', 'lidH', 3, 400, 1) : ''}
+    ${box && o.lidType === 'telescope' ? `<div class="field wide"><span class="fl">Материал крышки</span><select data-k="lidMat"><option value="board">Картон, как дно</option><option value="clear">Прозрачный пластик (ПЭТ)</option></select></div>` : ''}
+    ${box && o.lidType === 'telescope' ? rangeField('Высота крышки, мм', 'lidH', 3, 600, 1) : ''}
+    ${box && clearLid(o) ? `<p class="hint">Если крышка выше дна, она стоит на столе и закрывает лоток целиком. На прозрачные грани можно нанести печать: всё, что не закрыто слоями, остаётся прозрачным.</p>` : ''}
     ${box ? rangeField('Толщина, мм', 'thickness', .3, 6, .1) : ''}
-    ${box && o.lidType !== 'none' ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
+    ${box && windowPlace(o) ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
     ${box && o.window.on && windowPlace(o) ? windowFields(o) : ''}
     <div class="sec-h" style="margin-top:4px"><h2>Материал</h2></div>
     <div class="field wide"><span class="fl">Цвет картона</span><div class="row">
@@ -1515,6 +1566,7 @@ function renderModel() {
     if (k === 'name') { renderObjects(); $('#objBadge').textContent = o.name; return; }
     if (k === 'type') { o.dims = { ...PRESETS.find(p => p.type === o.type).dims }; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, faceKeys(o)[0]); renderModel(); renderObjects(); return; }
     if (k === 'lidType') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'lidMat') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'earsOn' || k === 'earFull') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k.startsWith('dims') || k === 'thickness') { rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
@@ -1547,6 +1599,7 @@ function renderModel() {
     if (o.type === 'box') {
       o.lidType = p.lid?.type ?? 'flat';
       for (const [k, v] of [['flapH', p.lid?.flapH], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
+      o.lidMat = p.lid?.mat ?? 'board';
       o.earsOn = true; o.earFull = true;
       ensureFaces(o); if (p.board) setBoard(o, p.board);
       applyObjMaterials(o); select(o.id, sel.face);
@@ -2087,8 +2140,8 @@ function exportVideo() {
 function templateSVG(o) {
   const n = netLayout(o), f = v => +v.toFixed(2);
   let body = '';
-  const label = (p) => { const [mw, mh] = faceMM(o, p.key); const fs = Math.max(3, Math.min(p.w, p.h) * .07);
-    return `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}"${p.rot ? ` transform="rotate(180 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''} font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(faceLabel(o, p.key).toUpperCase())} · ${fmt(mw, 1)}×${fmt(mh, 1)} мм</text>`; };
+  const label = (p) => { const [mw, mh] = faceMM(o, p.key), pet = isClearFace(o, p.key) ? ' · ПЭТ' : ''; const fs = Math.max(3, Math.min(p.w, p.h) * .07);
+    return `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}"${p.rot ? ` transform="rotate(180 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''} font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(faceLabel(o, p.key).toUpperCase())} · ${fmt(mw, 1)}×${fmt(mh, 1)} мм${pet}</text>`; };
   if (o.type === 'tube') {
     for (const p of n.panels) {
       body += p.circle ? `<circle cx="${f(p.x + p.w / 2)}" cy="${f(p.y + p.h / 2)}" r="${f(p.w / 2)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`
