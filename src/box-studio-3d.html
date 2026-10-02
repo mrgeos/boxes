@@ -405,7 +405,7 @@ PRESETS.push(
   { id: 'bagFlatClear', label: 'Пакет плоский прозрачный 100×150', type: 'bag', dims: { w: 100, h: 150, d: 10 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'flat', top: 'flap', mat: 'clear', flapH: 30 } },
   { id: 'bagBlock', label: 'Пакет с плоским дном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'block', top: 'fold', turns: 2, mat: 'frosty', flapH: 16 } },
   { id: 'bagKraft', label: 'Крафт-пакет с дном и экстендером', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#c39460', grain: .45, bag: { style: 'block', top: 'fold', turns: 2, mat: 'kraft', flapH: 16, ext: true } },
-  { id: 'bagWindow', label: 'Крафт-пакет с окном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#e8d3b4', grain: .35, bag: { style: 'block', top: 'fold', turns: 2, mat: 'kraft', flapH: 16, win: { on: true, w: 40, h: 80, y: 30, wrap: 'right', ws: 30 } } },
+  { id: 'bagWindow', label: 'Крафт-пакет с окном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#e8d3b4', grain: .35, bag: { style: 'block', top: 'fold', turns: 2, mat: 'kraft', flapH: 16, win: { on: true, w: 46, h: 80, cy: 75, corners: 'round', r: 6 } } },
 );
 const BAG_MATS = { clear: 'Прозрачная плёнка', frosty: 'Матовая плёнка (frosty)', tracing: 'Калька', paper: 'Бумага белая', kraft: 'Крафт-бумага' };
 const BAG_TOPS = { flap: 'Клапан с клеевой лентой', fold: 'Завёрнут (отворот)', seal: 'Запаян' };
@@ -497,6 +497,7 @@ function ensureFaces(o) {
   if (o.type === 'bag') {
     o.bagStyle ??= 'flat'; o.bagTop ??= 'flap'; o.bagMat ??= 'frosty'; o.flapH ??= 35; o.rollTurns ??= 1; o.shoulder ??= 0;
     o.bagWin ??= defaultBagWin(o.dims);
+    o.bagWin.cy ??= (o.bagWin.y ?? Math.round(o.dims.h * .2)) + (o.bagWin.h ?? 0) / 2; o.bagWin.corners ??= 'square'; o.bagWin.r ??= 6;
     o.ext ??= { on: false, h: 40, ov: 18, w: o.dims.w, staples: 2 };
     o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 6 };
   }
@@ -517,7 +518,7 @@ function newObject(presetId = 'mailer') {
   if (p.board) setBoard(o, p.board);
   return o;
 }
-const defaultBagWin = d => ({ on: false, w: Math.round(d.w * .5), h: Math.round(d.h * .35), y: Math.round(d.h * .2), x: 0, wrap: 'none', ws: Math.round((d.d || 20) * .6) });
+const defaultBagWin = d => ({ on: false, w: Math.round(d.w * .5), h: Math.round(d.h * .35), cy: Math.round(d.h * .37), x: 0, corners: 'round', r: 6 });
 function applyBagPreset(o, p) {
   Object.assign(o, { bagStyle: p.bag.style, bagTop: p.bag.top, bagMat: p.bag.mat, flapH: p.bag.flapH, lid: 0, rollTurns: p.bag.turns ?? 1, shoulder: 0,
     ext: { on: !!p.bag.ext, h: 40, ov: 18, w: p.dims.w, staples: 2 }, bagWin: { ...defaultBagWin(p.dims), ...(p.bag.win || { on: false }) } });
@@ -749,16 +750,16 @@ function bagDims(o) {
   }
   return B;
 }
-/* windows cut into a paper bag (with film behind), per side as [u0, u1, v0, v1] */
+/* a window cut into the front of a paper bag (with film behind), as [u0, u1, v0, v1] plus corner radius r (mm).
+   It grows from its centre: cy is the centre's height above the bottom, x shifts it sideways. */
 function bagWindows(o) {
   const win = o.bagWin;
   if (o.type !== 'bag' || bagFilm(o) || !win?.on) return {};
-  const B = bagDims(o), { W, D, Hv } = B, w = clamp(win.w, 5, W - 4), h = clamp(win.h, 5, Hv - 10), y = clamp(win.y, 3, Hv - h - 3);
-  const v0 = y / Hv, v1 = (y + h) / Hv, wrap = B.block ? win.wrap || 'none' : 'none', ws = clamp(win.ws ?? D * .6, 3, Math.max(3, D - 3));
-  if (wrap === 'right') return { front: [1 - w / W, 1, v0, v1], right: [0, ws / D, v0, v1] };
-  if (wrap === 'left') return { front: [0, w / W, v0, v1], left: [1 - ws / D, 1, v0, v1] };
-  const x0 = clamp((W - w) / 2 + (win.x || 0), 2, W - w - 2);
-  return { front: [x0 / W, (x0 + w) / W, v0, v1] };
+  const B = bagDims(o), { W, Hv } = B, w = clamp(win.w, 5, W - 4), h = clamp(win.h, 5, Hv - 10);
+  const cy = clamp(win.cy ?? Hv * .4, h / 2 + 3, Hv - h / 2 - 3), x0 = clamp((W - w) / 2 + (win.x || 0), 2, W - w - 2);
+  const r = [x0 / W, (x0 + w) / W, (cy - h / 2) / Hv, (cy + h / 2) / Hv];
+  r.r = win.corners === 'round' ? clamp(win.r ?? 6, 0, Math.min(w, h) / 2) : 0;
+  return { front: r };
 }
 function bagNet(o) {
   const B = bagDims(o), { W, D, fh, Hv, roll } = B, panels = [], seams = [], HID = 'скрыто в скрутке';
@@ -789,7 +790,7 @@ function bagNet(o) {
     panels.push({ key: 'bottom', x: D, y: t0 + Hv, w: W, h: D });
     NW = gx + 12; NH = t0 + Hv + D;
     // crease lines of the gable top across front, back and the gusset centres
-    const yc = t0 + Hv - B.neck - B.L, yt = t0 + Hv - B.neck;
+    const yc = t0 + B.neck + B.L, yt = t0 + B.neck;   // measured down from the top edge
     seams.creases = [[0, yc, gx, yc], ...(B.neck ? [[0, yt, gx, yt]] : []), [D / 2, t0, D / 2, t0 + Hv], [D + W + D / 2, t0, D + W + D / 2, t0 + Hv]];
   }
   if (B.top === 'flap') { const p = panels.find(q => q.key === 'flap'); glue = { x: p.x + 4, y: p.y + 3, w: p.w - 8, h: Math.min(10, fh * .35) }; }
@@ -1775,7 +1776,11 @@ function renderFace(o, k) {
   if (bf && o.bagStyle !== 'block' && (k === 'front' || k === 'back')) bagSeals(ctx, o, W, H);
   const bw = o.type === 'bag' ? bagWindows(o)[k] : null;
   f.win = !!bw;
-  if (bw) ctx.clearRect(bw[0] * W, (1 - bw[3]) * H, (bw[1] - bw[0]) * W, (bw[3] - bw[2]) * H);
+  if (bw) {
+    const kk = W / faceMM(o, k)[0];
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out'; ctx.beginPath();
+    ctx.roundRect(bw[0] * W, (1 - bw[3]) * H, (bw[1] - bw[0]) * W, (bw[3] - bw[2]) * H, bw.r * kk); ctx.fill(); ctx.restore();
+  }
   // stickers sit on top of everything printed
   const ops = [];
   const frs = RT.get(o.id)?.frames;
@@ -2529,7 +2534,7 @@ function renderModel() {
     if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k.startsWith('dims') || k === 'thickness') { rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lid') { applyLid(o); return; }
-    if (k === 'bagStyle') { o.dims.d = o.bagStyle === 'block' ? Math.round(o.dims.w * .65) : 12; o.lid = 0; o.bagWin.ws = Math.round(o.dims.d * .6); ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); renderObjects(); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'bagStyle') { o.dims.d = o.bagStyle === 'block' ? Math.round(o.dims.w * .65) : 12; o.lid = 0; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'bagTop' || k === 'ext.on') { o.lid = 0; if (k === 'bagTop' && o.bagTop === 'fold' && o.bagStyle === 'block' && o.rollTurns < 2) { o.rollTurns = 2; o.flapH = 16; } ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'bagMat') {
       if (o.bagMat === 'kraft') { o.grain = .45; setBoard(o, '#c39460'); } else if (o.bagMat === 'paper') { o.grain = .12; setBoard(o, '#ffffff'); }
@@ -2539,7 +2544,7 @@ function renderModel() {
     if (k === 'rollTurns' || k === 'shoulder' || k.startsWith('bagWin')) {
       if (k === 'rollTurns') o.lid = 0;
       rebuildQueue.add(o.id); markObj(o); ui.net = true; updateFaceMeta();
-      if (k === 'rollTurns' || k === 'bagWin.on' || k === 'bagWin.wrap') renderModel();
+      if (k === 'rollTurns' || k === 'bagWin.on' || k === 'bagWin.corners') renderModel();
       return;
     }
     if (k === 'cupWall' || k === 'cupLid') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'cupLid') renderModel(); return; }
@@ -2603,9 +2608,11 @@ function bagFields(o) {
     + `<label class="check"><input type="checkbox" data-k="ext.on"> Экстендер (картонный хедер на степлере)</label>`
     + (o.ext?.on ? rangeField('Экстендер: высота, мм', 'ext.h', 10, 200, 1) + rangeField('Экстендер: нахлёст на пакет, мм', 'ext.ov', 8, 200, 1) + `<div class="field wide"><span class="fl">Скобы</span><select data-k="ext.staples"><option value="1">Одна по центру</option><option value="2">Две</option></select></div>` : '')
     + (!bagFilm(o) ? `<label class="check"><input type="checkbox" data-k="bagWin.on"> Окно с плёнкой</label>`
-      + (o.bagWin?.on ? (block ? `<div class="field wide"><span class="fl">Окно</span><select data-k="bagWin.wrap"><option value="none">На переде</option><option value="right">С заходом на правый фальц</option><option value="left">С заходом на левый фальц</option></select></div>` : '')
-        + rangeField('Окно: ширина на переде, мм', 'bagWin.w', 5, 600, 1) + rangeField('Окно: высота, мм', 'bagWin.h', 5, 800, 1) + rangeField('Окно: от дна, мм', 'bagWin.y', 3, 800, 1)
-        + (block && o.bagWin.wrap !== 'none' ? rangeField('Окно: на фальце, мм', 'bagWin.ws', 3, 300, 1) : rangeField('Окно: сдвиг вбок, мм', 'bagWin.x', -300, 300, 1)) : '') : '')
+      + (o.bagWin?.on ? rangeField('Окно: ширина, мм', 'bagWin.w', 5, 600, 1) + rangeField('Окно: высота, мм', 'bagWin.h', 5, 800, 1)
+        + rangeField('Окно: центр от дна, мм', 'bagWin.cy', 5, 800, 1) + rangeField('Окно: сдвиг вбок, мм', 'bagWin.x', -300, 300, 1)
+        + `<div class="field wide"><span class="fl">Углы окна</span><select data-k="bagWin.corners"><option value="round">Скруглённые</option><option value="square">Прямые</option></select></div>`
+        + (o.bagWin.corners === 'round' ? rangeField('Окно: радиус, мм', 'bagWin.r', 0, 60, .5) : '')
+        + `<p class="hint">Окно растёт от своего центра во все стороны.</p>` : '') : '')
     + `<div class="field wide"><span class="fl">Содержимое</span><div class="row"><button class="btn sm" id="prodBtn">${pr.src ? 'Заменить фото…' : 'Фото продукта (PNG)…'}</button>${pr.src ? '<button class="btn sm" id="prodOff">Убрать</button>' : ''}</div></div>`
     + (pr.src ? rangeField('Содержимое: ширина, мм', 'product.w', 5, 600, 1) + rangeField('Содержимое: от дна, мм', 'product.y', -50, 600, 1) + rangeField('Содержимое: сдвиг вбок, мм', 'product.x', -300, 300, 1) : '')
     + `<p class="hint">Фото продукта без фона (PNG) стоит внутри пакета и просвечивает сквозь плёнку: через матовую плёнку и кальку — размыто.${top === 'flap' ? ' Клеевая лента — на внутренней стороне клапана, видна при открытии.' : ''}</p>`;
@@ -3397,7 +3404,7 @@ function bagSVG(o, n, f, label) {
   for (const p of n.panels) {
     const r = n.wins?.[p.key]; if (!r) continue;
     const x = p.rot ? p.x + (1 - r[1]) * p.w : p.x + r[0] * p.w, y = p.rot ? p.y + r[2] * p.h : p.y + (1 - r[3]) * p.h;
-    body += `<rect x="${f(x)}" y="${f(y)}" width="${f((r[1] - r[0]) * p.w)}" height="${f((r[3] - r[2]) * p.h)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+    body += `<rect x="${f(x)}" y="${f(y)}" width="${f((r[1] - r[0]) * p.w)}" height="${f((r[3] - r[2]) * p.h)}"${r.r ? ` rx="${f(r.r)}"` : ''} fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
   }
   if (n.glue) { const g = n.glue; body += `<rect x="${f(g.x)}" y="${f(g.y)}" width="${f(g.w)}" height="${f(g.h)}" fill="none" stroke="#f08c00" stroke-width="0.3" stroke-dasharray="1.5 1"/><text x="${f(g.x + g.w / 2)}" y="${f(g.y + g.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.min(3, g.h * .5))}" fill="#f08c00" text-anchor="middle" dominant-baseline="middle">КЛЕЕВАЯ ЛЕНТА (с обратной стороны)</text>`; }
   for (const p of n.panels) {
