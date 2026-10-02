@@ -373,33 +373,58 @@ const EFFECT_SHORT = { 'foil-gold': 'золото', 'foil-silver': 'серебр
 const isFoil = e => e && e.startsWith('foil');
 const BLENDS = { 'source-over': 'Обычное', multiply: 'Умножение', screen: 'Осветление', overlay: 'Перекрытие' };
 const PRESETS = [
-  { id: 'window', label: 'Коробка с окном', type: 'box', dims: { w: 200, h: 50, d: 150 }, finish: 'matte', edge: '#e9e5dc', thick: .8, window: { on: true, w: 136, d: 127, h: 23, r: 6 } },
-  { id: 'mailer', label: 'Почтовая коробка (мейлер)', type: 'box', dims: { w: 260, h: 80, d: 170 }, finish: 'matte', edge: '#cdb08a' },
+  { id: 'window', label: 'Коробка с окном', type: 'box', dims: { w: 200, h: 50, d: 150 }, finish: 'matte', edge: '#e9e5dc', thick: .8, board: '#f4f1e9', window: { on: true, w: 136, d: 127, h: 23, r: 6 } },
+  { id: 'flap150', label: 'С клапаном 150×90×70', type: 'box', dims: { w: 150, h: 70, d: 90 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'flap', flapH: 24, ears: 12 } },
+  { id: 'flap230', label: 'С клапаном 230×140×60', type: 'box', dims: { w: 230, h: 60, d: 140 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'flap', flapH: 20, ears: 12 } },
+  { id: 'mailer', label: 'Почтовая коробка (мейлер)', type: 'box', dims: { w: 260, h: 80, d: 170 }, finish: 'matte', edge: '#cdb08a', lid: { type: 'tuck', flapH: 45 } },
+  { id: 'lidbase', label: 'Крышка-дно', type: 'box', dims: { w: 220, h: 90, d: 160 }, finish: 'soft', edge: '#e2ddd4', thick: 1.5, lid: { type: 'telescope', lidH: 45 } },
   { id: 'shipping', label: 'Гофрокороб', type: 'box', dims: { w: 400, h: 300, d: 300 }, finish: 'kraft', edge: '#a87f50', thick: 4 },
   { id: 'product', label: 'Коробка для продукта', type: 'box', dims: { w: 70, h: 180, d: 70 }, finish: 'gloss', edge: '#ece8e0', thick: .6 },
-  { id: 'gift', label: 'Подарочная коробка', type: 'box', dims: { w: 200, h: 120, d: 200 }, finish: 'soft', edge: '#e2ddd4', thick: 1.5 },
+  { id: 'gift', label: 'Подарочная коробка', type: 'box', dims: { w: 200, h: 120, d: 200 }, finish: 'soft', edge: '#e2ddd4', thick: 1.5, lid: { type: 'telescope', lidH: 40 } },
+  { id: 'tray', label: 'Лоток без крышки', type: 'box', dims: { w: 240, h: 60, d: 160 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'none' } },
   { id: 'flat', label: 'Плоская (пицца, одежда)', type: 'box', dims: { w: 330, h: 45, d: 330 }, finish: 'kraft', edge: '#a87f50', thick: 3 },
   { id: 'tube', label: 'Тубус', type: 'tube', dims: { w: 80, h: 200, d: 80 }, finish: 'matte', edge: '#cdb08a' },
   { id: 'can', label: 'Низкая банка', type: 'tube', dims: { w: 100, h: 60, d: 100 }, finish: 'metal', edge: '#cccccc' },
 ];
-const FACES = { box: ['front', 'top', 'right', 'left', 'back', 'bottom', 'inside', 'insideBottom'], tube: ['wrap', 'top', 'bottom'] };
-const OUTER = { box: ['front', 'back', 'left', 'right', 'top', 'bottom'], tube: ['wrap', 'top', 'bottom'] };
-const FACE_LABEL = { front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
+const LID_TYPES = {
+  flat: 'Откидная крышка',
+  flap: 'Откидная с клапаном снаружи',
+  tuck: 'Откидная с клапаном внутрь (мейлер)',
+  telescope: 'Отдельная крышка (крышка-дно)',
+  none: 'Без крышки (лоток)',
+};
+const LID_WALLS = ['lidFront', 'lidRight', 'lidLeft', 'lidBack'];
+/* printed faces of an object, in tab order; depends on the lid construction */
+function faceKeys(o) {
+  if (o.type === 'tube') return ['wrap', 'top', 'bottom'];
+  const lt = o.lidType || 'flat';
+  const k = ['front'];
+  if (lt !== 'none') k.push('top');
+  if (lt === 'flap' || lt === 'tuck') k.push('flap');
+  if (lt === 'telescope') k.push(...LID_WALLS);
+  k.push('right', 'left', 'back', 'bottom');
+  if (lt !== 'none') k.push('inside');
+  k.push('insideBottom');
+  return k;
+}
+const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
+const FACE_LABEL = { flap: 'Клапан', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
 const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : FACE_LABEL[k];
 const BOARD = [['#f4f1e9', 'Белый'], ['#c39460', 'Крафт'], ['#2e3530', 'Графит'], ['#879c79', 'Шалфей'], ['#d28f84', 'Розовый'], ['#8aacca', 'Голубой']];
 const WHITE_INSIDE = '#f8f6ef';
 const SWATCHES = ['#ffffff', '#f3ead6', '#1c1b19', '#20392b', '#0a7aa1', '#b8461b', '#e6007e', '#ffe500'];
 const LIGHTS = {
-  studio: { light: 2.4, az: 38, el: 52, env: .9, shadow: .38, exposure: 1 },
-  day:    { light: 3.2, az: -30, el: 62, env: .65, shadow: .5, exposure: 1.02 },
-  drama:  { light: 4.2, az: 70, el: 24, env: .22, shadow: .62, exposure: .95 },
-  flat:   { light: 1.0, az: 20, el: 70, env: 1.35, shadow: .18, exposure: 1.05 },
+  studio: { light: 1.6, az: 38, el: 52, env: .55, shadow: .38, exposure: .85 },
+  day:    { light: 2.2, az: -30, el: 62, env: .42, shadow: .5, exposure: .88 },
+  drama:  { light: 3.0, az: 70, el: 24, env: .14, shadow: .62, exposure: .85 },
+  flat:   { light: .7, az: 20, el: 70, env: .95, shadow: .18, exposure: .9 },
 };
 
 /* ================================================================
    State
    ================================================================ */
-const state = { objects: [], scene: { preset: 'studio', ...LIGHTS.studio, bg: 'gradient', bg1: '#f4f1eb', bg2: '#cec6b8', autoRotate: false }, fonts: [] };
+// scene.v 2: lighting calibrated so a lit matte face renders close to its printed colour
+const state = { objects: [], scene: { v: 2, preset: 'studio', ...LIGHTS.studio, bg: 'gradient', bg1: '#f4f1eb', bg2: '#cec6b8', autoRotate: false }, fonts: [] };
 const sel = { obj: null, face: null, layer: null };
 const assets = {};   // id -> dataURL
 const imgCache = {}; // id -> HTMLImageElement
@@ -409,24 +434,31 @@ const activeFaceData = () => { const o = activeObj(); return o && sel.face ? o.f
 const activeLayer = () => { const f = activeFaceData(); return f ? f.layers.find(l => l.id === sel.layer) || null : null; };
 
 function ensureFaces(o) {
+  if (o.type === 'box') {
+    o.lidType ??= 'flat';
+    o.flapH ??= Math.round(o.dims.h * .35);
+    o.ears ??= 10;
+    o.lidH ??= Math.round(o.dims.h * .45);
+  }
   if (!o.window) o.window = { on: false, w: Math.round(o.dims.w * .68), d: Math.round(o.dims.d * .85), h: Math.round(o.dims.h * .46), r: 6 };
   if (o.whiteInside === undefined) o.whiteInside = true;
-  for (const k of FACES[o.type]) if (!o.faces[k]) o.faces[k] = { bg: k.startsWith('inside') ? '#f4f1ea' : '#ffffff', layers: [] };
+  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: k.startsWith('inside') ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
   if (!o.board) o.board = (o.faces.front || o.faces.wrap).bg;
 }
 function newObject(presetId = 'mailer') {
   const p = PRESETS.find(x => x.id === presetId) || PRESETS[0];
   const o = { id: uid(), name: p.label, type: p.type, dims: { ...p.dims }, lid: 0, thickness: p.thick ?? 2, finish: p.finish, edge: p.edge,
-    grain: p.finish === 'kraft' ? .55 : .12, dieline: null, pos: { x: 0, z: 0 }, rotY: 0, faces: {},
-    board: '#ffffff', whiteInside: true, window: p.window ? { ...p.window } : null };
+    grain: p.grain ?? (p.finish === 'kraft' ? .55 : .12), dieline: null, pos: { x: 0, z: 0 }, rotY: 0, faces: {},
+    board: '#ffffff', whiteInside: true, window: p.window ? { ...p.window } : null,
+    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, ears: p.lid?.ears, lidH: p.lid?.lidH };
   ensureFaces(o);
-  if (presetId === 'window') setBoard(o, BOARD[0][0]);
+  if (p.board) setBoard(o, p.board);
   return o;
 }
 /* unprinted board colour: outer faces take it, the inside stays white unless switched off */
 function setBoard(o, c) {
   o.board = c;
-  for (const k of OUTER[o.type]) o.faces[k].bg = c;
+  for (const k of outerKeys(o)) o.faces[k].bg = c;
   for (const k of ['inside', 'insideBottom']) if (o.faces[k]) o.faces[k].bg = o.whiteInside ? WHITE_INSIDE : c;
 }
 const newText = (text = 'Текст') => ({ id: uid(), type: 'text', text, font: 'Montserrat', weight: 700, italic: false, size: .14, color: '#1c1b19', align: 'center', ls: 0, lh: 1.1, x: .5, y: .5, rot: 0, opacity: 1, blend: 'source-over', effect: 'none', visible: true });
@@ -439,6 +471,11 @@ function faceMM(o, k) {
   if (o.type === 'tube') return k === 'wrap' ? [Math.PI * w, h] : [w, w];
   if (k === 'front' || k === 'back') return [w, h];
   if (k === 'left' || k === 'right') return [d, h];
+  const tele = o.lidType === 'telescope', lw = w + 2 * o.thickness + 1, ld = d + 2 * o.thickness + 1;
+  if (k === 'flap') return [w, clamp(o.flapH, 3, h)];
+  if (k === 'lidFront' || k === 'lidBack') return [lw, clamp(o.lidH, 3, h)];
+  if (k === 'lidLeft' || k === 'lidRight') return [ld, clamp(o.lidH, 3, h)];
+  if (tele && (k === 'top' || k === 'inside')) return [lw, ld];
   return [w, d];
 }
 const TEX_MAX = 1536;
@@ -456,10 +493,20 @@ function netLayout(o) {
       { key: 'wrap', x: 0, y: D, w: C, h },
       { key: 'bottom', x: C / 2 - D / 2, y: D + h, w: D, h: D, circle: true }] };
   }
-  return { W: 2 * d + 2 * w, H: h + 2 * d, panels: [
-    { key: 'top', x: d, y: 0, w, h: d }, { key: 'left', x: 0, y: d, w: d, h },
-    { key: 'front', x: d, y: d, w, h }, { key: 'right', x: d + w, y: d, w: d, h },
-    { key: 'back', x: 2 * d + w, y: d, w, h }, { key: 'bottom', x: d, y: d + h, w, h: d }] };
+  // base as a cross; the hinged lid sits above the front panel, other lid parts go in a row below
+  const keys = faceKeys(o), hinged = keys.includes('top') && o.lidType !== 'telescope', oy = hinged ? d : 0;
+  const panels = [
+    { key: 'left', x: 0, y: oy, w: d, h }, { key: 'front', x: d, y: oy, w, h }, { key: 'right', x: d + w, y: oy, w: d, h },
+    { key: 'back', x: 2 * d + w, y: oy, w, h }, { key: 'bottom', x: d, y: oy + h, w, h: d }];
+  if (hinged) panels.unshift({ key: 'top', x: d, y: 0, w, h: d });
+  let W = 2 * d + 2 * w, H = oy + h + d;
+  const extra = keys.filter(k => k === 'flap' || LID_WALLS.includes(k) || (k === 'top' && !hinged));
+  if (extra.length) {
+    const gap = 15, y = H + gap; let x = 0, rowH = 0;
+    for (const k of extra) { const [pw, ph] = faceMM(o, k); panels.push({ key: k, x, y, w: pw, h: ph, part: true }); x += pw + gap; rowH = Math.max(rowH, ph); }
+    W = Math.max(W, x - gap); H = y + rowH;
+  }
+  return { W, H, panels, oy, hinged };
 }
 
 /* ================================================================
@@ -585,7 +632,7 @@ const dirtyFaces = new Set();
 const rebuildQueue = new Set();
 const ui = { editor: true, net: true, layers: false };
 function markFace(o, k) { dirtyFaces.add(o.id + '|' + k); if (o.id === sel.obj) { ui.editor = true; ui.net = true; } }
-function markObj(o) { for (const k of FACES[o.type]) markFace(o, k); }
+function markObj(o) { for (const k of faceKeys(o)) markFace(o, k); }
 
 function ensureFaceRT(o, k) {
   const rt = RT.get(o.id); let f = rt.faces[k];
@@ -621,13 +668,14 @@ function buildObject(o) {
   if (!rt) {
     rt = { group: new THREE.Group(), faces: {},
       edgeMat: new THREE.MeshStandardMaterial({ roughness: .92, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }),
+      earMat: new THREE.MeshStandardMaterial({ roughness: .9, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }),
       filmMat: new THREE.MeshPhysicalMaterial({ color: 0xf2f8f8, transparent: true, opacity: .22, roughness: .04, metalness: 0, clearcoat: 1, clearcoatRoughness: .02, side: THREE.DoubleSide, depthWrite: false }),
       innerMat: new THREE.MeshStandardMaterial({ roughness: .9, shadowSide: THREE.DoubleSide }), lidPivot: null };
     RT.set(o.id, rt); world.add(rt.group);
   }
   rt.group.traverse(m => { if (m.isMesh) m.geometry.dispose(); });
   rt.group.clear(); rt.lidPivot = null;
-  for (const k of FACES[o.type]) ensureFaceRT(o, k);
+  for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else buildTube(o, rt);
   applyTransform(o); applyLid(o); applyObjMaterials(o); markObj(o);
 }
@@ -636,11 +684,11 @@ function disposeObject(id) {
   rt.group.traverse(m => { if (m.isMesh) m.geometry.dispose(); });
   world.remove(rt.group);
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
-  rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); RT.delete(id);
+  rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.earMat.dispose(); RT.delete(id);
 }
 /* ---------- window cut-out (die-cut window with PET film over the lid/front edge) ---------- */
 function winMM(o) {
-  if (o.type !== 'box' || !o.window?.on) return null;
+  if (o.type !== 'box' || !o.window?.on || (o.lidType && o.lidType !== 'flat')) return null;
   const { w, h, d } = o.dims, t = o.thickness, wn = o.window;
   const ww = clamp(wn.w, 10, w - 6), wd = clamp(wn.d, 5, d - 4), wh = clamp(wn.h, 2, Math.max(2, h - t - 2));
   const r = clamp(wn.r, 0, Math.max(0, Math.min(ww / 2, wd, wh) - .5));
@@ -736,20 +784,64 @@ function buildBox(o, rt) {
   add(g, W, T, rt.edgeMat, [0, H, -D / 2 + T / 2], [-P / 2, 0, 0]);
   add(g, T, D - 2 * T, rt.edgeMat, [W / 2 - T / 2, H, 0], [-P / 2, 0, 0]);
   add(g, T, D - 2 * T, rt.edgeMat, [-W / 2 + T / 2, H, 0], [-P / 2, 0, 0]);
-  // hinged lid
+  rt.lidPivot = rt.lidGroup = null;
+  const lt = o.lidType || 'flat', eps = .3 * S;
+  if (lt === 'none') return;
+  if (lt === 'telescope') {
+    // separate lid: a shallow box that slides over the base walls
+    const G = .5 * S, WL = W + 2 * (T + G), DL = D + 2 * (T + G), LH = clamp(o.lidH, 3, o.dims.h) * S, wy = (T - LH) / 2;
+    const lg = new THREE.Group(); lg.position.set(0, H, 0); g.add(lg); rt.lidGroup = lg;
+    add(lg, WL, DL, F('top'), [0, T, 0], [-P / 2, 0, 0], { face: 'top' });
+    add(lg, WL - 2 * T, DL - 2 * T, F('inside'), [0, 0, 0], [P / 2, 0, 0], { face: 'inside' });
+    add(lg, WL, LH, F('lidFront'), [0, T - LH / 2, DL / 2], [0, 0, 0], { face: 'lidFront' });
+    add(lg, WL, LH, F('lidBack'), [0, T - LH / 2, -DL / 2], [0, P, 0], { face: 'lidBack' });
+    add(lg, DL, LH, F('lidRight'), [WL / 2, T - LH / 2, 0], [0, P / 2, 0], { face: 'lidRight' });
+    add(lg, DL, LH, F('lidLeft'), [-WL / 2, T - LH / 2, 0], [0, -P / 2, 0], { face: 'lidLeft' });
+    add(lg, WL - 2 * T, LH - T, rt.innerMat, [0, wy, DL / 2 - T], [0, P, 0], { face: 'inside', wall: true });
+    add(lg, WL - 2 * T, LH - T, rt.innerMat, [0, wy, -DL / 2 + T], [0, 0, 0], { face: 'inside', wall: true });
+    add(lg, DL - 2 * T, LH - T, rt.innerMat, [WL / 2 - T, wy, 0], [0, -P / 2, 0], { face: 'inside', wall: true });
+    add(lg, DL - 2 * T, LH - T, rt.innerMat, [-WL / 2 + T, wy, 0], [0, P / 2, 0], { face: 'inside', wall: true });
+    for (const sz of [-1, 1]) add(lg, WL, T, rt.edgeMat, [0, T - LH, sz * (DL / 2 - T / 2)], [P / 2, 0, 0]);
+    for (const sx of [-1, 1]) add(lg, T, DL - 2 * T, rt.edgeMat, [sx * (WL / 2 - T / 2), T - LH, 0], [P / 2, 0, 0]);
+    return;
+  }
+  // hinged lid; an outer flap needs the lid to reach past the front wall
+  const flapOut = lt === 'flap', DL = flapOut ? D + T + eps : D;
   const pivot = new THREE.Group(); pivot.position.set(0, H, -D / 2); g.add(pivot); rt.lidPivot = pivot;
   const lidNotch = win && notchPts(W, D, ww / 2, wd, wr, 'bottom');
-  addG(pivot, planeGeo(W, D, lidNotch, 'bottom'), F('top'), [0, T, D / 2], [-P / 2, 0, 0], { face: 'top' });
-  addG(pivot, planeGeo(W, D, win && notchPts(W, D, ww / 2, wd, wr, 'top'), 'top'), F('inside'), [0, 0, D / 2], [P / 2, 0, 0], { face: 'inside' });
+  addG(pivot, planeGeo(W, DL, lidNotch, 'bottom'), F('top'), [0, T, DL / 2], [-P / 2, 0, 0], { face: 'top' });
+  addG(pivot, planeGeo(W, DL, win && notchPts(W, D, ww / 2, wd, wr, 'top'), 'top'), F('inside'), [0, 0, DL / 2], [P / 2, 0, 0], { face: 'inside' });
   if (win) {
     const sw = (W - ww) / 2;
     for (const sx of [-1, 1]) add(pivot, sw, T, rt.edgeMat, [sx * (ww / 2 + sw / 2), T / 2, D], [0, 0, 0]);
     addG(pivot, ribbonGeo(lidNotch.map(p => [p.x, T, D / 2 - p.y]), lidNotch.map(p => [p.x, 0, D / 2 - p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
     film(pivot, lidNotch, [0, T / 2, D / 2], [-P / 2, 0, 0]);
-  } else add(pivot, W, T, rt.edgeMat, [0, T / 2, D], [0, 0, 0]);
+  } else if (!flapOut) add(pivot, W, T, rt.edgeMat, [0, T / 2, DL], [0, 0, 0]);
   add(pivot, W, T, rt.edgeMat, [0, T / 2, 0], [0, P, 0]);
-  add(pivot, D, T, rt.edgeMat, [W / 2, T / 2, D / 2], [0, P / 2, 0]);
-  add(pivot, D, T, rt.edgeMat, [-W / 2, T / 2, D / 2], [0, -P / 2, 0]);
+  add(pivot, DL, T, rt.edgeMat, [W / 2, T / 2, DL / 2], [0, P / 2, 0]);
+  add(pivot, DL, T, rt.edgeMat, [-W / 2, T / 2, DL / 2], [0, -P / 2, 0]);
+  if (flapOut) {
+    // front flap folds down over the outside of the front wall, with ears wrapping the corners
+    // hinged at the lid's front edge and sprung slightly outward, as real board does
+    const FH = clamp(o.flapH, 3, o.dims.h) * S;
+    const fp = new THREE.Group(); fp.position.set(0, T, DL); fp.rotation.x = -3.5 * DEG; pivot.add(fp);
+    add(fp, W, FH, F('flap'), [0, -FH / 2, 0], [0, 0, 0], { face: 'flap' });
+    add(fp, W, FH - T, rt.innerMat, [0, -(FH + T) / 2, -T], [0, P, 0], { face: 'inside', wall: true });
+    add(fp, W, T, rt.edgeMat, [0, -FH, -T / 2], [P / 2, 0, 0]);
+    for (const sx of [-1, 1]) add(fp, T, FH, rt.edgeMat, [sx * W / 2, -FH / 2, -T / 2], [0, sx * P / 2, 0]);
+    const EW = clamp(o.ears, 0, o.dims.d / 2) * S;
+    if (EW > 0) for (const sx of [-1, 1]) {
+      const EH = (FH - T) * .92, shape = new THREE.Shape([V2(-EW / 2, EH / 2), V2(EW / 2, EH / 2), V2(EW / 2, -EH / 2), V2(-EW / 2 + EW * .35, -EH / 2)]);
+      const ear = addG(fp, new THREE.ShapeGeometry(shape), rt.earMat, [sx * (W / 2 + eps), -T - EH / 2, -T - EW / 2], [0, sx * P / 2, 0]);
+      if (sx < 0) ear.scale.x = -1;
+    }
+  } else if (lt === 'tuck') {
+    // tuck flap hangs inside the front wall
+    const TF = clamp(o.flapH, 3, o.dims.h - 2 * o.thickness) * S, TW = W - 2 * T - 2 * eps, z = D - T - eps;
+    add(pivot, TW, TF, F('flap'), [0, -TF / 2, z], [0, 0, 0], { face: 'flap' });
+    add(pivot, TW, TF, rt.innerMat, [0, -TF / 2, z - T], [0, P, 0], { face: 'inside', wall: true });
+    add(pivot, TW, T, rt.edgeMat, [0, -TF, z - T / 2], [P / 2, 0, 0]);
+  }
 }
 function buildTube(o, rt) {
   const R = o.dims.w / 2 * S, H = o.dims.h * S;
@@ -767,13 +859,25 @@ function buildTube(o, rt) {
   rt.group.add(m);
 }
 function applyTransform(o) { const rt = RT.get(o.id); if (!rt) return; rt.group.position.set(o.pos.x * S, 0, o.pos.z * S); rt.group.rotation.y = o.rotY * DEG; updateShadowCam(); }
-function applyLid(o) { const rt = RT.get(o.id); if (rt?.lidPivot) rt.lidPivot.rotation.x = -o.lid * DEG; }
+function applyLid(o) {
+  const rt = RT.get(o.id); if (!rt) return;
+  if (rt.lidPivot) rt.lidPivot.rotation.x = -o.lid * DEG;
+  if (rt.lidGroup) {
+    // the separate lid lifts, slides back a little and tilts
+    const f = clamp(o.lid / 125, 0, 1), H = o.dims.h * S, LH = clamp(o.lidH, 3, o.dims.h) * S;
+    rt.lidGroup.position.set(0, H + f * (LH + H * .35 + .3), -f * o.dims.d * S * .18);
+    rt.lidGroup.rotation.x = -f * .32;
+  }
+}
 function applyObjMaterials(o) {
   const rt = RT.get(o.id); if (!rt) return;
   rt.edgeMat.color.set(o.edge);
   const inner = new THREE.Color(o.faces.inside?.bg || '#f4f1ea');
   if (FINISHES[o.finish]?.kraft) inner.multiply(new THREE.Color(FINISHES[o.finish].kraft));
   rt.innerMat.color.copy(inner);
+  const ear = new THREE.Color(o.faces.flap?.bg || o.board || '#ffffff');
+  if (FINISHES[o.finish]?.kraft) ear.multiply(new THREE.Color(FINISHES[o.finish].kraft));
+  rt.earMat.color.copy(ear);
   rt.innerMat.bumpMap = o.grain > 0 ? rt.faces.inside?.grain ?? null : null;
   rt.innerMat.bumpScale = o.grain * 1.2; rt.innerMat.needsUpdate = true;
 }
@@ -858,13 +962,13 @@ function drawLayer(ctx, L, W, H, paint = null, alpha = null) {
   ctx.restore();
 }
 function renderFace(o, k) {
-  const rt = RT.get(o.id); if (!rt || !FACES[o.type].includes(k)) return;
+  const rt = RT.get(o.id); if (!rt || !faceKeys(o).includes(k)) return;
   const f = ensureFaceRT(o, k), face = o.faces[k], ctx = f.ctx;
   const W = f.canvas.width, H = f.canvas.height;
   const fin = FINISHES[o.finish] || FINISHES.matte;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = face.bg; ctx.fillRect(0, 0, W, H);
-  if (o.dieline && OUTER[o.type].includes(k)) {
+  if (o.dieline && outerKeys(o).includes(k)) {
     const im = getImg(o.dieline), net = netLayout(o), p = net.panels.find(p => p.key === k);
     if (im && p) ctx.drawImage(im, p.x / net.W * im.naturalWidth, p.y / net.H * im.naturalHeight, p.w / net.W * im.naturalWidth, p.h / net.H * im.naturalHeight, 0, 0, W, H);
   }
@@ -1010,8 +1114,8 @@ function select(objId, face = undefined, layerId = null, { flash = false } = {})
   sel.obj = objId;
   const o = activeObj();
   if (o) {
-    if (face !== undefined && face && FACES[o.type].includes(face)) sel.face = face;
-    else if (!FACES[o.type].includes(sel.face)) sel.face = FACES[o.type][0];
+    if (face !== undefined && face && faceKeys(o).includes(face)) sel.face = face;
+    else if (!faceKeys(o).includes(sel.face)) sel.face = faceKeys(o)[0];
   } else sel.face = null;
   sel.layer = layerId;
   if (flash && o) { const f = RT.get(o.id)?.faces[sel.face]; if (f) { f.flash = 1; accent.set(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0a7aa1'); } }
@@ -1067,10 +1171,11 @@ function loadProject(d, { resetHistory = true } = {}) {
   for (const id of [...RT.keys()]) disposeObject(id);
   Object.assign(assets, d.assets || {});
   state.objects = d.objects; state.scene = { ...state.scene, ...(d.scene || {}) }; state.fonts = d.fonts || [];
+  if ((d.scene?.v || 1) < 2) Object.assign(state.scene, LIGHTS[state.scene.preset] || LIGHTS.studio, { v: 2 });
   state.fonts.forEach(registerFont);
   for (const o of state.objects) { ensureFaces(o); buildObject(o); }
   sel.obj = state.objects[0]?.id ?? null; sel.face = null; sel.layer = null;
-  if (sel.obj) sel.face = FACES[activeObj().type][0];
+  if (sel.obj) sel.face = faceKeys(activeObj())[0];
   applyScene(); renderAll();
   if (resetHistory) { hist.stack = []; hist.i = -1; }
   commit();
@@ -1151,9 +1256,14 @@ function renderModel() {
     <div class="field wide"><span class="fl">Заготовка</span><select id="presetSel"><option value="">— выбрать размер —</option>${PRESETS.filter(p => p.type === o.type).map(p => `<option value="${p.id}">${p.label}</option>`).join('')}</select></div>
     ${box ? rangeField('Ширина, мм', 'dims.w', 20, 800, 1) + rangeField('Глубина, мм', 'dims.d', 20, 800, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)
           : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
-    ${box ? rangeField('Открыть крышку, °', 'lid', 0, 125, 1) + rangeField('Толщина, мм', 'thickness', .3, 6, .1) : ''}
-    ${box ? `<label class="check"><input type="checkbox" data-k="window.on"> Окно с плёнкой (вырубка на крышке и передней стенке)</label>` : ''}
-    ${box && o.window.on ? rangeField('Окно: ширина, мм', 'window.w', 10, 800, 1) + rangeField('Окно: на крышке, мм', 'window.d', 5, 800, 1) + rangeField('Окно: на передней, мм', 'window.h', 2, 800, 1) + rangeField('Окно: радиус, мм', 'window.r', 0, 40, .5) : ''}
+    ${box ? `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(LID_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : ''}
+    ${box && o.lidType !== 'none' ? rangeField(o.lidType === 'telescope' ? 'Поднять крышку' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
+    ${box && (o.lidType === 'flap' || o.lidType === 'tuck') ? rangeField('Клапан, мм', 'flapH', 3, 300, 1) : ''}
+    ${box && o.lidType === 'flap' ? rangeField('Ушки, мм', 'ears', 0, 40, 1) : ''}
+    ${box && o.lidType === 'telescope' ? rangeField('Высота крышки, мм', 'lidH', 3, 400, 1) : ''}
+    ${box ? rangeField('Толщина, мм', 'thickness', .3, 6, .1) : ''}
+    ${box && o.lidType === 'flat' ? `<label class="check"><input type="checkbox" data-k="window.on"> Окно с плёнкой (вырубка на крышке и передней стенке)</label>` : ''}
+    ${box && o.lidType === 'flat' && o.window.on ? rangeField('Окно: ширина, мм', 'window.w', 10, 800, 1) + rangeField('Окно: на крышке, мм', 'window.d', 5, 800, 1) + rangeField('Окно: на передней, мм', 'window.h', 2, 800, 1) + rangeField('Окно: радиус, мм', 'window.r', 0, 40, .5) : ''}
     <div class="sec-h" style="margin-top:4px"><h2>Материал</h2></div>
     <div class="field wide"><span class="fl">Цвет картона</span><div class="row">
       <div class="swatches" id="boardSw">${BOARD.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.board === c}"></button>`).join('')}</div>
@@ -1169,7 +1279,9 @@ function renderModel() {
   bindFields(sec, activeObj, (k) => {
     const o = activeObj();
     if (k === 'name') { renderObjects(); $('#objBadge').textContent = o.name; return; }
-    if (k === 'type') { o.dims = { ...PRESETS.find(p => p.type === o.type).dims }; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, FACES[o.type][0]); renderModel(); renderObjects(); return; }
+    if (k === 'type') { o.dims = { ...PRESETS.find(p => p.type === o.type).dims }; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, faceKeys(o)[0]); renderModel(); renderObjects(); return; }
+    if (k === 'lidType') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'flapH' || k === 'ears' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k.startsWith('dims') || k === 'thickness') { rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lid') { applyLid(o); return; }
     if (k.startsWith('pos') || k === 'rotY') { applyTransform(o); return; }
@@ -1184,8 +1296,14 @@ function renderModel() {
   $('#boardColor').addEventListener('change', () => commit());
   $('#presetSel').onchange = e => {
     const p = PRESETS.find(x => x.id === e.target.value); if (!p) return;
-    o.dims = { ...p.dims }; o.finish = p.finish; o.edge = p.edge; o.thickness = p.thick ?? 2; o.grain = p.finish === 'kraft' ? .55 : o.grain;
+    o.dims = { ...p.dims }; o.finish = p.finish; o.edge = p.edge; o.thickness = p.thick ?? 2; o.grain = p.grain ?? (p.finish === 'kraft' ? .55 : o.grain);
     o.window = p.window ? { ...p.window } : { ...o.window, on: false };
+    if (o.type === 'box') {
+      o.lidType = p.lid?.type ?? 'flat';
+      for (const [k, v] of [['flapH', p.lid?.flapH], ['ears', p.lid?.ears], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
+      ensureFaces(o); if (p.board) setBoard(o, p.board);
+      applyObjMaterials(o); select(o.id, sel.face);
+    }
     rebuildQueue.add(o.id); renderModel(); renderObjects(); commit(); setTimeout(() => setView(lastView), 50);
   };
 }
@@ -1203,10 +1321,10 @@ function bindScene() {
 function renderFaceTabs() {
   const o = activeObj();
   $('#objBadge').textContent = o ? o.name : '';
-  $('#faceTabs').innerHTML = o ? FACES[o.type].map(k => `<button class="chip ${k === sel.face ? 'on' : ''}" data-f="${k}">${faceLabel(o, k)}${o.faces[k].layers.length ? `<span class="cnt">${o.faces[k].layers.length}</span>` : ''}</button>`).join('') : '';
+  $('#faceTabs').innerHTML = o ? faceKeys(o).map(k => `<button class="chip ${k === sel.face ? 'on' : ''}" data-f="${k}">${faceLabel(o, k)}${o.faces[k].layers.length ? `<span class="cnt">${o.faces[k].layers.length}</span>` : ''}</button>`).join('') : '';
   $$('#faceTabs .chip').forEach(b => b.onclick = () => select(sel.obj, b.dataset.f, null, { flash: true }));
   const sel2 = $('#copyTarget');
-  sel2.innerHTML = o ? `<option value="">Скопировать дизайн на…</option><option value="*">все внешние грани</option>` + FACES[o.type].filter(k => k !== sel.face).map(k => `<option value="${k}">${faceLabel(o, k)}</option>`).join('') : '';
+  sel2.innerHTML = o ? `<option value="">Скопировать дизайн на…</option><option value="*">все внешние грани</option>` + faceKeys(o).filter(k => k !== sel.face).map(k => `<option value="${k}">${faceLabel(o, k)}</option>`).join('') : '';
 }
 function updateFaceMeta() {
   const o = activeObj(); if (!o || !sel.face) { $('#faceMeta').textContent = ''; return; }
@@ -1225,7 +1343,7 @@ function renderFacePanel() {
 function setFaceBg(c, doCommit) {
   const o = activeObj(), f = activeFaceData(); if (!f) return;
   f.bg = c; $('#faceBg').value = c; markFace(o, sel.face);
-  if (sel.face === 'inside') applyObjMaterials(o);
+  if (sel.face === 'inside' || sel.face === 'flap') applyObjMaterials(o);
   if (doCommit) commit();
 }
 function layerName(L) {
@@ -1686,13 +1804,19 @@ function templateSVG(o) {
       body += label(p);
     }
   } else {
-    const { w, h, d } = o.dims;
-    const pts = [[d, 0], [d + w, 0], [d + w, d], [2 * d + 2 * w, d], [2 * d + 2 * w, d + h], [d + w, d + h], [d + w, 2 * d + h], [d, 2 * d + h], [d, d + h], [0, d + h], [0, d], [d, d]];
+    const { w, h, d } = o.dims, oy = n.oy;
+    // base cut outline (the lid row is cut as separate parts)
+    const pts = n.hinged
+      ? [[d, 0], [d + w, 0], [d + w, d], [2 * d + 2 * w, d], [2 * d + 2 * w, d + h], [d + w, d + h], [d + w, 2 * d + h], [d, 2 * d + h], [d, d + h], [0, d + h], [0, d], [d, d]]
+      : [[0, 0], [2 * d + 2 * w, 0], [2 * d + 2 * w, h], [d + w, h], [d + w, h + d], [d, h + d], [d, h], [0, h]];
     body += `<polygon points="${pts.map(p => p.map(f).join(',')).join(' ')}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
     const nw = netWindow(o);
-    const folds = [[d, d + h, d + w, d + h], [d, d, d, d + h], [d + w, d, d + w, d + h], [2 * d + w, d, 2 * d + w, d + h]];
-    if (nw) { folds.push([d, d, nw.x, d], [nw.x + nw.w, d, d + w, d]); body += `<rect x="${f(nw.x)}" y="${f(nw.y)}" width="${f(nw.w)}" height="${f(nw.h)}" rx="${f(nw.r)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`; }
-    else folds.push([d, d, d + w, d]);
+    const folds = [[d, oy + h, d + w, oy + h], [d, oy, d, oy + h], [d + w, oy, d + w, oy + h], [2 * d + w, oy, 2 * d + w, oy + h]];
+    if (n.hinged) {
+      if (nw) { folds.push([d, d, nw.x, d], [nw.x + nw.w, d, d + w, d]); body += `<rect x="${f(nw.x)}" y="${f(nw.y)}" width="${f(nw.w)}" height="${f(nw.h)}" rx="${f(nw.r)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`; }
+      else folds.push([d, d, d + w, d]);
+    }
+    for (const p of n.panels) if (p.part) body += `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
     body += folds.map(l => `<line x1="${f(l[0])}" y1="${f(l[1])}" x2="${f(l[2])}" y2="${f(l[3])}" stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"/>`).join('');
     for (const p of n.panels) body += label(p);
   }
@@ -1778,7 +1902,7 @@ function sampleProject() {
   const T = (text, o) => Object.assign(newText(text), o);
   const m = newObject('mailer');
   Object.assign(m, { name: 'Пример: мейлер «Север»', finish: 'soft', lid: 24, grain: .1, pos: { x: -60, z: 0 }, rotY: -12 });
-  for (const k of ['front', 'back', 'left', 'right', 'top', 'bottom']) m.faces[k].bg = '#20392b';
+  for (const k of ['front', 'back', 'left', 'right', 'top', 'bottom', 'flap']) m.faces[k].bg = '#20392b';
   m.faces.top.layers = [
     Object.assign(newShape('rect'), { w: .93, h: .89, stroke: .006, fill: '#e8d9a8', effect: 'foil-gold' }),
     Object.assign(newImage(gold, 1), { w: .17, y: .3, effect: 'foil-gold' }),
@@ -1832,7 +1956,7 @@ $('#addPreset').innerHTML = PRESETS.map(p => `<option value="${p.id}">${p.label}
 $('#addObjBtn').onclick = () => {
   const o = newObject($('#addPreset').value);
   const b = sceneBounds(); o.pos.x = state.objects.length ? Math.round(b.max.x / S + o.dims.w / 2 + 40) : 0;
-  state.objects.push(o); buildObject(o); select(o.id, FACES[o.type][0], null); renderObjects(); commit(); setTimeout(() => setView('fit'), 60);
+  state.objects.push(o); buildObject(o); select(o.id, faceKeys(o)[0], null); renderObjects(); commit(); setTimeout(() => setView('fit'), 60);
 };
 $('#dupObjBtn').onclick = () => {
   const o = activeObj(); if (!o) return;
@@ -1849,7 +1973,7 @@ $('#faceBg').addEventListener('input', e => setFaceBg(e.target.value, false));
 $('#faceBg').addEventListener('change', () => commit());
 $('#bgAllBtn').onclick = () => {
   const o = activeObj(), f = activeFaceData(); if (!f) return;
-  for (const k of OUTER[o.type]) o.faces[k].bg = f.bg; markObj(o); commit(); toast('Фон применён ко всем внешним граням');
+  for (const k of outerKeys(o)) o.faces[k].bg = f.bg; markObj(o); commit(); toast('Фон применён ко всем внешним граням');
 };
 $('#clearFaceBtn').onclick = () => {
   const o = activeObj(), f = activeFaceData(); if (!f) return;
@@ -1857,7 +1981,7 @@ $('#clearFaceBtn').onclick = () => {
 };
 $('#copyFaceBtn').onclick = () => {
   const o = activeObj(), f = activeFaceData(), t = $('#copyTarget').value; if (!f || !t) return toast('Выберите, куда копировать');
-  const targets = t === '*' ? OUTER[o.type].filter(k => k !== sel.face) : [t];
+  const targets = t === '*' ? outerKeys(o).filter(k => k !== sel.face) : [t];
   for (const k of targets) { o.faces[k] = { bg: f.bg, layers: f.layers.map(l => ({ ...structuredClone(l), id: uid() })) }; markFace(o, k); }
   renderFaceTabs(); commit(); toast(`Дизайн скопирован: ${targets.map(k => faceLabel(o, k)).join(', ')}`);
 };
@@ -1910,5 +2034,5 @@ let booted = false;
 try { const saved = localStorage.getItem(LS_KEY); if (saved) { loadProject(JSON.parse(saved)); booted = true; } } catch {}
 if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
-window.__boxStudio = { state, sel, select, setView, RT, camera, THREE };
+window.__boxStudio = { state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene };
 </script>
