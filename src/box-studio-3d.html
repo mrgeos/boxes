@@ -403,8 +403,9 @@ PRESETS.push(
   // bags: w = width, h = height, d = gusset depth (flat-bottom bag) or content thickness (flat bag)
   { id: 'bagFlat', label: 'Пакет плоский 140×140 с клапаном', type: 'bag', dims: { w: 140, h: 140, d: 12 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'flat', top: 'flap', mat: 'frosty', flapH: 35 } },
   { id: 'bagFlatClear', label: 'Пакет плоский прозрачный 100×150', type: 'bag', dims: { w: 100, h: 150, d: 10 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'flat', top: 'flap', mat: 'clear', flapH: 30 } },
-  { id: 'bagBlock', label: 'Пакет с плоским дном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'block', top: 'fold', mat: 'frosty', flapH: 45 } },
-  { id: 'bagKraft', label: 'Крафт-пакет с дном и экстендером', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#c39460', grain: .45, bag: { style: 'block', top: 'fold', mat: 'kraft', flapH: 45, ext: true } },
+  { id: 'bagBlock', label: 'Пакет с плоским дном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'block', top: 'fold', turns: 2, mat: 'frosty', flapH: 16 } },
+  { id: 'bagKraft', label: 'Крафт-пакет с дном и экстендером', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#c39460', grain: .45, bag: { style: 'block', top: 'fold', turns: 2, mat: 'kraft', flapH: 16, ext: true } },
+  { id: 'bagWindow', label: 'Крафт-пакет с окном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#e8d3b4', grain: .35, bag: { style: 'block', top: 'fold', turns: 2, mat: 'kraft', flapH: 16, win: { on: true, w: 40, h: 80, y: 30, wrap: 'right', ws: 30 } } },
 );
 const BAG_MATS = { clear: 'Прозрачная плёнка', frosty: 'Матовая плёнка (frosty)', tracing: 'Калька', paper: 'Бумага белая', kraft: 'Крафт-бумага' };
 const BAG_TOPS = { flap: 'Клапан с клеевой лентой', fold: 'Завёрнут (отворот)', seal: 'Запаян' };
@@ -494,7 +495,8 @@ function ensureFaces(o) {
   }
   if (o.type === 'cup') { o.cupWall ??= 'double'; o.cupLid ??= true; o.lidColor ??= LID_COLORS[0][0]; }
   if (o.type === 'bag') {
-    o.bagStyle ??= 'flat'; o.bagTop ??= 'flap'; o.bagMat ??= 'frosty'; o.flapH ??= 35;
+    o.bagStyle ??= 'flat'; o.bagTop ??= 'flap'; o.bagMat ??= 'frosty'; o.flapH ??= 35; o.rollTurns ??= 1; o.shoulder ??= 0;
+    o.bagWin ??= defaultBagWin(o.dims);
     o.ext ??= { on: false, h: 40, w: o.dims.w, staples: 2 };
     o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 6 };
   }
@@ -515,9 +517,10 @@ function newObject(presetId = 'mailer') {
   if (p.board) setBoard(o, p.board);
   return o;
 }
+const defaultBagWin = d => ({ on: false, w: Math.round(d.w * .5), h: Math.round(d.h * .35), y: Math.round(d.h * .2), x: 0, wrap: 'none', ws: Math.round((d.d || 20) * .6) });
 function applyBagPreset(o, p) {
-  Object.assign(o, { bagStyle: p.bag.style, bagTop: p.bag.top, bagMat: p.bag.mat, flapH: p.bag.flapH, lid: 0,
-    ext: { on: !!p.bag.ext, h: 40, w: p.dims.w, staples: 2 } });
+  Object.assign(o, { bagStyle: p.bag.style, bagTop: p.bag.top, bagMat: p.bag.mat, flapH: p.bag.flapH, lid: 0, rollTurns: p.bag.turns ?? 1, shoulder: 0,
+    ext: { on: !!p.bag.ext, h: 40, w: p.dims.w, staples: 2 }, bagWin: { ...defaultBagWin(p.dims), ...(p.bag.win || { on: false }) } });
   if (o.product) o.product.w = Math.round(p.dims.w * .7);
 }
 /* unprinted board colour: outer faces take it, the inside stays white unless switched off */
@@ -724,35 +727,68 @@ function fanOutline(F, u0 = -F.gU, u1 = 1, n = 96) {
    (back panel folded over the front), a fold-over strip, or a seal. Every printed side is a
    surface f(u, v) in object mm: its mesh, its UVs and the stickers on it all use the same map. */
 function bagDims(o) {
-  const W = o.dims.w, H = o.dims.h, block = o.bagStyle === 'block', top = o.bagTop || 'flap';
+  const W = o.dims.w, H = o.dims.h, block = o.bagStyle === 'block', top = o.bagTop || 'flap', film = bagFilm(o);
   const D = block ? clamp(o.dims.d, 10, W * 1.5) : 0, t = block ? 0 : clamp(o.dims.d, 0, Math.min(W, H) / 3);
-  const fh = top === 'seal' ? 0 : clamp(o.flapH, 8, H * .45), Hv = top === 'fold' ? H - fh : H;
-  return { W, H, D, t, block, top, fh, Hv, seam: block ? 0 : 6, sealTop: top === 'seal' ? 10 : 0,
-    ext: !!o.ext?.on, ew: W, eh: clamp(o.ext?.h ?? 40, 10, Hv * .6) };
+  const turns = top === 'fold' ? clamp(Math.round(o.rollTurns ?? 1), 1, 3) : 0;
+  let fh = top === 'seal' ? 0 : clamp(o.flapH, 8, H * .4);
+  if (turns) fh = Math.min(fh, H * .6 / (2 * turns - 1));
+  // paper rolled into the top: the visible band plus the turns hidden under it
+  const roll = turns ? fh * (2 * turns - 1) : 0, Hv = H - roll, ext = !!o.ext?.on, eh = clamp(o.ext?.h ?? 40, 10, Hv * .5);
+  const tk = turns > 1 ? .3 + turns * (film ? .5 : 1.1) : .18;
+  const B = { W, H, D, t, block, top, turns, fh, roll, Hv, tk, film, seam: block ? 0 : 6, sealTop: top === 'seal' ? 10 : 0, ext, ew: W, eh };
+  if (block) {
+    // gable top: from the shoulder the front and back slope in to meet at the crest; above the crest
+    // a flat neck holds the extender (or the seal)
+    B.dmin = 1.2; B.neck = ext ? eh + 3 : top === 'seal' ? 12 : 0;
+    const run = (D - B.dmin) / 2, maxL = Math.max(1, Hv - B.neck - 15);
+    let hp = o.shoulder > 0 ? clamp(o.shoulder, 3, 400) : D * .85, L = Math.hypot(hp, run);
+    if (L > maxL) { hp = Math.sqrt(Math.max(1, maxL * maxL - run * run)); L = Math.hypot(hp, run); }
+    B.hp = hp; B.L = L; B.s0 = Hv - B.neck - L;
+  }
+  return B;
+}
+/* windows cut into a paper bag (with film behind), per side as [u0, u1, v0, v1] */
+function bagWindows(o) {
+  const win = o.bagWin;
+  if (o.type !== 'bag' || bagFilm(o) || !win?.on) return {};
+  const B = bagDims(o), { W, D, Hv } = B, w = clamp(win.w, 5, W - 4), h = clamp(win.h, 5, Hv - 10), y = clamp(win.y, 3, Hv - h - 3);
+  const v0 = y / Hv, v1 = (y + h) / Hv, wrap = B.block ? win.wrap || 'none' : 'none', ws = clamp(win.ws ?? D * .6, 3, Math.max(3, D - 3));
+  if (wrap === 'right') return { front: [1 - w / W, 1, v0, v1], right: [0, ws / D, v0, v1] };
+  if (wrap === 'left') return { front: [0, w / W, v0, v1], left: [1 - ws / D, 1, v0, v1] };
+  const x0 = clamp((W - w) / 2 + (win.x || 0), 2, W - w - 2);
+  return { front: [x0 / W, (x0 + w) / W, v0, v1] };
 }
 function bagNet(o) {
-  const B = bagDims(o), { W, D, fh, Hv } = B, panels = [], seams = [];
+  const B = bagDims(o), { W, D, fh, Hv, roll } = B, panels = [], seams = [], HID = 'скрыто в скрутке';
   let NW, NH, glue = null;
   if (!B.block) {
     let y = 0;
-    if (B.top !== 'seal') { panels.push({ key: B.top, x: 0, y: 0, w: W, h: fh, rot: true }); y = fh; }
+    if (B.top === 'fold' && roll > fh) { panels.push({ key: 'hidden', blank: HID, x: 0, y, w: W, h: roll - fh }); y += roll - fh; }
+    if (B.top !== 'seal') { panels.push({ key: B.top, x: 0, y, w: W, h: fh, rot: true }); y += fh; }
     const y0 = y;
     panels.push({ key: 'back', x: 0, y, w: W, h: Hv }); y += Hv;
     panels.push({ key: 'front', x: 0, y, w: W, h: Hv, rot: true }); y += Hv;
-    if (B.top === 'fold') { panels.push({ key: 'hidden', blank: 'скрыто в отвороте', x: 0, y, w: W, h: fh }); y += fh; }
+    if (B.top === 'fold') { panels.push({ key: 'hidden', blank: B.turns > 1 ? HID : 'скрыто в отвороте', x: 0, y, w: W, h: roll }); y += roll; }
     seams.push([B.seam, y0, B.seam, y], [W - B.seam, y0, W - B.seam, y]);
     if (B.top === 'seal') seams.push([0, B.sealTop, W, B.sealTop], [0, y - B.sealTop, W, y - B.sealTop]);
     NW = W; NH = y;
   } else {
-    const t0 = B.top === 'seal' ? 0 : fh, cols = [['left', 0, D], ['front', D, W], ['right', D + W, D], ['back', 2 * D + W, W]], gx = 2 * D + 2 * W;
+    const t0 = B.top === 'fold' ? roll : B.top === 'flap' ? fh : 0, cols = [['left', 0, D], ['front', D, W], ['right', D + W, D], ['back', 2 * D + W, W]], gx = 2 * D + 2 * W;
+    const hid = B.turns > 1 ? HID : 'скрыто в отвороте';
     for (const [key, x, w] of cols) {
       panels.push({ key, x, y: t0, w, h: Hv });
-      if (B.top === 'fold') panels.push(key === 'back' ? { key: 'fold', x, y: 0, w, h: fh, rot: true } : { key: 'hidden', blank: 'скрыто в отвороте', x, y: 0, w, h: fh });
+      if (B.top === 'fold') {
+        if (key === 'back') { panels.push({ key: 'fold', x, y: roll - fh, w, h: fh, rot: true }); if (roll > fh) panels.push({ key: 'hidden', blank: hid, x, y: 0, w, h: roll - fh }); }
+        else panels.push({ key: 'hidden', blank: hid, x, y: 0, w, h: roll });
+      }
       if (B.top === 'flap' && key === 'back') panels.push({ key: 'flap', x, y: 0, w, h: fh, rot: true });
     }
-    panels.push({ key: 'glue', blank: 'клеевой шов', x: gx, y: B.top === 'fold' ? 0 : t0, w: 12, h: Hv + (B.top === 'fold' ? fh : 0) });
+    panels.push({ key: 'glue', blank: 'клеевой шов', x: gx, y: B.top === 'fold' ? 0 : t0, w: 12, h: Hv + (B.top === 'fold' ? roll : 0) });
     panels.push({ key: 'bottom', x: D, y: t0 + Hv, w: W, h: D });
     NW = gx + 12; NH = t0 + Hv + D;
+    // crease lines of the gable top across front, back and the gusset centres
+    const yc = t0 + Hv - B.neck - B.L, yt = t0 + Hv - B.neck;
+    seams.creases = [[0, yc, gx, yc], ...(B.neck ? [[0, yt, gx, yt]] : []), [D / 2, t0, D / 2, t0 + Hv], [D + W + D / 2, t0, D + W + D / 2, t0 + Hv]];
   }
   if (B.top === 'flap') { const p = panels.find(q => q.key === 'flap'); glue = { x: p.x + 4, y: p.y + 3, w: p.w - 8, h: Math.min(10, fh * .35) }; }
   if (B.ext) {
@@ -760,59 +796,86 @@ function bagNet(o) {
     panels.push({ key: 'extBack', x: 0, y, w: B.ew, h: B.eh, rot: true, part: true }, { key: 'extFront', x: 0, y: y + B.eh, w: B.ew, h: B.eh, part: true });
     NW = Math.max(NW, B.ew); NH = y + 2 * B.eh;
   }
-  return { W: NW, H: NH, panels, seams, glue, bag: B };
+  return { W: NW, H: NH, panels, seams, glue, bag: B, wins: bagWindows(o) };
 }
 const smooth = (a, b, x) => { const q = clamp((x - a) / (b - a), 0, 1); return q * q * (3 - 2 * q); };
-/* surfaces of a bag in its closed state, object mm. Each entry: f(u, v) → [x, y, z], plus a rest
-   plane (centre c and axes) that stickers use to find their way between sides. */
+/* surfaces of a bag in its closed state, object mm. Each side is f(u, v) → [x, y, z] with v measured
+   along the paper, so print keeps its size over folds; its rest plane is the side laid out flat
+   (paper coordinates) and tells stickers how sides meet. */
 function bagShape(o) {
   const B = bagDims(o), { W, D, fh, Hv } = B, S3 = {}, P = (c, u, v) => ({ c, u, v });
   // the strip folded over the top and the extender press the top of the bag flat
   const cover = Math.max(B.top === 'seal' ? 0 : fh, B.ext ? B.eh : 0);
-  let zFront, zBack;
+  let frontAt, backTop;   // a point and outward normal on the front at (x, paper s); the back's top edge
   if (!B.block) {
     // puff: zero along the sealed sides, the bottom fold and the mouth; a faint ripple in the film
     const mx = Math.min(W * .25, 28), my = Math.min(Hv * .25, 28), top = Hv - Math.max(B.sealTop, B.ext ? B.eh * .9 : 0);
     const puff = (x, y) => smooth(0, mx, W / 2 - B.seam - Math.abs(x)) * smooth(0, my, y) * smooth(0, my * .8, top - y);
     const rip = (x, y) => .3 * Math.sin(x * .13 + y * .07) * Math.sin(y * .11 - x * .05);
-    zFront = (x, y) => { const f = puff(x, y); return f * (B.t / 2 + rip(x, y)) + .06; };
-    zBack = (x, y) => { const f = puff(x, y); return -f * (B.t / 2 + rip(-x, y + 9)) - .06; };
+    const zFront = (x, y) => { const f = puff(x, y); return f * (B.t / 2 + rip(x, y)) + .06; };
+    const zBack = (x, y) => { const f = puff(x, y); return -f * (B.t / 2 + rip(-x, y + 9)) - .06; };
     S3.front = { f: (u, v) => { const x = (u - .5) * W, y = v * Hv; return [x, y, zFront(x, y)]; }, rest: P([0, Hv / 2, 0], [1, 0, 0], [0, 1, 0]) };
     S3.back = { f: (u, v) => { const x = (.5 - u) * W, y = v * Hv; return [x, y, zBack(x, y)]; }, rest: P([0, Hv / 2, 0], [-1, 0, 0], [0, 1, 0]) };
+    frontAt = (x, s) => ({ p: [x, s, zFront(x, s)], n: [0, 0, 1] });
+    backTop = x => [x, Hv, zBack(x, Hv)];
+    B.topY = Hv; B.zTop = zFront(0, Hv); B.zBackTop = zBack(0, Hv);
   } else {
-    // block bag: the front stays upright, the back comes forward over the top hp to meet it
-    const hp = Math.min(D * .8, Hv * .4), dmin = 1.2, b = Math.min(3.5, W * .035);
-    const pin = y => smooth(Hv - hp, Hv, y), Dd = y => D - (D - dmin) * pin(y);
-    const g = y => smooth(0, 18, y) * (1 - pin(y)) * (1 - smooth(Hv - cover - 25, Hv - cover, y));
-    zFront = (x, y) => D / 2 + b * Math.cos(Math.PI * x / W) * g(y) + .06;
-    zBack = (x, y) => D / 2 - Dd(y) - b * Math.cos(Math.PI * x / W) * g(y) - .06;
-    S3.front = { f: (u, v) => { const x = (u - .5) * W, y = v * Hv; return [x, y, zFront(x, y)]; }, rest: P([0, Hv / 2, D / 2], [1, 0, 0], [0, 1, 0]) };
-    S3.back = { f: (u, v) => { const x = (.5 - u) * W, y = v * Hv; return [x, y, zBack(x, y)]; }, rest: P([0, Hv / 2, -D / 2], [-1, 0, 0], [0, 1, 0]) };
-    // gussets: flat below, folded inward along a centre crease as the top closes
+    // paper profile of the front (y, z) against paper length s: upright, a crease, the slope, the crest.
+    // Paper bags fold on sharp creases, film rounds them a little.
+    const { s0, L, dmin } = B, r = B.film ? 4 : .6, run = (D - dmin) / 2;
+    const sp = x => x / r > 30 ? x : r * Math.log1p(Math.exp(x / r));
+    const zP = s => D / 2 - run * (sp(s - s0) - sp(s - s0 - L)) / L;
+    const N = 800, ys = new Float64Array(N + 1), zs = new Float64Array(N + 1);
+    zs[0] = zP(0);
+    for (let i = 1; i <= N; i++) { const s = Hv * i / N, ds = Hv / N; zs[i] = zP(s); const dz = zs[i] - zs[i - 1]; ys[i] = ys[i - 1] + Math.sqrt(Math.max(0, ds * ds - dz * dz)); }
+    const prof = s => {
+      const f = clamp(s / Hv, 0, 1) * N, i = Math.min(N - 1, Math.floor(f)), t = f - i;
+      const y = ys[i] + (ys[i + 1] - ys[i]) * t, z = zs[i] + (zs[i + 1] - zs[i]) * t, dy = ys[i + 1] - ys[i], dz = zs[i + 1] - zs[i], l = Math.hypot(dy, dz) || 1;
+      return { y, z, ny: -dz / l, nz: dy / l };
+    };
+    const b = Math.min(3.5, W * .035), g = s => smooth(0, 18, s) * (1 - smooth(s0 - 30, s0 - 4, s)) * (1 - smooth(Hv - cover - 25, Hv - cover, s));
+    const bulge = (x, s) => b * Math.cos(Math.PI * x / W) * g(s);
+    S3.front = { f: (u, v) => { const x = (u - .5) * W, s = v * Hv, q = prof(s); return [x, q.y, q.z + bulge(x, s) + .06]; }, rest: P([0, Hv / 2, D / 2], [1, 0, 0], [0, 1, 0]) };
+    S3.back = { f: (u, v) => { const x = (.5 - u) * W, s = v * Hv, q = prof(s); return [x, q.y, -q.z - bulge(x, s) - .06]; }, rest: P([0, Hv / 2, -D / 2], [-1, 0, 0], [0, 1, 0]) };
+    // gussets fold in along a centre crease as front and back close up: triangles under the slope
     const side = sg => (u, v) => {
-      const y = v * Hv, zf = D / 2, zb = D / 2 - Dd(y), q = sg < 0 ? u : 1 - u;   // q: 0 at the back edge … 1 at the front edge
-      const inset = Math.sqrt(Math.max(0, (D / 2) ** 2 - (Dd(y) / 2) ** 2)), cx = sg * (W / 2 - inset), cz = (zf + zb) / 2;
-      const [ax, az, bx, bz, t] = q < .5 ? [sg * W / 2, zb, cx, cz, q * 2] : [cx, cz, sg * W / 2, zf, q * 2 - 1];
-      const bulge = sg * b * .6 * Math.sin(Math.PI * q) * g(y);
-      return [ax + (bx - ax) * t + bulge + sg * .06, y, az + (bz - az) * t];
+      const s = v * Hv, q = prof(s), zf = q.z, w = sg < 0 ? u : 1 - u;   // w: 0 at the back edge … 1 at the front edge
+      const inset = Math.sqrt(Math.max(0, (D / 2) ** 2 - zf * zf)), cx = sg * (W / 2 - inset);
+      const [ax, az, bx, bz, t] = w < .5 ? [sg * W / 2, -zf, cx, 0, w * 2] : [cx, 0, sg * W / 2, zf, w * 2 - 1];
+      return [ax + (bx - ax) * t + sg * (b * .6 * Math.sin(Math.PI * w) * g(s) + .06), q.y, az + (bz - az) * t];
     };
     S3.left = { f: side(-1), rest: P([-W / 2, Hv / 2, 0], [0, 0, 1], [0, 1, 0]) };
     S3.right = { f: side(1), rest: P([W / 2, Hv / 2, 0], [0, 0, -1], [0, 1, 0]) };
     S3.bottom = { f: (u, v) => [(u - .5) * W, -.06, (v - .5) * D], rest: P([0, 0, 0], [1, 0, 0], [0, 0, 1]) };
+    frontAt = (x, s) => { const q = prof(s); return { p: [x, q.y, q.z + bulge(x, s) + .06], n: [0, q.ny, q.nz] }; };
+    backTop = x => { const q = prof(Hv); return [x, q.y, -q.z - .06]; };
+    const qt = prof(Hv); B.topY = qt.y; B.zTop = qt.z + .06; B.zBackTop = -qt.z - .06;
   }
-  // the flap / fold-over strip lies on the front, hinged at the top edge
-  const zTop = zFront(0, Hv), z0 = B.block ? D / 2 : 0;
+  // the flap / fold-over strip lies on the front, measured from the top edge down
+  const z0 = B.block ? D / 2 : 0;
   if (B.top !== 'seal') {
-    const lift = .18;
-    S3[B.top] = { f: (u, v) => { const x = (u - .5) * W, y = Hv - (1 - v) * fh; return [x, y, zFront(x, y) + lift]; },
-      rest: P([0, Hv - fh / 2, z0 + lift], [1, 0, 0], [0, 1, 0]), hinge: [0, Hv, zTop + lift / 2] };
+    const lift = B.top === 'fold' ? B.tk : .18;
+    S3[B.top] = { f: (u, v) => { const a = frontAt((u - .5) * W, Hv - (1 - v) * fh); return [a.p[0] + a.n[0] * lift, a.p[1] + a.n[1] * lift, a.p[2] + a.n[2] * lift]; },
+      rest: P([0, Hv - fh / 2, z0 + .18], [1, 0, 0], [0, 1, 0]), hinge: [0, B.topY, B.zTop + lift / 2] };
+    if (B.turns > 1) {
+      // the roll: its top runs round from the front band over to the back, its ends are closed
+      const strip = S3.fold.f;
+      const arc = (u, v) => {
+        const a = strip(u, 1), b = backTop((u - .5) * W), c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], r = Math.hypot(a[1] - b[1], a[2] - b[2]) / 2 + .05;
+        const dy = (a[1] - c[1]) / r, dz = (a[2] - c[2]) / r, an = Math.PI * v;   // from the front point over the top to the back
+        return [a[0], c[1] + (dy * Math.cos(an) + dz * Math.sin(an)) * r, c[2] + (dz * Math.cos(an) - dy * Math.sin(an)) * r];
+      };
+      B.roll3 = { arc, strip, inner: (u, v) => frontAt((u - .5) * W, Hv - (1 - v) * fh).p };
+    }
   }
-  // extender: a card folded over the top edge, stapled through
-  const zf = zTop + (B.top === 'seal' ? 0 : .36), zb = zBack(0, Hv);
+  // extender: a card folded over the crest, stapled through
+  const zf = B.zTop + (B.top === 'fold' ? B.tk : B.top === 'flap' ? .36 : 0), zb = B.zBackTop;
   B.extZ = [zf + .35, zb - .35];
   if (B.ext) {
-    S3.extFront = { f: (u, v) => [(u - .5) * B.ew, Hv - (1 - v) * B.eh, B.extZ[0]], rest: P([0, Hv - B.eh / 2, B.extZ[0]], [1, 0, 0], [0, 1, 0]) };
-    S3.extBack = { f: (u, v) => [(.5 - u) * B.ew, Hv - (1 - v) * B.eh, B.extZ[1]], rest: P([0, Hv - B.eh / 2, B.extZ[1]], [-1, 0, 0], [0, 1, 0]) };
+    const yt = B.topY + (B.turns > 1 ? B.tk : 0);
+    B.extTop = yt;
+    S3.extFront = { f: (u, v) => [(u - .5) * B.ew, yt - (1 - v) * B.eh, B.extZ[0]], rest: P([0, Hv - B.eh / 2, z0 + .6], [1, 0, 0], [0, 1, 0]) };
+    S3.extBack = { f: (u, v) => [(.5 - u) * B.ew, yt - (1 - v) * B.eh, B.extZ[1]], rest: P([0, Hv - B.eh / 2, -z0 - .6], [-1, 0, 0], [0, 1, 0]) };
   }
   return { B, S3 };
 }
@@ -1453,10 +1516,10 @@ function buildCupLid(o, rt, G) {
   rt.cupLid = g; rt.group.add(g);
 }
 /* a grid over a surface f(u, v) (mm), offset by off (mm) into a part's own space */
-function gridGeo(f, nu, nv, off = [0, 0, 0]) {
+function gridGeo(f, nu, nv, off = [0, 0, 0], r = [0, 1, 0, 1]) {
   const P = [], UV = [], I = [];
   for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) {
-    const u = i / nu, v = j / nv, p = f(u, v);
+    const u = r[0] + (r[1] - r[0]) * i / nu, v = r[2] + (r[3] - r[2]) * j / nv, p = f(u, v);
     P.push((p[0] - off[0]) * S, (p[1] - off[1]) * S, (p[2] - off[2]) * S); UV.push(u, v);
   }
   for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1; I.push(a, b, d, a, d, c); }
@@ -1478,41 +1541,61 @@ function surfFrame(o, key, s3, parent, pinv) {
   return { c: V(s3.rest.c), u, v, n, w, h, parent, pinv, map, nrm, key };
 }
 function buildBag(o, rt) {
-  const { B, S3 } = bagShape(o), film = bagFilm(o), clear = o.bagMat === 'clear', frames = rt.bagFrames = {};
+  const { B, S3 } = bagShape(o), film = bagFilm(o), clear = o.bagMat === 'clear', frames = rt.bagFrames = {}, wins = bagWindows(o);
   const I4 = new THREE.Matrix4();
-  const res = k => { const [w, h] = faceMM(o, k); return [clamp(Math.ceil(w / 4), 4, 48), clamp(Math.ceil(h / 4), 4, 80)]; };
+  const res = k => { const [w, h] = faceMM(o, k); return [clamp(Math.ceil(w / 3), 4, 60), clamp(Math.ceil(h / 2.5), 4, 120)]; };
   const face = (key, parent, off = [0, 0, 0], pinv = I4) => {
     const s3 = S3[key], [nu, nv] = res(key), geo = gridGeo(s3.f, nu, nv, off), f = rt.faces[key], card = EXT_KEYS.includes(key);
     f.mat.side = film && !card ? THREE.DoubleSide : THREE.FrontSide;
     const m = new THREE.Mesh(geo, f.mat); m.userData = { objId: o.id, face: key };
     m.castShadow = !clear || card; m.receiveShadow = true; m.renderOrder = 2; parent.add(m);
+    const sub = (r, mat, order) => { const g = gridGeo(s3.f, Math.max(2, Math.ceil(nu * (r[1] - r[0]))), Math.max(2, Math.ceil(nv * (r[3] - r[2]))), off, r); const x = new THREE.Mesh(g, mat); x.raycast = () => {}; x.receiveShadow = true; x.renderOrder = order; parent.add(x); return x; };
     if (film && !card) {
       if (clear) { const sh = new THREE.Mesh(geo, rt.petMat); sh.raycast = () => {}; sh.renderOrder = 1; parent.add(sh); }
+    } else if (wins[key]) {
+      // a window: the inside of the paper around it, and the film across it
+      const [u0, u1, v0, v1] = wins[key];
+      for (const r of [[0, 1, 0, v0], [0, 1, v1, 1], [0, u0, v0, v1], [u1, 1, v0, v1]]) if (r[1] - r[0] > 1e-4 && r[3] - r[2] > 1e-4) sub(r, rt.innerMat, 0);
+      sub(wins[key], rt.petMat, 4);
     } else { const tw = new THREE.Mesh(geo, rt.innerMat); tw.raycast = () => {}; tw.receiveShadow = true; parent.add(tw); }
     frames[key] = surfFrame(o, key, s3, parent, pinv);
     return m;
   };
   for (const k of ['front', 'back', 'left', 'right', 'bottom']) if (S3[k]) face(k, rt.group);
   if (B.top !== 'seal') {
-    const st = S3[B.top], hg = st.hinge, pv = new THREE.Group();
-    pv.position.set(hg[0] * S, hg[1] * S, hg[2] * S); rt.group.add(pv); rt.bagPivot = pv;
-    face(B.top, pv, hg, new THREE.Matrix4().makeTranslation(-hg[0] * S, -hg[1] * S, -hg[2] * S));
-    if (B.top === 'flap') {
-      // adhesive tape on the inside of the flap, near its edge
-      const v0 = 3 / B.fh, v1 = v0 + Math.min(10, B.fh * .35) / B.fh;
-      const tape = new THREE.Mesh(gridGeo((u, v) => { const p = st.f(.03 + .94 * u, v0 + (v1 - v0) * v); p[2] -= .1; return p; }, 48, 4, hg), rt.tapeMat);
-      tape.raycast = () => {}; pv.add(tape); rt.bagTape = tape;   // hidden while the flap is shut (it is sandwiched anyway)
+    const st = S3[B.top], hg = st.hinge;
+    if (B.turns > 1) {
+      // a roll stays rolled: the band is part of the bag, its top and ends are board
+      face('fold', rt.group);
+      const R = B.roll3, mat = rt.faces.fold.mat;
+      const cap = gridGeo(R.arc, 48, 10); const uv = cap.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, 1);
+      const cm = new THREE.Mesh(cap, mat); cm.castShadow = cm.receiveShadow = true; cm.userData = { objId: o.id, face: 'fold' }; rt.group.add(cm);
+      for (const u of [0, 1]) {
+        const band = gridGeo((a, b) => { const p = R.inner(u, a), q = R.strip(u, a); return [p[0] + (q[0] - p[0]) * b, p[1] + (q[1] - p[1]) * b, p[2] + (q[2] - p[2]) * b]; }, 16, 1);
+        const top = gridGeo((a, b) => { const c = R.arc(u, .5), p = R.arc(u, a); return [c[0], c[1] + (p[1] - c[1]) * b, c[2] + (p[2] - c[2]) * b]; }, 16, 1);
+        for (const g of [band, top]) { const e = new THREE.Mesh(g, rt.foldMat); e.userData = { objId: o.id, face: null }; rt.group.add(e); }
+      }
+    } else {
+      const pv = new THREE.Group();
+      pv.position.set(hg[0] * S, hg[1] * S, hg[2] * S); rt.group.add(pv); rt.bagPivot = pv;
+      face(B.top, pv, hg, new THREE.Matrix4().makeTranslation(-hg[0] * S, -hg[1] * S, -hg[2] * S));
+      if (B.top === 'flap') {
+        // adhesive tape on the inside of the flap, near its edge; hidden while the flap is shut (it is sandwiched anyway)
+        const v0 = 3 / B.fh, v1 = v0 + Math.min(10, B.fh * .35) / B.fh;
+        const tape = new THREE.Mesh(gridGeo((u, v) => { const p = st.f(.03 + .94 * u, v0 + (v1 - v0) * v); p[2] -= .1; return p; }, 48, 4, hg), rt.tapeMat);
+        tape.raycast = () => {}; pv.add(tape); rt.bagTape = tape;
+      }
     }
   }
   if (B.ext) {
     face('extFront', rt.group); face('extBack', rt.group);
-    const [zf, zb] = B.extZ, zc = (zf + zb) / 2, r = (zf - zb) / 2;
-    const bend = new THREE.Mesh(gridGeo((u, v) => [(u - .5) * B.ew, B.Hv + r * Math.sin(Math.PI * v), zc + r * Math.cos(Math.PI * v)], 2, 10), rt.cardMat);
+    const [zf, zb] = B.extZ, zc = (zf + zb) / 2, r = (zf - zb) / 2, yt = B.extTop;
+    const bend = new THREE.Mesh(gridGeo((u, v) => [(u - .5) * B.ew, yt + r * Math.sin(Math.PI * v), zc + r * Math.cos(Math.PI * v)], 2, 10), rt.cardMat);
     bend.castShadow = bend.receiveShadow = true; bend.userData = { objId: o.id, face: null }; rt.group.add(bend);
     const n = +o.ext.staples === 1 ? [0] : [-B.ew * .27, B.ew * .27];
     for (const x of n) for (const z of [zf + .25, zb - .25]) {
       const sp = new THREE.Mesh(new THREE.BoxGeometry(11 * S, .7 * S, .45 * S), rt.metalMat);
-      sp.position.set(x * S, (B.Hv - B.eh * .55) * S, z * S); sp.castShadow = true; rt.group.add(sp);
+      sp.position.set(x * S, (yt - B.eh * .55) * S, z * S); sp.castShadow = true; rt.group.add(sp);
     }
   }
   // the product inside: a cut-out photo, softened behind frosty film or tracing paper
@@ -1686,6 +1769,9 @@ function renderFace(o, k) {
   }
   for (const L of fxl) if (isFoil(L.effect)) drawLayer(ctx, L, W, H, foilPaint(ctx, L.effect, W, H), 1);
   if (bf && o.bagStyle !== 'block' && (k === 'front' || k === 'back')) bagSeals(ctx, o, W, H);
+  const bw = o.type === 'bag' ? bagWindows(o)[k] : null;
+  f.win = !!bw;
+  if (bw) ctx.clearRect(bw[0] * W, (1 - bw[3]) * H, (bw[1] - bw[0]) * W, (bw[3] - bw[2]) * H);
   // stickers sit on top of everything printed
   const ops = [];
   const frs = RT.get(o.id)?.frames;
@@ -1762,7 +1848,8 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
   m.sheen = fin.sheen || 0; m.sheenRoughness = .8; m.sheenColor.set(0xffffff);
   // bag film keeps depth so the flap and stickers on it always cover the side beneath
   m.transparent = !!f.clear; m.depthWrite = !f.clear || o.type === 'bag';
-  const sig = [!!m.roughnessMap, !!m.bumpMap, fin.cc > 0, !!fin.sheen, !!f.clear].join();
+  m.alphaTest = f.win ? .5 : 0;   // a window cut in a paper bag
+  const sig = [!!m.roughnessMap, !!m.bumpMap, fin.cc > 0, !!fin.sheen, !!f.clear, !!f.win].join();
   if (sig !== f.sig) { f.sig = sig; m.needsUpdate = true; }
 }
 
@@ -2438,13 +2525,19 @@ function renderModel() {
     if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k.startsWith('dims') || k === 'thickness') { rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lid') { applyLid(o); return; }
-    if (k === 'bagStyle') { o.dims.d = o.bagStyle === 'block' ? Math.round(o.dims.w * .65) : 12; o.lid = 0; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); renderObjects(); ui.net = true; updateFaceMeta(); return; }
-    if (k === 'bagTop' || k === 'ext.on') { o.lid = 0; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'bagStyle') { o.dims.d = o.bagStyle === 'block' ? Math.round(o.dims.w * .65) : 12; o.lid = 0; o.bagWin.ws = Math.round(o.dims.d * .6); ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); renderObjects(); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'bagTop' || k === 'ext.on') { o.lid = 0; if (k === 'bagTop' && o.bagTop === 'fold' && o.bagStyle === 'block' && o.rollTurns < 2) { o.rollTurns = 2; o.flapH = 16; } ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'bagMat') {
       if (o.bagMat === 'kraft') { o.grain = .45; setBoard(o, '#c39460'); } else if (o.bagMat === 'paper') { o.grain = .12; setBoard(o, '#ffffff'); }
       rebuildQueue.add(o.id); applyObjMaterials(o); markObj(o); renderModel(); renderFacePanel(); return;
     }
     if (k.startsWith('product') || k.startsWith('ext.')) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'rollTurns' || k === 'shoulder' || k.startsWith('bagWin')) {
+      if (k === 'rollTurns') o.lid = 0;
+      rebuildQueue.add(o.id); markObj(o); ui.net = true; updateFaceMeta();
+      if (k === 'rollTurns' || k === 'bagWin.on' || k === 'bagWin.wrap') renderModel();
+      return;
+    }
     if (k === 'cupWall' || k === 'cupLid') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'cupLid') renderModel(); return; }
     if (k === 'lidColor') { applyObjMaterials(o); $$('#lidSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.lidColor)); return; }
     if (k.startsWith('pos') || k === 'rotY') { applyTransform(o); return; }
@@ -2497,11 +2590,18 @@ function bagFields(o) {
   return `<div class="field wide"><span class="fl">Форма</span><select data-k="bagStyle"><option value="flat">Плоский</option><option value="block">С плоским дном</option></select></div>`
     + rangeField('Ширина, мм', 'dims.w', 30, 600, 1) + rangeField('Высота, мм', 'dims.h', 30, 800, 1)
     + (block ? rangeField('Глубина дна (фальц), мм', 'dims.d', 10, 300, 1) : rangeField('Толщина содержимого, мм', 'dims.d', 0, 80, 1))
-    + `<div class="field wide"><span class="fl">Верх</span><select data-k="bagTop">${Object.entries(BAG_TOPS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
-    + (top !== 'seal' ? rangeField(top === 'flap' ? 'Клапан, мм' : 'Отворот, мм', 'flapH', 8, 200, 1) + rangeField(top === 'flap' ? 'Открыть клапан, °' : 'Развернуть отворот, °', 'lid', 0, 180, 1) : '')
+    + `<div class="field wide"><span class="fl">Верх</span><select data-k="bagTop">${Object.entries(BAG_TOPS).map(([k, v]) => `<option value="${k}">${k === 'fold' && block ? 'Завёрнут (скрутка)' : v}</option>`).join('')}</select></div>`
+    + (top === 'fold' ? rangeField('Обороты (1 — простой отворот)', 'rollTurns', 1, 3, 1) : '')
+    + (top !== 'seal' ? rangeField(top === 'flap' ? 'Клапан, мм' : (o.rollTurns > 1 ? 'Скрутка: ширина валика, мм' : 'Отворот, мм'), 'flapH', 8, 200, 1) : '')
+    + (top === 'flap' || (top === 'fold' && !(o.rollTurns > 1)) ? rangeField(top === 'flap' ? 'Открыть клапан, °' : 'Развернуть отворот, °', 'lid', 0, 180, 1) : '')
+    + (block ? rangeField('Скат верха, мм (0 — авто)', 'shoulder', 0, 300, 1) : '')
     + `<div class="field wide"><span class="fl">Материал</span><select data-k="bagMat">${Object.entries(BAG_MATS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
     + `<label class="check"><input type="checkbox" data-k="ext.on"> Экстендер (картонный хедер на степлере)</label>`
     + (o.ext?.on ? rangeField('Экстендер: высота, мм', 'ext.h', 10, 200, 1) + `<div class="field wide"><span class="fl">Скобы</span><select data-k="ext.staples"><option value="1">Одна по центру</option><option value="2">Две</option></select></div>` : '')
+    + (!bagFilm(o) ? `<label class="check"><input type="checkbox" data-k="bagWin.on"> Окно с плёнкой</label>`
+      + (o.bagWin?.on ? (block ? `<div class="field wide"><span class="fl">Окно</span><select data-k="bagWin.wrap"><option value="none">На переде</option><option value="right">С заходом на правый фальц</option><option value="left">С заходом на левый фальц</option></select></div>` : '')
+        + rangeField('Окно: ширина на переде, мм', 'bagWin.w', 5, 600, 1) + rangeField('Окно: высота, мм', 'bagWin.h', 5, 800, 1) + rangeField('Окно: от дна, мм', 'bagWin.y', 3, 800, 1)
+        + (block && o.bagWin.wrap !== 'none' ? rangeField('Окно: на фальце, мм', 'bagWin.ws', 3, 300, 1) : rangeField('Окно: сдвиг вбок, мм', 'bagWin.x', -300, 300, 1)) : '') : '')
     + `<div class="field wide"><span class="fl">Содержимое</span><div class="row"><button class="btn sm" id="prodBtn">${pr.src ? 'Заменить фото…' : 'Фото продукта (PNG)…'}</button>${pr.src ? '<button class="btn sm" id="prodOff">Убрать</button>' : ''}</div></div>`
     + (pr.src ? rangeField('Содержимое: ширина, мм', 'product.w', 5, 600, 1) + rangeField('Содержимое: от дна, мм', 'product.y', -50, 600, 1) + rangeField('Содержимое: сдвиг вбок, мм', 'product.x', -300, 300, 1) : '')
     + `<p class="hint">Фото продукта без фона (PNG) стоит внутри пакета и просвечивает сквозь плёнку: через матовую плёнку и кальку — размыто.${top === 'flap' ? ' Клеевая лента — на внутренней стороне клапана, видна при открытии.' : ''}</p>`;
@@ -3289,6 +3389,12 @@ function bagSVG(o, n, f, label) {
   let body = cut.map(l => line(l, 'stroke="#00a0e3" stroke-width="0.3"')).join('');
   body += [...fold.values()].map(l => line(l, 'stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"')).join('');
   body += (n.seams || []).map(l => line(l, 'stroke="#2e9e5b" stroke-width="0.3" stroke-dasharray="0.8 0.8"')).join('');
+  body += (n.seams?.creases || []).map(l => line(l, 'stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"')).join('');
+  for (const p of n.panels) {
+    const r = n.wins?.[p.key]; if (!r) continue;
+    const x = p.rot ? p.x + (1 - r[1]) * p.w : p.x + r[0] * p.w, y = p.rot ? p.y + r[2] * p.h : p.y + (1 - r[3]) * p.h;
+    body += `<rect x="${f(x)}" y="${f(y)}" width="${f((r[1] - r[0]) * p.w)}" height="${f((r[3] - r[2]) * p.h)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+  }
   if (n.glue) { const g = n.glue; body += `<rect x="${f(g.x)}" y="${f(g.y)}" width="${f(g.w)}" height="${f(g.h)}" fill="none" stroke="#f08c00" stroke-width="0.3" stroke-dasharray="1.5 1"/><text x="${f(g.x + g.w / 2)}" y="${f(g.y + g.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.min(3, g.h * .5))}" fill="#f08c00" text-anchor="middle" dominant-baseline="middle">КЛЕЕВАЯ ЛЕНТА (с обратной стороны)</text>`; }
   for (const p of n.panels) {
     if (p.blank) { const fs = Math.max(2.5, Math.min(p.w, p.h) * .12); body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle"${p.h > p.w ? ` transform="rotate(-90 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''}>${esc(p.blank.toUpperCase())}</text>`; }
