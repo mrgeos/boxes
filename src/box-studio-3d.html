@@ -241,13 +241,15 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
       <button class="btn sm" data-view="top">Сверху</button>
       <button class="btn sm" data-view="back">Сзади</button>
       <button class="btn sm" data-view="bottom">Снизу</button>
-      <button class="btn sm" data-view="focus">К выбранному</button>
-      <button class="btn sm" data-view="fit">Показать всё</button>
+      <button class="btn sm" data-view="focus" title="Приблизить выбранный объект (F или двойной клик)">К выбранному</button>
+      <button class="btn sm" data-view="fit" title="Вся сцена (H)">Показать всё</button>
+      <button class="btn sm on" id="orbitLockBtn" aria-pressed="true" title="Вращение, сдвиг и масштаб вокруг выбранного объекта">◎ Вокруг выбранного</button>
     </div>
     <div class="stage-hint" id="stageHint">
       <button id="hideHint" aria-label="Скрыть подсказку">×</button>
       <b>Клик по грани</b> — выбрать её для дизайна. <b>Перетащите выбранный слой</b> прямо по модели.<br>
-      Вращение — левая кнопка, сдвиг — правая, масштаб — колесо. Картинку можно бросить прямо на грань.
+      Камера вращается вокруг выбранного объекта: левая кнопка — вращение, правая или Shift — сдвиг, колесо — масштаб.
+      <b>Двойной клик</b> или F — приблизить объект, H — вся сцена.
     </div>
     <div class="drop" id="dropHint" hidden>Отпустите, чтобы разместить на грани</div>
     <div class="rec" id="recBadge" hidden>● Запись видео…</div>
@@ -858,7 +860,15 @@ function buildTube(o, rt) {
   m.userData = { objId: o.id, faces: ['wrap', 'top', 'bottom'] };
   rt.group.add(m);
 }
-function applyTransform(o) { const rt = RT.get(o.id); if (!rt) return; rt.group.position.set(o.pos.x * S, 0, o.pos.z * S); rt.group.rotation.y = o.rotY * DEG; updateShadowCam(); }
+function applyTransform(o) {
+  const rt = RT.get(o.id); if (!rt) return;
+  const before = rt.group.position.clone();
+  rt.group.position.set(o.pos.x * S, 0, o.pos.z * S); rt.group.rotation.y = o.rotY * DEG;
+  // keep orbiting the selected object while it is being moved
+  if (rt.placed && orbitLock && o.id === sel.obj && !camTween) { const d = rt.group.position.clone().sub(before); camera.position.add(d); controls.target.add(d); }
+  rt.placed = true;
+  updateShadowCam();
+}
 function applyLid(o) {
   const rt = RT.get(o.id); if (!rt) return;
   if (rt.lidPivot) rt.lidPivot.rotation.x = -o.lid * DEG;
@@ -1042,16 +1052,62 @@ function sceneBounds(onlyActive = false) {
 }
 const VIEW_DIRS = { front: [0, .2, 1], q: [.78, .62, 1], side: [1, .2, 0], top: [0, 1, .0001], back: [0, .2, -1], bottom: [.0001, -1, .25] };
 let camTween = null, lastView = 'q';
+
+/* ---------- orbit around the selected object ----------
+   With the lock on, the orbit pivot (controls.target) sits at the selected object's centre.
+   Panning shifts the picture on screen (a projection offset) instead of moving the pivot,
+   so rotating and zooming always stay around the object. */
+let orbitLock = true;
+try { orbitLock = localStorage.getItem('box-studio-3d/orbit') !== 'free'; } catch {}
+const view = { x: 0, y: 0 };   // screen-space pan, CSS px
+const lockActive = () => orbitLock && !!activeObj();
+function applyViewOffset() {
+  const w = viewport.clientWidth, h = viewport.clientHeight;
+  if (!w || !h) return;
+  if (Math.abs(view.x) < .01 && Math.abs(view.y) < .01) camera.clearViewOffset();
+  else camera.setViewOffset(w, h, view.x, view.y, w, h);
+}
+function fitDistance(r) {
+  const vf = camera.fov * DEG / 2, hf = Math.atan(Math.tan(vf) * camera.aspect);
+  return r / Math.sin(Math.min(vf, hf)) * 1.08;
+}
+function tweenCamera(p1, q1, instant = false) {
+  if (instant) { camera.position.copy(p1); controls.target.copy(q1); view.x = view.y = 0; applyViewOffset(); controls.update(); return; }
+  camTween = { t0: performance.now(), p0: camera.position.clone(), q0: controls.target.clone(), p1, q1, v0: { ...view } };
+}
+function objBounds(id) {
+  const rt = RT.get(id), b = new THREE.Box3(); if (rt) b.expandByObject(rt.group);
+  return b.isEmpty() ? null : b;
+}
+/* move the pivot to the selected object; keep the viewing angle, adjust distance only if it is far off */
+function focusSelected({ frame = false } = {}) {
+  const o = activeObj(), b = o && objBounds(o.id); if (!b) return;
+  const c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
+  const off = camera.position.clone().sub(controls.target);
+  let dist = off.length();
+  const fit = fitDistance(r);
+  if (frame) dist = fit; else dist = clamp(dist, fit * .45, fit * 3.2);
+  off.setLength(dist);
+  tweenCamera(c.clone().add(off), c);
+  $$('#views .btn[data-view]').forEach(b => b.classList.toggle('on', frame && b.dataset.view === 'focus'));
+}
 function setView(name, instant = false) {
   if (VIEW_DIRS[name]) lastView = name;
+  const o = activeObj();
+  const onObj = o && name !== 'fit' && (orbitLock || name === 'focus');
   const dir = new THREE.Vector3(...(VIEW_DIRS[name] || VIEW_DIRS[lastView])).normalize();
-  const b = sceneBounds(name === 'focus'), c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
-  const vf = camera.fov * DEG / 2, hf = Math.atan(Math.tan(vf) * camera.aspect);
-  const dist = r / Math.sin(Math.min(vf, hf)) * 1.08;
-  const toPos = c.clone().add(dir.multiplyScalar(dist));
-  if (instant) { camera.position.copy(toPos); controls.target.copy(c); controls.update(); return; }
-  camTween = { t0: performance.now(), p0: camera.position.clone(), q0: controls.target.clone(), p1: toPos, q1: c };
-  $$('#views .btn').forEach(b => b.classList.toggle('on', b.dataset.view === name));
+  if (onObj) dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), o.rotY * DEG);   // views follow the object's own front
+  const b = onObj ? (objBounds(o.id) || sceneBounds()) : sceneBounds();
+  const c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
+  tweenCamera(c.clone().add(dir.multiplyScalar(fitDistance(r))), c, instant);
+  $$('#views .btn[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === name));
+}
+function setOrbitLock(on) {
+  orbitLock = on;
+  try { localStorage.setItem('box-studio-3d/orbit', on ? 'object' : 'free'); } catch {}
+  controls.enablePan = !on;
+  const b = $('#orbitLockBtn'); b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on);
+  if (on) focusSelected(); else if (view.x || view.y) tweenCamera(camera.position.clone(), controls.target.clone());
 }
 function updateShadowCam() {
   const b = sceneBounds(), c = b.getCenter(new THREE.Vector3()), r = Math.max(.5, b.getBoundingSphere(new THREE.Sphere()).radius);
@@ -1077,7 +1133,7 @@ function applyScene() {
    ================================================================ */
 function resize() {
   const w = viewport.clientWidth, h = viewport.clientHeight; if (!w || !h) return;
-  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); applyViewOffset();
 }
 new ResizeObserver(resize).observe(viewport);
 const accent = new THREE.Color();
@@ -1092,8 +1148,10 @@ renderer.setAnimationLoop(now => {
   if (camTween) {
     const t = clamp((now - camTween.t0) / 520, 0, 1), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     camera.position.lerpVectors(camTween.p0, camTween.p1, e); controls.target.lerpVectors(camTween.q0, camTween.q1, e);
+    view.x = camTween.v0.x * (1 - e); view.y = camTween.v0.y * (1 - e); applyViewOffset();
     if (t >= 1) camTween = null;
   }
+  controls.enablePan = !lockActive();
   if (recording) recording.step(now);
   else controls.update();
   for (const rt of RT.values()) for (const k in rt.faces) {
@@ -1119,7 +1177,7 @@ function select(objId, face = undefined, layerId = null, { flash = false } = {})
   } else sel.face = null;
   sel.layer = layerId;
   if (flash && o) { const f = RT.get(o.id)?.faces[sel.face]; if (f) { f.flash = 1; accent.set(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0a7aa1'); } }
-  if (changedObj) { renderObjects(); renderModel(); }
+  if (changedObj) { renderObjects(); renderModel(); if (orbitLock) focusSelected(); }
   renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps();
   ui.editor = ui.net = true;
 }
@@ -1179,7 +1237,7 @@ function loadProject(d, { resetHistory = true } = {}) {
   applyScene(); renderAll();
   if (resetHistory) { hist.stack = []; hist.i = -1; }
   commit();
-  requestAnimationFrame(() => setView('q', true));
+  requestAnimationFrame(() => { lastView = 'q'; setView('fit', true); });
 }
 
 /* ---------- file saving (viewer download capability, with a plain fallback) ---------- */
@@ -1652,8 +1710,35 @@ function pick(clientX, clientY, only = null) {
 }
 const cvs = renderer.domElement;
 let down = null, drag3 = null, hoverT = 0;
+/* screen-space pan in orbit-lock mode: right button, Shift/Ctrl/Cmd + left button, or two fingers */
+const touches = new Map(); let pan = null;
+const touchMid = () => { const p = [...touches.values()]; return [(p[0][0] + p[1][0]) / 2, (p[0][1] + p[1][1]) / 2]; };
 cvs.addEventListener('pointerdown', e => {
-  if (recording) return;
+  if (e.pointerType === 'touch') {
+    touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (touches.size === 2 && lockActive()) { const [x, y] = touchMid(); pan = { x, y, vx: view.x, vy: view.y, touch: true }; }
+    return;
+  }
+  if (!lockActive() || drag3) return;
+  if (e.button === 2 || (e.button === 0 && (e.shiftKey || e.ctrlKey || e.metaKey))) {
+    pan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y }; camTween = null; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'move';
+  }
+}, true);
+window.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch' && touches.has(e.pointerId)) touches.set(e.pointerId, [e.clientX, e.clientY]);
+  if (!pan) return;
+  const [x, y] = pan.touch ? (touches.size === 2 ? touchMid() : [pan.x, pan.y]) : [e.clientX, e.clientY];
+  view.x = pan.vx - (x - pan.x); view.y = pan.vy - (y - pan.y); applyViewOffset();
+});
+const endPan = e => { touches.delete(e.pointerId); if (pan && (!pan.touch || touches.size < 2)) { pan = null; cvs.style.cursor = 'grab'; } };
+window.addEventListener('pointerup', endPan); window.addEventListener('pointercancel', endPan);
+cvs.addEventListener('dblclick', e => {
+  const h = pick(e.clientX, e.clientY); if (!h) return setView('fit');
+  if (h.objId !== sel.obj) select(h.objId, h.face || undefined, null, { flash: true });
+  focusSelected({ frame: true });
+});
+cvs.addEventListener('pointerdown', e => {
+  if (recording || e.button !== 0 || pan) return;
   down = { x: e.clientX, y: e.clientY };
   const h = pick(e.clientX, e.clientY), L = activeLayer();
   if (h && L && h.objId === sel.obj && h.face === sel.face && h.uv && !h.wall) {
@@ -1688,7 +1773,7 @@ cvs.addEventListener('pointermove', e => {
 });
 cvs.addEventListener('pointerup', e => {
   if (drag3) { drag3 = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.layers = true; commit(); down = null; return; }
-  if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) { down = null; return; }
+  if (e.button !== 0 || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) { down = null; return; }
   down = null;
   const h = pick(e.clientX, e.clientY);
   if (!h) return;
@@ -1731,6 +1816,11 @@ document.addEventListener('keydown', e => {
   if (mod && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); redo(); return; }
   if (e.key === 'Escape') { $('#exportMenu').hidden = true; $('#exportBtn').setAttribute('aria-expanded', 'false'); }
   if (typing) return;
+  if (!mod && !e.altKey) {
+    const key = e.key.toLowerCase();
+    if (key === 'f' || key === 'а') { e.preventDefault(); return activeObj() ? focusSelected({ frame: true }) : setView('fit'); }
+    if (key === 'h' || key === 'р' || e.key === 'Home') { e.preventDefault(); return setView('fit'); }
+  }
   const L = activeLayer(); if (!L) return;
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteLayer(L.id); }
   else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateLayer(L.id); }
@@ -2024,15 +2114,16 @@ $('#newBtn').onclick = () => {
 $('#sampleBtn').onclick = () => { loadProject(sampleProject(), { resetHistory: false }); toast('Загружен пример. Вернуть предыдущий — Ctrl+Z'); };
 $('#fontBtn').onclick = () => { $('#fontInput').value = ''; $('#fontInput').click(); };
 $('#fontInput').onchange = e => e.target.files[0] && addFontFile(e.target.files[0]);
-$$('#views .btn').forEach(b => b.onclick = () => setView(b.dataset.view));
+$$('#views .btn[data-view]').forEach(b => b.onclick = () => setView(b.dataset.view));
+$('#orbitLockBtn').onclick = () => setOrbitLock(!orbitLock);
 $('#hideHint').onclick = () => { $('#stageHint').hidden = true; try { localStorage.setItem('box-studio-3d/hint', '1'); } catch {} };
 try { if (localStorage.getItem('box-studio-3d/hint')) $('#stageHint').hidden = true; } catch {}
 
 /* boot */
-resize(); bindScene();
+resize(); bindScene(); setOrbitLock(orbitLock);
 let booted = false;
 try { const saved = localStorage.getItem(LS_KEY); if (saved) { loadProject(JSON.parse(saved)); booted = true; } } catch {}
 if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
-window.__boxStudio = { state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene };
+window.__boxStudio = { state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target };
 </script>
