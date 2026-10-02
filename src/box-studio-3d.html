@@ -585,6 +585,7 @@ function onAssetLoaded(id) {
     if (o.dieline === id) markObj(o);
     for (const k in o.faces) if (o.faces[k].layers.some(l => l.src === id)) markFace(o, k);
     for (const st of o.stickers || []) if (st.src === id) { tintCache.forEach((_, key) => key.startsWith(id + '|') && tintCache.delete(key)); touchSticker(o, st); }
+    if ((o.stickers || []).some(st => st.text)) stickerDirty.add(o.id);
   }
   ui.layers = true; ui.stickers = true;
 }
@@ -618,6 +619,10 @@ function ensureFont(L) {
 }
 function markAllText() {
   for (const o of state.objects) for (const k in o.faces) if (o.faces[k].layers.some(l => l.type === 'text')) markFace(o, k);
+  // sticker artwork with text is redrawn once the font has arrived
+  for (const o of state.objects) if (o.stickers?.some(t => t.text)) {
+    const rt = RT.get(o.id); rt?.stickerLook?.forEach(L => { L.key = ''; }); stickerDirty.add(o.id);
+  }
   ui.editor = true;
 }
 async function registerFont(f) {
@@ -738,12 +743,14 @@ function buildObject(o) {
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else buildTube(o, rt);
   applyTransform(o); computeFrames(o, rt); applyLid(o); applyObjMaterials(o); markObj(o);
+  rt.stickerMeshes = []; buildStickerFilms(o);
 }
 function disposeObject(id) {
   const rt = RT.get(id); if (!rt) return;
   rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
   world.remove(rt.group);
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
+  for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
   rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); RT.delete(id);
 }
 /* clear PET: black diffuse, so only reflections remain (stronger at grazing angles). The shader turns
@@ -1248,15 +1255,26 @@ function renderFace(o, k) {
   for (const L of fxl) if (isFoil(L.effect)) drawLayer(ctx, L, W, H, foilPaint(ctx, L.effect, W, H), 1);
   // stickers sit on top of everything printed
   const ops = [];
+  const frs = RT.get(o.id)?.frames;
   if (!skipStickers) for (const st of o.stickers || []) {
     if (!st.visible) continue;
-    for (const pl of placementsFor(o, st)) if (pl.key === k) ops.push({ st, M: pl.M });
+    const pls = placementsFor(o, st);
+    for (const pl of pls) {
+      if (pl.key !== k) continue;
+      // under a flap or lid the board is hidden by the outer face; no shadow there (it would show once opened)
+      const F = frs?.[k];
+      if (F && pls.some(q => q.key !== k && frs[q.key] && frs[q.key].n.dot(F.n) > .99 && frs[q.key].c.dot(F.n) > F.c.dot(F.n) + .2)) continue;
+      ops.push({ st, M: pl.M });
+    }
   }
-  const ppx = W / faceMM(o, k)[0];
-  for (const { st, M } of ops) { ctx.setTransform(M[0] * ppx, M[1] * ppx, M[2] * ppx, M[3] * ppx, M[4] * ppx, M[5] * ppx); drawSticker(ctx, st, ppx); }
+  const ppx = W / faceMM(o, k)[0], film = !!RT.get(o.id)?.frames;
+  for (const { st, M } of ops) {
+    ctx.setTransform(M[0] * ppx, M[1] * ppx, M[2] * ppx, M[3] * ppx, M[4] * ppx, M[5] * ppx);
+    if (film) stickerShadow(ctx, st, ppx); else drawSticker(ctx, st, ppx);
+  }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   f.tex.needsUpdate = true;
-  updateFaceMaterial(o, k, f, fxl, fin, ops);
+  updateFaceMaterial(o, k, f, fxl, fin, film ? [] : ops);
 }
 let skipStickers = false;
 function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
@@ -1313,7 +1331,7 @@ function newSticker(kind, face, extra = {}) {
   return { id: uid(), kind, face, x: .5, y: .5, rot: 0, w: kind === 'rect' ? 60 : 40, h: kind === 'rect' ? 25 : 40, radius: 3,
     fill: '#ffffff', clear: false, stroke: '#1c1b19', strokeW: 0, src: null, aspect: 1, imgScale: .7, outline: 0,
     text: kind === 'custom' ? '' : 'Спасибо!', textColor: '#1c1b19', textSize: 7, font: 'Caveat', weight: 700,
-    finish: 'gloss', visible: true, ...extra };
+    finish: 'gloss', thick: .2, visible: true, ...extra };
 }
 const activeSticker = () => activeObj()?.stickers?.find(t => t.id === sel.sticker) || null;
 function stickerSize(st) {
@@ -1336,7 +1354,8 @@ function computeFrames(o, rt) {
     const M = inv.clone().multiply(m.matrixWorld), [w, h] = faceMM(o, k);
     const c = new THREE.Vector3().applyMatrix4(M).divideScalar(S);
     const u = new THREE.Vector3(1, 0, 0).transformDirection(M), v = new THREE.Vector3(0, 1, 0).transformDirection(M);
-    frames[k] = { c, u, v, n: new THREE.Vector3().crossVectors(u, v).normalize(), w, h };
+    const pinv = inv.clone().multiply(m.parent.matrixWorld).invert();   // object space → the part's own space (closed)
+    frames[k] = { c, u, v, n: new THREE.Vector3().crossVectors(u, v).normalize(), w, h, parent: m.parent, pinv };
   });
   o.lid = saved; applyLid(o);
   rt.frames = frames;
@@ -1378,9 +1397,11 @@ function placementsFor(o, st) {
   }
   return out;
 }
+const stickerDirty = new Set();
 /* re-render only the faces a sticker touched before or touches now */
 const stickerKeys = new Map();
 function touchSticker(o, st) {
+  stickerDirty.add(o.id);
   const now = st ? placementsFor(o, st).map(p => p.key) : [];
   for (const k of new Set([...(stickerKeys.get(st?.id) || []), ...now])) markFace(o, k);
   if (st) stickerKeys.set(st.id, now);
@@ -1420,9 +1441,9 @@ function stickerFoil(c, finish, w, h) {
   return g;
 }
 /* draws a sticker in its own mm space (origin at its centre); ppm sizes the shadow in pixels */
-function drawSticker(c, st, ppm) {
+function drawSticker(c, st, ppm, withShadow = true) {
   const [w, h] = stickerSize(st), foil = st.finish.startsWith('foil');
-  if (st.finish !== 'clear') {
+  if (withShadow && st.finish !== 'clear') {
     c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = Math.max(1, .9 * ppm); c.shadowOffsetY = .35 * ppm;
     stickerMask(c, st, '#ffffff'); c.restore();
   }
@@ -1452,6 +1473,121 @@ function drawSticker(c, st, ppm) {
     c.restore();
   }
 }
+/* soft contact shadow painted on the board under a sticker */
+function stickerShadow(c, st, ppm) {
+  c.save(); c.filter = `blur(${Math.max(1, .8 * ppm)}px)`; c.globalAlpha = st.finish === 'clear' ? .1 : .3 + Math.min(.2, (st.thick || 0) * .1);
+  c.translate(0, .3 + (st.thick || 0) * .4); stickerMask(c, st, '#000000'); c.restore();
+}
+/* the sticker as a film in 3D. A grid follows the faces (folded over edges, projected over flaps
+   and lids); where the surface underneath steps down the film bridges the step instead of
+   following it, and it splits along the opening line, each piece riding with its own part. */
+function stickerMaterial(params, offset) {
+  const m = new THREE.MeshPhysicalMaterial(params);
+  m.userData.off = { value: offset };
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uStOff = m.userData.off;
+    sh.vertexShader = 'uniform float uStOff;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed += normalize(objectNormal) * uStOff;');
+  };
+  m.customProgramCacheKey = () => 'sticker-film-v1';
+  return m;
+}
+const stickerMargin = st => (st.kind === 'custom' ? st.outline || 0 : 0) + .5;
+function stickerLook(rt, st) {
+  rt.stickerLook ??= new Map();
+  const key = JSON.stringify({ ...st, x: 0, y: 0, face: 0, rot: 0, visible: 0, loaded: !!(st.src && getImg(st.src)) });
+  let L = rt.stickerLook.get(st.id);
+  if (L && L.key === key) return L;
+  if (L) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
+  const [w, h] = stickerSize(st), m = stickerMargin(st), ew = w + 2 * m, eh = h + 2 * m;
+  const ppm = Math.min(12, 2048 / Math.max(ew, eh));
+  const paint = fn => { const c = document.createElement('canvas'); c.width = Math.max(2, Math.round(ew * ppm)); c.height = Math.max(2, Math.round(eh * ppm));
+    const x = c.getContext('2d'); x.setTransform(c.width / ew, 0, 0, c.height / eh, c.width / 2, c.height / 2); fn(x); return c; };
+  const tex = new THREE.CanvasTexture(paint(x => drawSticker(x, st, ppm, false)));
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = maxAniso;
+  // the edge colour: paper for opaque stickers, a darker tone of the fill for coloured ones
+  const edgeCol = st.finish === 'clear' ? '#dfe7ea' : new THREE.Color(st.kind === 'custom' ? '#ece9e2' : st.fill).multiplyScalar(.82).getStyle();
+  const edgeTex = new THREE.CanvasTexture(paint(x => stickerMask(x, st, edgeCol)));
+  edgeTex.colorSpace = THREE.SRGBColorSpace;
+  const [r, mt] = STICKER_FX[st.finish] || STICKER_FX.gloss, thick = Math.max(0, st.thick ?? .2) * S;
+  const art = stickerMaterial({ map: tex, transparent: true, alphaTest: .04, roughness: r, metalness: mt, clearcoat: st.finish === 'gloss' ? .6 : 0, clearcoatRoughness: .1,
+    side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }, thick);
+  const layers = thick > .03 * S ? clamp(Math.ceil(thick / (.04 * S)), 2, 40) : 0, edges = [];
+  for (let i = 0; i < layers; i++) edges.push(stickerMaterial({ map: edgeTex, alphaTest: .5, roughness: .85, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }, thick * i / layers));
+  L = { key, tex, edgeTex, art, edges, ext: [ew, eh] }; rt.stickerLook.set(st.id, L);
+  return L;
+}
+function buildStickerFilms(o) {
+  const rt = RT.get(o.id); if (!rt) return;
+  for (const m of rt.stickerMeshes || []) { m.parent?.remove(m); if (m.userData.own) m.geometry.dispose(); }
+  rt.stickerMeshes = [];
+  if (!rt.frames) return;
+  const lift = .1, V = () => new THREE.Vector3();
+  for (const st of o.stickers || []) {
+    if (!st.visible) continue;
+    const pls = placementsFor(o, st).filter(pl => rt.frames[pl.key]); if (!pls.length) continue;
+    const look = stickerLook(rt, st), [ew, eh] = look.ext;
+    const step = Math.max(.6, Math.max(ew, eh) / 140), nx = Math.max(2, Math.ceil(ew / step) + 1), ny = Math.max(2, Math.ceil(eh / step) + 1), N = nx * ny;
+    const P = new Array(N), Nn = new Array(N), own = new Array(N);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const sx = -ew / 2 + ew * i / (nx - 1), sy = -eh / 2 + eh * j / (ny - 1);
+      let best = null, near = null, nearD = Infinity;
+      for (const { key, M } of pls) {
+        const F = rt.frames[key], X = M[0] * sx + M[2] * sy + M[4], Y = M[1] * sx + M[3] * sy + M[5];
+        const p = F.c.clone().addScaledVector(F.u, X - F.w / 2).addScaledVector(F.v, F.h / 2 - Y);
+        const out = Math.max(0, -X, X - F.w) + Math.max(0, -Y, Y - F.h);
+        if (out < 1e-6) { if (!best || (best.F.n.dot(F.n) > .99 && p.dot(F.n) > best.p.dot(F.n))) best = { p, F }; }
+        else if (out < nearD) { nearD = out; near = { p, F }; }
+      }
+      const hit = best || near, k = j * nx + i;
+      P[k] = hit.p.addScaledVector(hit.F.n, lift); Nn[k] = hit.F.n; own[k] = hit.F;
+    }
+    // bridge steps: upper envelope of the heights, then smoothed; never below the surface
+    const R = Math.max(1, Math.round(4 / step)), hgt = new Float32Array(N);
+    for (let k = 0; k < N; k++) hgt[k] = P[k].dot(Nn[k]);
+    const pass = (src, horiz, op) => {
+      const out = new Float32Array(N);
+      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+        const k = j * nx + i, n = Nn[k]; let acc = op === 'max' ? -Infinity : 0, cnt = 0;
+        for (let d = -R; d <= R; d++) {
+          const ii = horiz ? i + d : i, jj = horiz ? j : j + d;
+          if (ii < 0 || jj < 0 || ii >= nx || jj >= ny) continue;
+          const q = jj * nx + ii; if (Nn[q].dot(n) < .99) continue;
+          const v = src[q] + (P[q].dot(n) - hgt[q]);   // neighbour height measured along this normal
+          if (op === 'max') acc = Math.max(acc, v); else { acc += v; cnt++; }
+        }
+        out[k] = op === 'max' ? acc : acc / cnt;
+      }
+      return out;
+    };
+    const env = pass(pass(pass(pass(hgt, true, 'max'), false, 'max'), true, 'avg'), false, 'avg');
+    for (let k = 0; k < N; k++) if (env[k] > hgt[k]) P[k].addScaledVector(Nn[k], env[k] - hgt[k]);
+    // one geometry per rigid part; a cell rides with the part under its first corner
+    const byPart = new Map();
+    for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+      const a = j * nx + i, F = own[a];
+      if (!byPart.has(F.parent)) byPart.set(F.parent, { F, idx: [] });
+      byPart.get(F.parent).idx.push(a, a + nx, a + 1, a + 1, a + nx, a + nx + 1);
+    }
+    for (const [parent, { F, idx }] of byPart) {
+      const pos = new Float32Array(N * 3), uv = new Float32Array(N * 2), tmp = V();
+      for (let k = 0; k < N; k++) {
+        tmp.copy(P[k]).multiplyScalar(S).applyMatrix4(F.pinv); pos.set([tmp.x, tmp.y, tmp.z], k * 3);
+        uv.set([(k % nx) / (nx - 1), 1 - Math.floor(k / nx) / (ny - 1)], k * 2);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      geo.setIndex(idx); geo.computeVertexNormals();
+      // make normals face outward (along the face normal in the part's space)
+      const nPart = F.n.clone().transformDirection(F.pinv), nrm = geo.attributes.normal;
+      if (nrm.count && new THREE.Vector3().fromBufferAttribute(nrm, idx[0]).dot(nPart) < 0) { geo.setIndex(idx.map((_, t) => idx[t - (t % 3) + [0, 2, 1][t % 3]])); geo.computeVertexNormals(); }
+      const mk = (mat, own, order) => { const m = new THREE.Mesh(geo, mat); m.raycast = () => {}; m.receiveShadow = true; m.renderOrder = order; m.userData.own = own; parent.add(m); rt.stickerMeshes.push(m); };
+      look.edges.forEach((mat, i) => mk(mat, false, 2));
+      mk(look.art, true, 3);
+    }
+  }
+}
+
 /* hit test in a face: which sticker sits under the point (face-canvas mm) */
 function stickerAt(o, key, px, py) {
   const list = o.stickers || [];
@@ -1573,6 +1709,8 @@ renderer.setAnimationLoop(now => {
     const [id, k] = key.split('|'); const o = state.objects.find(x => x.id === id); if (o) renderFace(o, k);
   }
   dirtyFaces.clear();
+  for (const id of stickerDirty) { const o = state.objects.find(x => x.id === id); if (o) buildStickerFilms(o); }
+  stickerDirty.clear();
   if (camTween) {
     const t = clamp((now - camTween.t0) / 520, 0, 1), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     camera.position.lerpVectors(camTween.p0, camTween.p1, e); controls.target.lerpVectors(camTween.q0, camTween.q1, e);
@@ -2035,6 +2173,7 @@ function renderStickers() {
       <div class="grid2"><select data-k="font" aria-label="Шрифт">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
         <div class="row"><input type="color" data-k="textColor" aria-label="Цвет текста"><span class="hint">цвет текста</span></div></div>
       ${rangeField('Кегль, мм', 'textSize', 1, 60, .5)}
+      ${rangeField('Толщина, мм', 'thick', 0, 3, .05)}
       <div class="field wide"><span class="fl">Покрытие</span><select data-k="finish">${Object.entries(STICKER_FINISH).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       <div class="field wide"><span class="fl">Грань</span><select data-k="face">${faceKeys(o).map(k => `<option value="${k}">${faceLabel(o, k)}</option>`).join('')}</select></div>
       ${rangeField('Центр X, %', 'x', -20, 120, .1, 100)}${rangeField('Центр Y, %', 'y', -20, 120, .1, 100)}${rangeField('Поворот, °', 'rot', -180, 180, 1)}
@@ -2134,6 +2273,18 @@ function drawEditor() {
     c.save(); windowPath(c, fw, 0, 0, dw, dh); c.strokeStyle = 'rgba(0,160,227,.9)'; c.setLineDash([5, 4]); c.lineWidth = 1.2; c.stroke(); c.setLineDash([]);
     c.fillStyle = 'rgba(0,120,170,.85)'; c.font = '600 11px Onest, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText('окно · плёнка', (fw.x + fw.w / 2) * dw, (fw.y + fw.h / 2) * dh); c.restore();
+  }
+  // stickers are 3D film on the model; show them here too, as they sit on this face
+  if (RT.get(o.id)?.frames) {
+    const [mw] = faceMM(o, sel.face), sc = k * W / mw;
+    for (const st of o.stickers || []) {
+      if (!st.visible) continue;
+      for (const pl of placementsFor(o, st)) if (pl.key === sel.face) {
+        const M = pl.M; c.save(); c.setTransform(dpr * sc * M[0], dpr * sc * M[1], dpr * sc * M[2], dpr * sc * M[3], dpr * sc * M[4], dpr * sc * M[5]);
+        drawSticker(c, st, sc * dpr, false); c.restore();
+      }
+    }
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   // guides
   c.strokeStyle = '#e6007e'; c.lineWidth = 1;
