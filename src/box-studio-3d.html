@@ -350,6 +350,7 @@ const ICON = {
   box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>',
   tube: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="7" ry="2.5"/><path d="M5 5v14c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5"/></svg>',
   cup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4.5 6.5h15M6 4.5h12l1.5 2-2 14.5h-11L4.5 6.5z"/><path d="M6.6 11h10.8"/></svg>',
+  bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 8h12l1 13H5L6 8z"/><path d="M6 8l1.5-4h9L18 8M9 12.5h6"/></svg>',
   rect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>',
   ell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>',
 };
@@ -398,6 +399,23 @@ const PRESETS = [
   { id: 'cup350', label: 'Бумажный стакан 350 мл', type: 'cup', dims: { w: 90, h: 110, d: 60 }, finish: 'matte', edge: '#ece8e0', thick: .4, board: '#f7f5f0', grain: .1 },
   { id: 'cup450', label: 'Бумажный стакан 450 мл', type: 'cup', dims: { w: 90, h: 130, d: 60 }, finish: 'matte', edge: '#ece8e0', thick: .4, board: '#f7f5f0', grain: .1 },
 ];
+PRESETS.push(
+  // bags: w = width, h = height, d = gusset depth (flat-bottom bag) or content thickness (flat bag)
+  { id: 'bagFlat', label: 'Пакет плоский 140×140 с клапаном', type: 'bag', dims: { w: 140, h: 140, d: 12 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'flat', top: 'flap', mat: 'frosty', flapH: 35 } },
+  { id: 'bagFlatClear', label: 'Пакет плоский прозрачный 100×150', type: 'bag', dims: { w: 100, h: 150, d: 10 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'flat', top: 'flap', mat: 'clear', flapH: 30 } },
+  { id: 'bagBlock', label: 'Пакет с плоским дном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'block', top: 'fold', mat: 'frosty', flapH: 45 } },
+  { id: 'bagKraft', label: 'Крафт-пакет с дном и экстендером', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#c39460', grain: .45, bag: { style: 'block', top: 'fold', mat: 'kraft', flapH: 45, ext: true } },
+);
+const BAG_MATS = { clear: 'Прозрачная плёнка', frosty: 'Матовая плёнка (frosty)', tracing: 'Калька', paper: 'Бумага белая', kraft: 'Крафт-бумага' };
+const BAG_TOPS = { flap: 'Клапан с клеевой лентой', fold: 'Завёрнут (отворот)', seal: 'Запаян' };
+const EXT_KEYS = ['extFront', 'extBack'];
+/* film bags print on a see-through base: frosty and tracing paper get a milky ground, clear stays clear */
+const bagFilm = o => o.type === 'bag' && ['clear', 'frosty', 'tracing'].includes(o.bagMat);
+const BAG_FILM = {
+  clear: { fin: { label: 'Печать на плёнке', r: .3, m: 0, cc: .4, ccr: .08 }, ground: null, blur: 0 },
+  frosty: { fin: { label: 'Матовая плёнка', r: .7, m: 0, cc: 0, ccr: 0 }, ground: 'rgba(236,240,241,.6)', blur: .012 },
+  tracing: { fin: { label: 'Калька', r: .85, m: 0, cc: 0, ccr: 0 }, ground: 'rgba(247,246,240,.8)', blur: .022 },
+};
 const LID_COLORS = [['#1d1d1f', 'Чёрная'], ['#f4f4f1', 'Белая']];
 const LID_TYPES = {
   flat: 'Откидная крышка',
@@ -411,6 +429,14 @@ const LID_WALLS = ['lidFront', 'lidRight', 'lidLeft', 'lidBack'];
 function faceKeys(o) {
   if (o.type === 'tube') return ['wrap', 'top', 'bottom'];
   if (o.type === 'cup') return ['wrap'];
+  if (o.type === 'bag') {
+    const k = ['front'];
+    if (o.bagTop === 'flap') k.push('flap'); else if (o.bagTop === 'fold') k.push('fold');
+    if (o.ext?.on) k.push(...EXT_KEYS);
+    k.push('back');
+    if (o.bagStyle === 'block') k.push('left', 'right', 'bottom');
+    return k;
+  }
   const lt = o.lidType || 'flat';
   const k = ['front'];
   if (lt !== 'none') k.push('top');
@@ -427,10 +453,11 @@ const wallMM = o => clamp(Math.max(o.wallT ?? o.thickness, o.thickness), o.thick
 const doubleWall = o => o.type === 'box' && wallMM(o) > o.thickness * 1.6 + .2;
 /* a separate lid can be clear PET (cake boxes): its faces carry only print, the rest is plastic */
 const clearLid = o => o.type === 'box' && o.lidType === 'telescope' && o.lidMat === 'clear';
-const isClearFace = (o, k) => clearLid(o) && (k === 'top' || LID_WALLS.includes(k));
+const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k));
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
-const FACE_LABEL = { fold: 'Внутренний борт', flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
-const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : FACE_LABEL[k];
+const FACE_LABEL = { extFront: 'Экстендер: перед', extBack: 'Экстендер: зад', fold: 'Внутренний борт', flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
+const BAG_LABEL = { fold: 'Отворот', left: 'Левый фальц', right: 'Правый фальц' };
+const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : (o.type === 'bag' && BAG_LABEL[k]) || FACE_LABEL[k];
 const BOARD = [['#f4f1e9', 'Белый'], ['#c39460', 'Крафт'], ['#2e3530', 'Графит'], ['#879c79', 'Шалфей'], ['#d28f84', 'Розовый'], ['#8aacca', 'Голубой']];
 const WHITE_INSIDE = '#f8f6ef';
 const SWATCHES = ['#ffffff', '#f3ead6', '#1c1b19', '#20392b', '#0a7aa1', '#b8461b', '#e6007e', '#ffe500'];
@@ -466,10 +493,15 @@ function ensureFaces(o) {
     o.lidFit ??= 'over';
   }
   if (o.type === 'cup') { o.cupWall ??= 'double'; o.cupLid ??= true; o.lidColor ??= LID_COLORS[0][0]; }
+  if (o.type === 'bag') {
+    o.bagStyle ??= 'flat'; o.bagTop ??= 'flap'; o.bagMat ??= 'frosty'; o.flapH ??= 35;
+    o.ext ??= { on: false, h: 40, w: o.dims.w, staples: 2 };
+    o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 6 };
+  }
   if (!o.window) o.window = { on: false, w: Math.round(o.dims.w * .68), d: Math.round(o.dims.d * .85), h: Math.round(o.dims.h * .46), r: 6 };
   o.window.place ??= 'edge'; o.window.off ??= 0; o.window.corners ??= 'round';
   if (o.whiteInside === undefined) o.whiteInside = true;
-  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: k.startsWith('inside') ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
+  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) ? '#ffffff' : k.startsWith('inside') ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
   if (!o.board) o.board = (o.faces.front || o.faces.wrap).bg;
 }
 function newObject(presetId = 'mailer') {
@@ -478,14 +510,20 @@ function newObject(presetId = 'mailer') {
     grain: p.grain ?? (p.finish === 'kraft' ? .55 : .12), dieline: null, pos: { x: 0, z: 0 }, rotY: 0, faces: {},
     board: '#ffffff', whiteInside: p.whiteInside ?? true, window: p.window ? { ...p.window } : null,
     lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2 };
+  if (p.bag) applyBagPreset(o, p);
   ensureFaces(o);
   if (p.board) setBoard(o, p.board);
   return o;
 }
+function applyBagPreset(o, p) {
+  Object.assign(o, { bagStyle: p.bag.style, bagTop: p.bag.top, bagMat: p.bag.mat, flapH: p.bag.flapH, lid: 0,
+    ext: { on: !!p.bag.ext, h: 40, w: p.dims.w, staples: 2 } });
+  if (o.product) o.product.w = Math.round(p.dims.w * .7);
+}
 /* unprinted board colour: outer faces take it, the inside stays white unless switched off */
 function setBoard(o, c) {
   o.board = c;
-  for (const k of outerKeys(o)) o.faces[k].bg = c;
+  for (const k of outerKeys(o)) if (!(o.type === 'bag' && EXT_KEYS.includes(k))) o.faces[k].bg = c;
   for (const k of ['inside', 'insideBottom']) if (o.faces[k]) o.faces[k].bg = o.whiteInside ? WHITE_INSIDE : c;
 }
 const newText = (text = 'Текст') => ({ id: uid(), type: 'text', text, font: 'Montserrat', weight: 700, italic: false, size: .14, color: '#1c1b19', align: 'center', ls: 0, lh: 1.1, x: .5, y: .5, rot: 0, opacity: 1, blend: 'source-over', effect: 'none', visible: true });
@@ -497,6 +535,14 @@ function faceMM(o, k) {
   const { w, h, d } = o.dims;
   if (o.type === 'tube') return k === 'wrap' ? [Math.PI * w, h] : [w, w];
   if (o.type === 'cup') { const G = cupGeom(o); return [G.Wr, G.Hr]; }
+  if (o.type === 'bag') {
+    const B = bagDims(o);
+    if (k === 'flap' || k === 'fold') return [w, B.fh];
+    if (EXT_KEYS.includes(k)) return [B.ew, B.eh];
+    if (k === 'left' || k === 'right') return [B.D, B.Hv];
+    if (k === 'bottom') return [w, B.D];
+    return [w, B.Hv];
+  }
   if (k === 'front' || k === 'back') return [w, h];
   if (k === 'left' || k === 'right') return [d, h];
   const tele = o.lidType === 'telescope', inLid = tele && o.lidMat === 'clear' && o.lidFit === 'inside';
@@ -527,6 +573,7 @@ function netLayout(o) {
       { key: 'wrap', x: 0, y: D, w: C, h },
       { key: 'bottom', x: C / 2 - D / 2, y: D + h, w: D, h: D, circle: true }] };
   }
+  if (o.type === 'bag') return bagNet(o);
   if (o.type === 'cup') {
     // the side wall is printed flat as a fan (an annular sector), with a glue overlap on the left
     const G = cupGeom(o), F = cupFan(G);
@@ -670,6 +717,106 @@ function fanOutline(F, u0 = -F.gU, u1 = 1, n = 96) {
   return pts;
 }
 
+/* ---------- bags ----------
+   Flat bag: front and back sealed along the sides, folded at the bottom, puffed by the content.
+   Flat-bottom bag: front, back, side gussets and a block bottom; at the top the gussets fold in and
+   the back comes forward, so the front stays upright. The top has a flap with an adhesive strip
+   (back panel folded over the front), a fold-over strip, or a seal. Every printed side is a
+   surface f(u, v) in object mm: its mesh, its UVs and the stickers on it all use the same map. */
+function bagDims(o) {
+  const W = o.dims.w, H = o.dims.h, block = o.bagStyle === 'block', top = o.bagTop || 'flap';
+  const D = block ? clamp(o.dims.d, 10, W * 1.5) : 0, t = block ? 0 : clamp(o.dims.d, 0, Math.min(W, H) / 3);
+  const fh = top === 'seal' ? 0 : clamp(o.flapH, 8, H * .45), Hv = top === 'fold' ? H - fh : H;
+  return { W, H, D, t, block, top, fh, Hv, seam: block ? 0 : 6, sealTop: top === 'seal' ? 10 : 0,
+    ext: !!o.ext?.on, ew: W, eh: clamp(o.ext?.h ?? 40, 10, Hv * .6) };
+}
+function bagNet(o) {
+  const B = bagDims(o), { W, D, fh, Hv } = B, panels = [], seams = [];
+  let NW, NH, glue = null;
+  if (!B.block) {
+    let y = 0;
+    if (B.top !== 'seal') { panels.push({ key: B.top, x: 0, y: 0, w: W, h: fh, rot: true }); y = fh; }
+    const y0 = y;
+    panels.push({ key: 'back', x: 0, y, w: W, h: Hv }); y += Hv;
+    panels.push({ key: 'front', x: 0, y, w: W, h: Hv, rot: true }); y += Hv;
+    if (B.top === 'fold') { panels.push({ key: 'hidden', blank: 'скрыто в отвороте', x: 0, y, w: W, h: fh }); y += fh; }
+    seams.push([B.seam, y0, B.seam, y], [W - B.seam, y0, W - B.seam, y]);
+    if (B.top === 'seal') seams.push([0, B.sealTop, W, B.sealTop], [0, y - B.sealTop, W, y - B.sealTop]);
+    NW = W; NH = y;
+  } else {
+    const t0 = B.top === 'seal' ? 0 : fh, cols = [['left', 0, D], ['front', D, W], ['right', D + W, D], ['back', 2 * D + W, W]], gx = 2 * D + 2 * W;
+    for (const [key, x, w] of cols) {
+      panels.push({ key, x, y: t0, w, h: Hv });
+      if (B.top === 'fold') panels.push(key === 'back' ? { key: 'fold', x, y: 0, w, h: fh, rot: true } : { key: 'hidden', blank: 'скрыто в отвороте', x, y: 0, w, h: fh });
+      if (B.top === 'flap' && key === 'back') panels.push({ key: 'flap', x, y: 0, w, h: fh, rot: true });
+    }
+    panels.push({ key: 'glue', blank: 'клеевой шов', x: gx, y: B.top === 'fold' ? 0 : t0, w: 12, h: Hv + (B.top === 'fold' ? fh : 0) });
+    panels.push({ key: 'bottom', x: D, y: t0 + Hv, w: W, h: D });
+    NW = gx + 12; NH = t0 + Hv + D;
+  }
+  if (B.top === 'flap') { const p = panels.find(q => q.key === 'flap'); glue = { x: p.x + 4, y: p.y + 3, w: p.w - 8, h: Math.min(10, fh * .35) }; }
+  if (B.ext) {
+    const y = NH + 15;
+    panels.push({ key: 'extBack', x: 0, y, w: B.ew, h: B.eh, rot: true, part: true }, { key: 'extFront', x: 0, y: y + B.eh, w: B.ew, h: B.eh, part: true });
+    NW = Math.max(NW, B.ew); NH = y + 2 * B.eh;
+  }
+  return { W: NW, H: NH, panels, seams, glue, bag: B };
+}
+const smooth = (a, b, x) => { const q = clamp((x - a) / (b - a), 0, 1); return q * q * (3 - 2 * q); };
+/* surfaces of a bag in its closed state, object mm. Each entry: f(u, v) → [x, y, z], plus a rest
+   plane (centre c and axes) that stickers use to find their way between sides. */
+function bagShape(o) {
+  const B = bagDims(o), { W, D, fh, Hv } = B, S3 = {}, P = (c, u, v) => ({ c, u, v });
+  // the strip folded over the top and the extender press the top of the bag flat
+  const cover = Math.max(B.top === 'seal' ? 0 : fh, B.ext ? B.eh : 0);
+  let zFront, zBack;
+  if (!B.block) {
+    // puff: zero along the sealed sides, the bottom fold and the mouth; a faint ripple in the film
+    const mx = Math.min(W * .25, 28), my = Math.min(Hv * .25, 28), top = Hv - Math.max(B.sealTop, B.ext ? B.eh * .9 : 0);
+    const puff = (x, y) => smooth(0, mx, W / 2 - B.seam - Math.abs(x)) * smooth(0, my, y) * smooth(0, my * .8, top - y);
+    const rip = (x, y) => .3 * Math.sin(x * .13 + y * .07) * Math.sin(y * .11 - x * .05);
+    zFront = (x, y) => { const f = puff(x, y); return f * (B.t / 2 + rip(x, y)) + .06; };
+    zBack = (x, y) => { const f = puff(x, y); return -f * (B.t / 2 + rip(-x, y + 9)) - .06; };
+    S3.front = { f: (u, v) => { const x = (u - .5) * W, y = v * Hv; return [x, y, zFront(x, y)]; }, rest: P([0, Hv / 2, 0], [1, 0, 0], [0, 1, 0]) };
+    S3.back = { f: (u, v) => { const x = (.5 - u) * W, y = v * Hv; return [x, y, zBack(x, y)]; }, rest: P([0, Hv / 2, 0], [-1, 0, 0], [0, 1, 0]) };
+  } else {
+    // block bag: the front stays upright, the back comes forward over the top hp to meet it
+    const hp = Math.min(D * .8, Hv * .4), dmin = 1.2, b = Math.min(3.5, W * .035);
+    const pin = y => smooth(Hv - hp, Hv, y), Dd = y => D - (D - dmin) * pin(y);
+    const g = y => smooth(0, 18, y) * (1 - pin(y)) * (1 - smooth(Hv - cover - 25, Hv - cover, y));
+    zFront = (x, y) => D / 2 + b * Math.cos(Math.PI * x / W) * g(y) + .06;
+    zBack = (x, y) => D / 2 - Dd(y) - b * Math.cos(Math.PI * x / W) * g(y) - .06;
+    S3.front = { f: (u, v) => { const x = (u - .5) * W, y = v * Hv; return [x, y, zFront(x, y)]; }, rest: P([0, Hv / 2, D / 2], [1, 0, 0], [0, 1, 0]) };
+    S3.back = { f: (u, v) => { const x = (.5 - u) * W, y = v * Hv; return [x, y, zBack(x, y)]; }, rest: P([0, Hv / 2, -D / 2], [-1, 0, 0], [0, 1, 0]) };
+    // gussets: flat below, folded inward along a centre crease as the top closes
+    const side = sg => (u, v) => {
+      const y = v * Hv, zf = D / 2, zb = D / 2 - Dd(y), q = sg < 0 ? u : 1 - u;   // q: 0 at the back edge … 1 at the front edge
+      const inset = Math.sqrt(Math.max(0, (D / 2) ** 2 - (Dd(y) / 2) ** 2)), cx = sg * (W / 2 - inset), cz = (zf + zb) / 2;
+      const [ax, az, bx, bz, t] = q < .5 ? [sg * W / 2, zb, cx, cz, q * 2] : [cx, cz, sg * W / 2, zf, q * 2 - 1];
+      const bulge = sg * b * .6 * Math.sin(Math.PI * q) * g(y);
+      return [ax + (bx - ax) * t + bulge + sg * .06, y, az + (bz - az) * t];
+    };
+    S3.left = { f: side(-1), rest: P([-W / 2, Hv / 2, 0], [0, 0, 1], [0, 1, 0]) };
+    S3.right = { f: side(1), rest: P([W / 2, Hv / 2, 0], [0, 0, -1], [0, 1, 0]) };
+    S3.bottom = { f: (u, v) => [(u - .5) * W, -.06, (v - .5) * D], rest: P([0, 0, 0], [1, 0, 0], [0, 0, 1]) };
+  }
+  // the flap / fold-over strip lies on the front, hinged at the top edge
+  const zTop = zFront(0, Hv), z0 = B.block ? D / 2 : 0;
+  if (B.top !== 'seal') {
+    const lift = .18;
+    S3[B.top] = { f: (u, v) => { const x = (u - .5) * W, y = Hv - (1 - v) * fh; return [x, y, zFront(x, y) + lift]; },
+      rest: P([0, Hv - fh / 2, z0 + lift], [1, 0, 0], [0, 1, 0]), hinge: [0, Hv, zTop + lift / 2] };
+  }
+  // extender: a card folded over the top edge, stapled through
+  const zf = zTop + (B.top === 'seal' ? 0 : .36), zb = zBack(0, Hv);
+  B.extZ = [zf + .35, zb - .35];
+  if (B.ext) {
+    S3.extFront = { f: (u, v) => [(u - .5) * B.ew, Hv - (1 - v) * B.eh, B.extZ[0]], rest: P([0, Hv - B.eh / 2, B.extZ[0]], [1, 0, 0], [0, 1, 0]) };
+    S3.extBack = { f: (u, v) => [(.5 - u) * B.ew, Hv - (1 - v) * B.eh, B.extZ[1]], rest: P([0, Hv - B.eh / 2, B.extZ[1]], [-1, 0, 0], [0, 1, 0]) };
+  }
+  return { B, S3 };
+}
+
 /* draw a face canvas into its dieline rectangle, turned if the panel lies upside down on the die */
 function drawNetPanel(c, src, p, x, y, w, h, crop = null) {
   if (p.fan) {
@@ -702,6 +849,7 @@ function onAssetLoaded(id) {
   for (const o of state.objects) {
     if (o.dieline === id) markObj(o);
     for (const k in o.faces) if (o.faces[k].layers.some(l => l.src === id)) markFace(o, k);
+    if (o.product?.src === id) rebuildQueue.add(o.id);
     for (const st of o.stickers || []) if (st.src === id) { tintCache.forEach((_, key) => key.startsWith(id + '|') && tintCache.delete(key)); touchSticker(o, st); }
     if ((o.stickers || []).some(st => st.text)) stickerDirty.add(o.id);
   }
@@ -855,14 +1003,18 @@ function buildObject(o) {
       filmMat: new THREE.MeshPhysicalMaterial({ color: 0xf2f8f8, transparent: true, opacity: .22, roughness: .04, metalness: 0, clearcoat: 1, clearcoatRoughness: .02, side: THREE.DoubleSide, depthWrite: false }),
       innerMat: new THREE.MeshStandardMaterial({ roughness: .9, shadowSide: THREE.DoubleSide }),
       cupLidMat: new THREE.MeshPhysicalMaterial({ roughness: .38, clearcoat: .35, clearcoatRoughness: .22, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }),
+      tapeMat: new THREE.MeshStandardMaterial({ color: 0xe4edf1, roughness: .3, transparent: true, opacity: .9, side: THREE.DoubleSide }),
+      cardMat: new THREE.MeshStandardMaterial({ roughness: .85, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }),
+      metalMat: new THREE.MeshStandardMaterial({ color: 0xc4c8cc, metalness: 1, roughness: .32 }),
+      productMat: new THREE.MeshStandardMaterial({ roughness: .85, alphaTest: .35, side: THREE.DoubleSide }),
       holeMat: new THREE.MeshBasicMaterial({ color: 0x141414, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), lidPivot: null };
     RT.set(o.id, rt); world.add(rt.group);
   }
   rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null; rt.cupLid = null;
-  rt.innerMat.side = o.type === 'cup' ? THREE.DoubleSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
+  rt.group.clear(); rt.lidPivot = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null;
+  rt.innerMat.side = o.type === 'cup' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
-  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else buildTube(o, rt);
+  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'bag') buildBag(o, rt); else buildTube(o, rt);
   applyTransform(o); computeFrames(o, rt); applyLid(o); applyObjMaterials(o); markObj(o);
   rt.stickerMeshes = []; buildStickerFilms(o);
 }
@@ -872,7 +1024,8 @@ function disposeObject(id) {
   world.remove(rt.group);
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
   for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
-  rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); rt.cupLidMat.dispose(); rt.holeMat.dispose(); RT.delete(id);
+  rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); rt.cupLidMat.dispose(); rt.holeMat.dispose();
+  rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); RT.delete(id);
 }
 /* clear PET: black diffuse, so only reflections remain (stronger at grazing angles). The shader turns
    their brightness into coverage, so plain plastic stays see-through even over the page background
@@ -1299,6 +1452,84 @@ function buildCupLid(o, rt, G) {
   vent.rotation.x = -Math.PI / 2; const rv = .755 * R; vent.position.set(0, yAt(rv) * S, -rv * S); vent.userData = { objId: o.id, face: null }; g.add(vent);
   rt.cupLid = g; rt.group.add(g);
 }
+/* a grid over a surface f(u, v) (mm), offset by off (mm) into a part's own space */
+function gridGeo(f, nu, nv, off = [0, 0, 0]) {
+  const P = [], UV = [], I = [];
+  for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) {
+    const u = i / nu, v = j / nv, p = f(u, v);
+    P.push((p[0] - off[0]) * S, (p[1] - off[1]) * S, (p[2] - off[2]) * S); UV.push(u, v);
+  }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1; I.push(a, b, d, a, d, c); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2));
+  g.setIndex(I); g.computeVertexNormals();
+  return g;
+}
+/* sticker frame for a curved side: the rest plane finds neighbours, map/nrm give the real surface */
+function surfFrame(o, key, s3, parent, pinv) {
+  const V = (a) => new THREE.Vector3(...a), [w, h] = faceMM(o, key), u = V(s3.rest.u), v = V(s3.rest.v), n = new THREE.Vector3().crossVectors(u, v);
+  const at = (a, b) => V(s3.f(clamp(a, 0, 1), clamp(b, 0, 1)));
+  const map = (X, Y) => { const a = X / w, b = 1 - Y / h, ca = clamp(a, 0, 1), cb = clamp(b, 0, 1); return at(ca, cb).addScaledVector(u, (a - ca) * w).addScaledVector(v, (b - cb) * h); };
+  const nrm = (X, Y) => {
+    const a = clamp(X / w, 0, 1), b = clamp(1 - Y / h, 0, 1), e = .01;
+    const m = new THREE.Vector3().crossVectors(at(a + e, b).sub(at(a - e, b)), at(a, b + e).sub(at(a, b - e))).normalize();
+    return m.dot(n) < 0 ? m.negate() : m;
+  };
+  return { c: V(s3.rest.c), u, v, n, w, h, parent, pinv, map, nrm, key };
+}
+function buildBag(o, rt) {
+  const { B, S3 } = bagShape(o), film = bagFilm(o), clear = o.bagMat === 'clear', frames = rt.bagFrames = {};
+  const I4 = new THREE.Matrix4();
+  const res = k => { const [w, h] = faceMM(o, k); return [clamp(Math.ceil(w / 4), 4, 48), clamp(Math.ceil(h / 4), 4, 80)]; };
+  const face = (key, parent, off = [0, 0, 0], pinv = I4) => {
+    const s3 = S3[key], [nu, nv] = res(key), geo = gridGeo(s3.f, nu, nv, off), f = rt.faces[key], card = EXT_KEYS.includes(key);
+    f.mat.side = film && !card ? THREE.DoubleSide : THREE.FrontSide;
+    const m = new THREE.Mesh(geo, f.mat); m.userData = { objId: o.id, face: key };
+    m.castShadow = !clear || card; m.receiveShadow = true; m.renderOrder = 2; parent.add(m);
+    if (film && !card) {
+      if (clear) { const sh = new THREE.Mesh(geo, rt.petMat); sh.raycast = () => {}; sh.renderOrder = 1; parent.add(sh); }
+    } else { const tw = new THREE.Mesh(geo, rt.innerMat); tw.raycast = () => {}; tw.receiveShadow = true; parent.add(tw); }
+    frames[key] = surfFrame(o, key, s3, parent, pinv);
+    return m;
+  };
+  for (const k of ['front', 'back', 'left', 'right', 'bottom']) if (S3[k]) face(k, rt.group);
+  if (B.top !== 'seal') {
+    const st = S3[B.top], hg = st.hinge, pv = new THREE.Group();
+    pv.position.set(hg[0] * S, hg[1] * S, hg[2] * S); rt.group.add(pv); rt.bagPivot = pv;
+    face(B.top, pv, hg, new THREE.Matrix4().makeTranslation(-hg[0] * S, -hg[1] * S, -hg[2] * S));
+    if (B.top === 'flap') {
+      // adhesive tape on the inside of the flap, near its edge
+      const v0 = 3 / B.fh, v1 = v0 + Math.min(10, B.fh * .35) / B.fh;
+      const tape = new THREE.Mesh(gridGeo((u, v) => { const p = st.f(.03 + .94 * u, v0 + (v1 - v0) * v); p[2] -= .1; return p; }, 48, 4, hg), rt.tapeMat);
+      tape.raycast = () => {}; pv.add(tape); rt.bagTape = tape;   // hidden while the flap is shut (it is sandwiched anyway)
+    }
+  }
+  if (B.ext) {
+    face('extFront', rt.group); face('extBack', rt.group);
+    const [zf, zb] = B.extZ, zc = (zf + zb) / 2, r = (zf - zb) / 2;
+    const bend = new THREE.Mesh(gridGeo((u, v) => [(u - .5) * B.ew, B.Hv + r * Math.sin(Math.PI * v), zc + r * Math.cos(Math.PI * v)], 2, 10), rt.cardMat);
+    bend.castShadow = bend.receiveShadow = true; bend.userData = { objId: o.id, face: null }; rt.group.add(bend);
+    const n = +o.ext.staples === 1 ? [0] : [-B.ew * .27, B.ew * .27];
+    for (const x of n) for (const z of [zf + .25, zb - .25]) {
+      const sp = new THREE.Mesh(new THREE.BoxGeometry(11 * S, .7 * S, .45 * S), rt.metalMat);
+      sp.position.set(x * S, (B.Hv - B.eh * .55) * S, z * S); sp.castShadow = true; rt.group.add(sp);
+    }
+  }
+  // the product inside: a cut-out photo, softened behind frosty film or tracing paper
+  const pr = o.product, im = pr?.src && getImg(pr.src);
+  if (im) {
+    const k = Math.min(1, 1024 / Math.max(im.naturalWidth, im.naturalHeight)), w = Math.round(im.naturalWidth * k), h = Math.round(im.naturalHeight * k);
+    const blur = film ? BAG_FILM[o.bagMat].blur * Math.max(w, h) : 0, pad = Math.ceil(blur * 2.5);
+    const c = document.createElement('canvas'); c.width = w + pad * 2; c.height = h + pad * 2;
+    const x = c.getContext('2d'); if (blur) x.filter = `blur(${blur}px)`; x.drawImage(im, pad, pad, w, h);
+    rt.productTex?.dispose(); rt.productTex = new THREE.CanvasTexture(c); rt.productTex.colorSpace = THREE.SRGBColorSpace;
+    rt.productMat.map = rt.productTex; rt.productMat.needsUpdate = true;
+    const pw = clamp(pr.w, 5, 1000), ph = pw * h / w, sc = (w + pad * 2) / w;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(pw * sc * S, ph * (h + pad * 2) / h * S), rt.productMat);
+    m.position.set((pr.x || 0) * S, ((pr.y ?? 6) + ph / 2) * S, 0); m.userData = { objId: o.id, face: null }; m.raycast = () => {};
+    rt.group.add(m);
+  }
+}
 function applyTransform(o) {
   const rt = RT.get(o.id); if (!rt) return;
   const before = rt.group.position.clone();
@@ -1310,6 +1541,8 @@ function applyTransform(o) {
 }
 function applyLid(o) {
   const rt = RT.get(o.id); if (!rt) return;
+  if (rt.bagPivot) rt.bagPivot.rotation.x = -clamp(o.lid, 0, 180) * DEG;
+  if (rt.bagTape) rt.bagTape.visible = o.lid > 1;
   if (rt.cupLid) {
     // the cup lid lifts off and tilts back
     const f = clamp(o.lid / 125, 0, 1);
@@ -1328,13 +1561,14 @@ function applyLid(o) {
 function applyObjMaterials(o) {
   const rt = RT.get(o.id); if (!rt) return;
   rt.edgeMat.color.set(o.edge);
-  const inner = new THREE.Color(o.faces.inside?.bg || '#f4f1ea');
+  const inner = new THREE.Color(o.type === 'bag' ? (o.whiteInside ? WHITE_INSIDE : o.board) : o.faces.inside?.bg || '#f4f1ea');
   if (FINISHES[o.finish]?.kraft) inner.multiply(new THREE.Color(FINISHES[o.finish].kraft));
   rt.innerMat.color.copy(inner);
   const fold = new THREE.Color(o.faces.front?.bg || o.board || '#ffffff');
   if (FINISHES[o.finish]?.kraft) fold.multiply(new THREE.Color(FINISHES[o.finish].kraft));
   rt.foldMat.color.copy(fold);
   rt.cupLidMat.color.set(o.lidColor || LID_COLORS[0][0]);
+  rt.cardMat.color.set(o.faces.extFront?.bg || '#ffffff');
   rt.foldMat.bumpMap = o.grain > 0 ? rt.faces.front?.grain ?? null : null; rt.foldMat.bumpScale = o.grain * 1.2; rt.foldMat.needsUpdate = true;
   rt.innerMat.bumpMap = o.grain > 0 ? rt.faces.inside?.grain ?? null : null;
   rt.innerMat.bumpScale = o.grain * 1.2; rt.innerMat.needsUpdate = true;
@@ -1425,9 +1659,10 @@ function renderFace(o, k) {
   const W = f.canvas.width, H = f.canvas.height;
   // print on a clear PET lid: no board colour, paper grain or kraft, only the layers
   const clear = f.clear = isClearFace(o, k);
-  const fin = clear ? PET_PRINT : FINISHES[o.finish] || FINISHES.matte;
+  const bf = clear && o.type === 'bag' ? BAG_FILM[o.bagMat] : null;
+  const fin = clear ? bf?.fin || PET_PRINT : FINISHES[o.finish] || FINISHES.matte;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-  if (clear) ctx.clearRect(0, 0, W, H);
+  if (clear) { ctx.clearRect(0, 0, W, H); if (bf?.ground) { ctx.fillStyle = bf.ground; ctx.fillRect(0, 0, W, H); } }
   else { ctx.fillStyle = face.bg; ctx.fillRect(0, 0, W, H); }
   if (!clear && o.dieline && outerKeys(o).includes(k)) {
     const im = getImg(o.dieline), net = netLayout(o), p = net.panels.find(p => p.key === k);
@@ -1450,6 +1685,7 @@ function renderFace(o, k) {
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
   for (const L of fxl) if (isFoil(L.effect)) drawLayer(ctx, L, W, H, foilPaint(ctx, L.effect, W, H), 1);
+  if (bf && o.bagStyle !== 'block' && (k === 'front' || k === 'back')) bagSeals(ctx, o, W, H);
   // stickers sit on top of everything printed
   const ops = [];
   const frs = RT.get(o.id)?.frames;
@@ -1475,6 +1711,16 @@ function renderFace(o, k) {
   updateFaceMaterial(o, k, f, fxl, fin, film ? [] : ops);
 }
 let skipStickers = false;
+/* heat seals of a film bag: fine ribs along the sealed sides (and the top seal) */
+function bagSeals(c, o, W, H) {
+  const B = bagDims(o), k = W / B.W, sw = B.seam * k;
+  c.save(); c.strokeStyle = 'rgba(255,255,255,.32)'; c.lineWidth = Math.max(1, .35 * k);
+  c.fillStyle = 'rgba(255,255,255,.1)'; c.fillRect(0, 0, sw, H); c.fillRect(W - sw, 0, sw, H);
+  c.beginPath();
+  for (let y = 0; y < H; y += .9 * k) { c.moveTo(0, y); c.lineTo(sw, y); c.moveTo(W - sw, y); c.lineTo(W, y); }
+  if (B.sealTop) { const th = B.sealTop * k; c.fillRect(sw, 0, W - 2 * sw, th); for (let x = 0; x < W; x += .9 * k) { c.moveTo(x, 0); c.lineTo(x, th); } }
+  c.stroke(); c.restore();
+}
 function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
   const m = f.mat;
   const needFx = ops.length > 0 || fxl.some(L => isFoil(L.effect) || L.effect === 'spot-uv');
@@ -1514,7 +1760,8 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
   else m.bumpMap = null;
   m.clearcoat = fin.cc; m.clearcoatRoughness = fin.ccr;
   m.sheen = fin.sheen || 0; m.sheenRoughness = .8; m.sheenColor.set(0xffffff);
-  m.transparent = !!f.clear; m.depthWrite = !f.clear;
+  // bag film keeps depth so the flap and stickers on it always cover the side beneath
+  m.transparent = !!f.clear; m.depthWrite = !f.clear || o.type === 'bag';
   const sig = [!!m.roughnessMap, !!m.bumpMap, fin.cc > 0, !!fin.sheen, !!f.clear].join();
   if (sig !== f.sig) { f.sig = sig; m.needsUpdate = true; }
 }
@@ -1542,6 +1789,7 @@ function stickerSize(st) {
    Canvas x runs along u, canvas y runs against v. */
 function computeFrames(o, rt) {
   rt.frames = null;
+  if (o.type === 'bag') { rt.frames = rt.bagFrames || null; return; }
   if (o.type !== 'box') return;
   const saved = o.lid; o.lid = 0; applyLid(o);
   rt.group.updateMatrixWorld(true);
@@ -1760,14 +2008,14 @@ function buildStickerFilms(o) {
       let best = null, near = null, nearD = Infinity;
       for (const { key, M, clips } of pls) {
         const F = rt.frames[key], X = M[0] * sx + M[2] * sy + M[4], Y = M[1] * sx + M[3] * sy + M[5];
-        const p = F.c.clone().addScaledVector(F.u, X - F.w / 2).addScaledVector(F.v, F.h / 2 - Y);
+        const p = F.map ? F.map(X, Y) : F.c.clone().addScaledVector(F.u, X - F.w / 2).addScaledVector(F.v, F.h / 2 - Y);
         let out = Math.max(0, -X, X - F.w) + Math.max(0, -Y, Y - F.h);
         for (const cl of clips || []) out += Math.max(0, -cl.sign * (p.dot(cl.n) - cl.d));
-        if (out < 1e-6) { if (!best || (best.F.n.dot(F.n) > .99 && p.dot(F.n) > best.p.dot(F.n))) best = { p, F }; }
-        else if (out < nearD) { nearD = out; near = { p, F }; }
+        if (out < 1e-6) { if (!best || (best.F.n.dot(F.n) > .99 && p.dot(F.n) > best.p.dot(F.n))) best = { p, F, X, Y }; }
+        else if (out < nearD) { nearD = out; near = { p, F, X, Y }; }
       }
-      const hit = best || near, k = j * nx + i;
-      P[k] = hit.p.addScaledVector(hit.F.n, lift); Nn[k] = hit.F.n; own[k] = hit.F; sup[k] = !!best || nearD < 1;
+      const hit = best || near, k = j * nx + i, nn = hit.F.nrm ? hit.F.nrm(hit.X, hit.Y) : hit.F.n;
+      P[k] = hit.p.addScaledVector(nn, lift); Nn[k] = nn; own[k] = hit.F; sup[k] = !!best || nearD < 1;
     }
     // tension as a rolling ball of radius r: the film follows what a ball pressed onto the sticker
     // from outside can reach, so it fillets inner corners and ramps over steps, while flat areas and
@@ -2124,7 +2372,7 @@ function refreshFields(root, t) { $$('[data-k]', root).forEach(el => { if (el !=
 function renderObjects() {
   $('#objList').innerHTML = state.objects.map(o => `<div class="obj ${o.id === sel.obj ? 'on' : ''}" data-id="${o.id}" tabindex="0" role="button">
     ${ICON[o.type] || ICON.box}<span class="nm">${esc(o.name)}</span>
-    <span class="dm mono">${o.type === 'tube' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'cup' ? `⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)}` : `${fmt(o.dims.w)}×${fmt(o.dims.d)}×${fmt(o.dims.h)}`}</span></div>`).join('')
+    <span class="dm mono">${o.type === 'tube' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'cup' ? `⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)}` : o.type === 'bag' && o.bagStyle !== 'block' ? `${fmt(o.dims.w)}×${fmt(o.dims.h)}` : `${fmt(o.dims.w)}×${fmt(o.dims.d)}×${fmt(o.dims.h)}`}</span></div>`).join('')
     || '<div class="empty">Добавьте коробку, стакан или тубус</div>';
   $$('#objList .obj').forEach(el => {
     const go = () => { select(el.dataset.id, undefined, null); };
@@ -2135,11 +2383,11 @@ function renderObjects() {
 function renderModel() {
   const o = activeObj(), sec = $('#modelSec');
   if (!o) { sec.innerHTML = '<div class="sec-h"><h2>Форма</h2></div><div class="empty">Нет выбранного объекта</div>'; return; }
-  const box = o.type === 'box', cup = o.type === 'cup';
+  const box = o.type === 'box', cup = o.type === 'cup', bag = o.type === 'bag', film = bagFilm(o);
   sec.innerHTML = `
     <div class="sec-h"><h2>Форма и размеры</h2></div>
     <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="name" aria-label="Название"></div>
-    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="cup">Бумажный стакан</option><option value="tube">Тубус / банка</option></select></div>
+    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="cup">Бумажный стакан</option><option value="bag">Пакет</option><option value="tube">Тубус / банка</option></select></div>
     <div class="field wide"><span class="fl">Заготовка</span><select id="presetSel"><option value="">— выбрать размер —</option>${PRESETS.filter(p => p.type === o.type).map(p => `<option value="${p.id}">${p.label}</option>`).join('')}</select></div>
     ${box ? rangeField('Ширина, мм', 'dims.w', 20, 800, 1) + rangeField('Глубина, мм', 'dims.d', 20, 800, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)
       : cup ? rangeField('Диаметр верха, мм', 'dims.w', 40, 160, 1) + rangeField('Диаметр дна, мм', 'dims.d', 30, 160, 1) + rangeField('Высота, мм', 'dims.h', 40, 250, 1)
@@ -2149,6 +2397,7 @@ function renderModel() {
               <div class="swatches" id="lidSw">${LID_COLORS.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.lidColor === c}"></button>`).join('')}</div>
               <input type="color" data-k="lidColor" aria-label="Свой цвет крышки"></div></div>` + rangeField('Снять крышку', 'lid', 0, 125, 1) : '')
           + `<p class="hint">Дизайн стенки рисуется на прямоугольнике: середина — лицевая сторона, края сходятся на шве сзади. К верхнему краю элементы на стакане крупнее, к нижнему — мельче (стакан расширяется), пропорции не искажаются. Для типографии — «Шаблон SVG» и «Развёртка PNG» веером.</p>`
+      : bag ? bagFields(o)
       : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
     ${box ? `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(LID_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : ''}
     ${box && o.lidType !== 'none' ? rangeField(o.lidType === 'telescope' ? 'Поднять крышку' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
@@ -2166,12 +2415,13 @@ function renderModel() {
     ${box && windowPlace(o) ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
     ${box && o.window.on && windowPlace(o) ? windowFields(o) : ''}
     <div class="sec-h" style="margin-top:4px"><h2>Материал</h2></div>
-    <div class="field wide"><span class="fl">Цвет картона</span><div class="row">
+    ${film ? `<p class="hint">Плёнка: всё, что не закрыто печатью, остаётся ${o.bagMat === 'clear' ? 'прозрачным' : 'полупрозрачным'}. Материал меняется в настройках пакета выше.</p>` : `
+    <div class="field wide"><span class="fl">${bag ? 'Цвет бумаги' : 'Цвет картона'}</span><div class="row">
       <div class="swatches" id="boardSw">${BOARD.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.board === c}"></button>`).join('')}</div>
       <input type="color" id="boardColor" value="${o.board || '#ffffff'}" aria-label="Свой цвет картона"></div></div>
     <label class="check"><input type="checkbox" data-k="whiteInside"> Белая внутренняя сторона</label>
     <div class="field wide"><span class="fl">Покрытие</span><select data-k="finish">${Object.entries(FINISHES).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('')}</select></div>
-    ${rangeField('Фактура бумаги', 'grain', 0, 100, 1, 100)}
+    ${rangeField('Фактура бумаги', 'grain', 0, 100, 1, 100)}`}
     ${box ? `<div class="field wide"><span class="fl">Цвет торца</span><div class="row"><input type="color" data-k="edge" aria-label="Цвет торца"><span class="hint">виден на срезе картона</span></div></div>` : ''}
     <div class="sec-h" style="margin-top:4px"><h2>Положение в сцене</h2></div>
     ${rangeField('Смещение X, мм', 'pos.x', -1000, 1000, 1)}
@@ -2188,6 +2438,13 @@ function renderModel() {
     if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k.startsWith('dims') || k === 'thickness') { rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lid') { applyLid(o); return; }
+    if (k === 'bagStyle') { o.dims.d = o.bagStyle === 'block' ? Math.round(o.dims.w * .65) : 12; o.lid = 0; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); renderObjects(); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'bagTop' || k === 'ext.on') { o.lid = 0; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'bagMat') {
+      if (o.bagMat === 'kraft') { o.grain = .45; setBoard(o, '#c39460'); } else if (o.bagMat === 'paper') { o.grain = .12; setBoard(o, '#ffffff'); }
+      rebuildQueue.add(o.id); applyObjMaterials(o); markObj(o); renderModel(); renderFacePanel(); return;
+    }
+    if (k.startsWith('product') || k.startsWith('ext.')) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k === 'cupWall' || k === 'cupLid') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'cupLid') renderModel(); return; }
     if (k === 'lidColor') { applyObjMaterials(o); $$('#lidSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.lidColor)); return; }
     if (k.startsWith('pos') || k === 'rotY') { applyTransform(o); return; }
@@ -2210,8 +2467,13 @@ function renderModel() {
   const board = c => { setBoard(o, c); applyObjMaterials(o); markObj(o); renderFacePanel(); $$('#boardSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === c)); $('#boardColor').value = c; };
   $$('#boardSw .sw').forEach(b => b.onclick = () => { board(b.dataset.c); commit(); });
   $$('#lidSw .sw').forEach(b => b.onclick = () => { o.lidColor = b.dataset.c; applyObjMaterials(o); renderModel(); commit(); });
-  $('#boardColor').addEventListener('input', e => board(e.target.value));
-  $('#boardColor').addEventListener('change', () => commit());
+  $('#boardColor')?.addEventListener('input', e => board(e.target.value));
+  $('#boardColor')?.addEventListener('change', () => commit());
+  if ($('#prodBtn')) $('#prodBtn').onclick = () => pickImage(async file => {
+    const r = await importImageFile(file); o.product.src = r.id; o.product.aspect = r.aspect;
+    rebuildQueue.add(o.id); renderModel(); commit();
+  });
+  if ($('#prodOff')) $('#prodOff').onclick = () => { o.product.src = null; rebuildQueue.add(o.id); renderModel(); commit(); };
   $('#presetSel').onchange = e => {
     const p = PRESETS.find(x => x.id === e.target.value); if (!p) return;
     o.dims = { ...p.dims }; o.finish = p.finish; o.edge = p.edge; o.thickness = p.thick ?? 2; o.grain = p.grain ?? (p.finish === 'kraft' ? .55 : o.grain);
@@ -2226,8 +2488,23 @@ function renderModel() {
       applyObjMaterials(o); select(o.id, sel.face);
     }
     if (o.type === 'cup' && p.board) { setBoard(o, p.board); applyObjMaterials(o); }
+    if (o.type === 'bag') { applyBagPreset(o, p); ensureFaces(o); if (p.board) setBoard(o, p.board); applyObjMaterials(o); select(o.id, sel.face); }
     rebuildQueue.add(o.id); renderModel(); renderObjects(); commit(); setTimeout(() => setView(lastView), 50);
   };
+}
+function bagFields(o) {
+  const block = o.bagStyle === 'block', top = o.bagTop, pr = o.product || {};
+  return `<div class="field wide"><span class="fl">Форма</span><select data-k="bagStyle"><option value="flat">Плоский</option><option value="block">С плоским дном</option></select></div>`
+    + rangeField('Ширина, мм', 'dims.w', 30, 600, 1) + rangeField('Высота, мм', 'dims.h', 30, 800, 1)
+    + (block ? rangeField('Глубина дна (фальц), мм', 'dims.d', 10, 300, 1) : rangeField('Толщина содержимого, мм', 'dims.d', 0, 80, 1))
+    + `<div class="field wide"><span class="fl">Верх</span><select data-k="bagTop">${Object.entries(BAG_TOPS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+    + (top !== 'seal' ? rangeField(top === 'flap' ? 'Клапан, мм' : 'Отворот, мм', 'flapH', 8, 200, 1) + rangeField(top === 'flap' ? 'Открыть клапан, °' : 'Развернуть отворот, °', 'lid', 0, 180, 1) : '')
+    + `<div class="field wide"><span class="fl">Материал</span><select data-k="bagMat">${Object.entries(BAG_MATS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+    + `<label class="check"><input type="checkbox" data-k="ext.on"> Экстендер (картонный хедер на степлере)</label>`
+    + (o.ext?.on ? rangeField('Экстендер: высота, мм', 'ext.h', 10, 200, 1) + `<div class="field wide"><span class="fl">Скобы</span><select data-k="ext.staples"><option value="1">Одна по центру</option><option value="2">Две</option></select></div>` : '')
+    + `<div class="field wide"><span class="fl">Содержимое</span><div class="row"><button class="btn sm" id="prodBtn">${pr.src ? 'Заменить фото…' : 'Фото продукта (PNG)…'}</button>${pr.src ? '<button class="btn sm" id="prodOff">Убрать</button>' : ''}</div></div>`
+    + (pr.src ? rangeField('Содержимое: ширина, мм', 'product.w', 5, 600, 1) + rangeField('Содержимое: от дна, мм', 'product.y', -50, 600, 1) + rangeField('Содержимое: сдвиг вбок, мм', 'product.x', -300, 300, 1) : '')
+    + `<p class="hint">Фото продукта без фона (PNG) стоит внутри пакета и просвечивает сквозь плёнку: через матовую плёнку и кальку — размыто.${top === 'flap' ? ' Клеевая лента — на внутренней стороне клапана, видна при открытии.' : ''}</p>`;
 }
 function windowFields(o) {
   const place = windowPlace(o), lt = o.lidType, flap = lt === 'flap';
@@ -2387,6 +2664,7 @@ function fitImage(cover) {
 /* a seal goes across the line where the box opens */
 function sealSpot(o) {
   const lt = o.lidType || 'flat';
+  if (o.type === 'bag') return o.ext?.on ? { face: 'extFront', x: .5, y: 1 } : o.bagTop === 'seal' ? { face: 'front', x: .5, y: .03 } : { face: o.bagTop, x: .5, y: 1 };
   if (o.type !== 'box') return { face: faceKeys(o)[0], x: .5, y: .5 };
   if (lt === 'flap') return { face: 'flap', x: .5, y: 1 };
   if (lt === 'telescope') return clearLid(o) && o.lidFit === 'inside' ? { face: 'top', x: .5, y: .5 } : { face: 'lidFront', x: .5, y: 1 };
@@ -2666,6 +2944,7 @@ function drawNet() {
     const x = pad + p.x * k, y = pad + p.y * k, w = p.w * k, h = p.h * k, fc = rt?.faces[p.key]?.canvas;
     c.save(); c.beginPath(); if (p.circle) c.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2); else c.rect(x, y, w, h); c.clip();
     if (fc) drawNetPanel(c, fc, p, x, y, w, h); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
+    else if (p.blank) { c.fillStyle = 'rgba(120,110,95,.14)'; c.fillRect(x, y, w, h); }
     c.restore();
     c.beginPath();
     if (p.fan) {
@@ -2682,7 +2961,7 @@ function drawNet() {
 netC.addEventListener('click', e => {
   if (!netGeom) return; const r = netC.getBoundingClientRect(); const x = (e.clientX - r.left - netGeom.pad) / netGeom.k, y = (e.clientY - r.top - netGeom.pad) / netGeom.k;
   const p = netGeom.n.panels.find(p => x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h);
-  if (p) select(sel.obj, p.key, null, { flash: true });
+  if (p && faceKeys(activeObj()).includes(p.key)) select(sel.obj, p.key, null, { flash: true });
 });
 
 /* ================================================================
@@ -2919,9 +3198,11 @@ function exportVideo() {
 function templateSVG(o) {
   const n = netLayout(o), f = v => +v.toFixed(2);
   let body = '';
-  const label = (p) => { const [mw, mh] = p.fold ? [p.w, p.h] : faceMM(o, p.key), pet = isClearFace(o, p.key) ? ' · ПЭТ' : ''; const fs = Math.max(3, Math.min(p.w, p.h) * .07);
-    return `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}"${p.rot ? ` transform="rotate(180 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''} font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(faceLabel(o, p.key).toUpperCase())} · ${fmt(mw, 1)}×${fmt(mh, 1)} мм${pet}</text>`; };
-  if (o.type === 'cup') {
+  const label = (p) => { const [mw, mh] = p.fold ? [p.w, p.h] : faceMM(o, p.key), pet = isClearFace(o, p.key) ? (o.type === 'bag' ? ` · ${BAG_MATS[o.bagMat].toLowerCase()}` : ' · ПЭТ') : '';
+    const txt = `${faceLabel(o, p.key).toUpperCase()} · ${fmt(mw, 1)}×${fmt(mh, 1)} мм${pet}`, fs = Math.min(Math.max(3, Math.min(p.w, p.h) * .07), p.w * .92 / (txt.length * .56));
+    return `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}"${p.rot ? ` transform="rotate(180 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''} font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(txt)}</text>`; };
+  if (o.type === 'bag') body = bagSVG(o, n, f, label);
+  else if (o.type === 'cup') {
     const F = n.fan, G = F.G, P = pts => pts.map(([X, Y], i) => `${i ? 'L' : 'M'}${f(X)},${f(Y)}`).join(' ');
     body += `<path d="${P(fanOutline(F, -F.gU, 1, 240))} Z" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
     body += `<path d="${P([fanXY(F, 0, 0), fanXY(F, 0, 1)])}" fill="none" stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"/>`;
@@ -2980,9 +3261,40 @@ function templateSVG(o) {
   }
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${f(n.W)}mm" height="${f(n.H)}mm" viewBox="0 0 ${f(n.W)} ${f(n.H)}">
-<!-- Box Studio 3D — ${esc(o.name)}. ${o.type === 'cup' ? 'Голубой: линия реза стенки стакана (веер), пурпурный пунктир: край нахлёста на шве. Верхняя дуга — край у бортика, нижняя — у дна. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете.' : 'Голубой: линия реза, пурпурный пунктир: биговка. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете. Крышка с клапаном и ушками крепится к задней стенке и лежит на развёртке вверх ногами — подписи повёрнуты так же.'} -->
+<!-- Box Studio 3D — ${esc(o.name)}. ${o.type === 'bag' ? 'Голубой: рез, пурпурный пунктир: сгиб, зелёный пунктир: запайка (шов), оранжевый: клеевая лента клапана. Клапан, отворот и задняя половина экстендера лежат на развёртке вверх ногами — подписи повёрнуты так же.' + (o.bagStyle === 'block' ? ' Дно показано упрощённо, одной панелью: схему складывания дна сверьте с типографией.' : ' Пакет сложен по дну: перед повёрнут на 180°.') + ' Вылеты добавьте в типографском макете.' : o.type === 'cup' ? 'Голубой: линия реза стенки стакана (веер), пурпурный пунктир: край нахлёста на шве. Верхняя дуга — край у бортика, нижняя — у дна. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете.' : 'Голубой: линия реза, пурпурный пунктир: биговка. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете. Крышка с клапаном и ушками крепится к задней стенке и лежит на развёртке вверх ногами — подписи повёрнуты так же.'} -->
 <g id="dieline">${body}</g>
 </svg>`;
+}
+/* bag die: an edge two panels share is a fold, any other edge is cut; seals and the tape are marked */
+function bagSVG(o, n, f, label) {
+  const segs = [], key = (a, b, c, d) => [a, b, c, d].map(v => v.toFixed(2)).join(',');
+  const edges = p => [[p.x, p.y, p.x + p.w, p.y], [p.x, p.y + p.h, p.x + p.w, p.y + p.h], [p.x, p.y, p.x, p.y + p.h], [p.x + p.w, p.y, p.x + p.w, p.y + p.h]];
+  const cut = [], fold = new Map();
+  for (const p of n.panels) for (const [x1, y1, x2, y2] of edges(p)) {
+    const hor = y1 === y2; let parts = [[hor ? x1 : y1, hor ? x2 : y2]];
+    const shared = [];
+    for (const q of n.panels) if (q !== p) for (const [a1, b1, a2, b2] of edges(q)) {
+      if (hor ? (b1 === b2 && Math.abs(b1 - y1) < 1e-6) : (a1 === a2 && Math.abs(a1 - x1) < 1e-6)) {
+        const s0 = Math.max(hor ? x1 : y1, hor ? Math.min(a1, a2) : Math.min(b1, b2)), s1 = Math.min(hor ? x2 : y2, hor ? Math.max(a1, a2) : Math.max(b1, b2));
+        if (s1 - s0 > .01) shared.push([s0, s1]);
+      }
+    }
+    for (const [s0, s1] of shared) {
+      fold.set(hor ? key(s0, y1, s1, y1) : key(x1, s0, x1, s1), hor ? [s0, y1, s1, y1] : [x1, s0, x1, s1]);
+      parts = parts.flatMap(([u, v]) => [[u, Math.min(v, s0)], [Math.max(u, s1), v]].filter(([a, b]) => b - a > .01));
+    }
+    for (const [u, v] of parts) cut.push(hor ? [u, y1, v, y1] : [x1, u, x1, v]);
+  }
+  const line = (l, st) => `<line x1="${f(l[0])}" y1="${f(l[1])}" x2="${f(l[2])}" y2="${f(l[3])}" ${st}/>`;
+  let body = cut.map(l => line(l, 'stroke="#00a0e3" stroke-width="0.3"')).join('');
+  body += [...fold.values()].map(l => line(l, 'stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"')).join('');
+  body += (n.seams || []).map(l => line(l, 'stroke="#2e9e5b" stroke-width="0.3" stroke-dasharray="0.8 0.8"')).join('');
+  if (n.glue) { const g = n.glue; body += `<rect x="${f(g.x)}" y="${f(g.y)}" width="${f(g.w)}" height="${f(g.h)}" fill="none" stroke="#f08c00" stroke-width="0.3" stroke-dasharray="1.5 1"/><text x="${f(g.x + g.w / 2)}" y="${f(g.y + g.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.min(3, g.h * .5))}" fill="#f08c00" text-anchor="middle" dominant-baseline="middle">КЛЕЕВАЯ ЛЕНТА (с обратной стороны)</text>`; }
+  for (const p of n.panels) {
+    if (p.blank) { const fs = Math.max(2.5, Math.min(p.w, p.h) * .12); body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle"${p.h > p.w ? ` transform="rotate(-90 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''}>${esc(p.blank.toUpperCase())}</text>`; }
+    else body += label(p);
+  }
+  return body;
 }
 function exportTemplate() {
   const o = activeObj(); if (!o) return toast('Выберите объект');
@@ -2999,6 +3311,7 @@ function exportFlat() {
     const fc = rt.faces[p.key]?.canvas, x = p.x * k, y = p.y * k, w = p.w * k, h = p.h * k;
     c.save(); c.beginPath(); if (p.circle) c.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2); else c.rect(x, y, w, h); c.clip();
     if (fc) drawNetPanel(c, fc, p, x, y, w, h); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
+    else if (p.blank && !bagFilm(o)) { c.fillStyle = o.board; c.fillRect(x, y, w, h); }
     c.restore();
   }
   cutNetWindow(c, o, 0, k);
