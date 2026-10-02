@@ -376,8 +376,8 @@ const isFoil = e => e && e.startsWith('foil');
 const BLENDS = { 'source-over': 'Обычное', multiply: 'Умножение', screen: 'Осветление', overlay: 'Перекрытие' };
 const PRESETS = [
   { id: 'window', label: 'Коробка с окном', type: 'box', dims: { w: 200, h: 50, d: 150 }, finish: 'matte', edge: '#e9e5dc', thick: .8, board: '#f4f1e9', window: { on: true, w: 136, d: 127, h: 23, r: 6 } },
-  { id: 'flap150', label: 'С клапаном 150×90×70', type: 'box', dims: { w: 150, h: 70, d: 90 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'flap', flapH: 24, ears: 12 } },
-  { id: 'flap230', label: 'С клапаном 230×140×60', type: 'box', dims: { w: 230, h: 60, d: 140 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'flap', flapH: 20, ears: 12 } },
+  { id: 'flap150', label: 'С клапаном 150×90×70', type: 'box', dims: { w: 150, h: 70, d: 90 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'flap', flapH: 24 } },
+  { id: 'flap230', label: 'С клапаном 230×140×60', type: 'box', dims: { w: 230, h: 60, d: 140 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'flap', flapH: 20 } },
   { id: 'mailer', label: 'Почтовая коробка (мейлер)', type: 'box', dims: { w: 260, h: 80, d: 170 }, finish: 'matte', edge: '#cdb08a', lid: { type: 'tuck', flapH: 45 } },
   { id: 'lidbase', label: 'Крышка-дно', type: 'box', dims: { w: 220, h: 90, d: 160 }, finish: 'soft', edge: '#e2ddd4', thick: 1.5, lid: { type: 'telescope', lidH: 45 } },
   { id: 'shipping', label: 'Гофрокороб', type: 'box', dims: { w: 400, h: 300, d: 300 }, finish: 'kraft', edge: '#a87f50', thick: 4 },
@@ -403,6 +403,7 @@ function faceKeys(o) {
   const k = ['front'];
   if (lt !== 'none') k.push('top');
   if (lt === 'flap' || lt === 'tuck') k.push('flap');
+  if (lt === 'flap' && o.earsOn) k.push('earLeft', 'earRight');
   if (lt === 'telescope') k.push(...LID_WALLS);
   k.push('right', 'left', 'back', 'bottom');
   if (lt !== 'none') k.push('inside');
@@ -410,7 +411,7 @@ function faceKeys(o) {
   return k;
 }
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
-const FACE_LABEL = { flap: 'Клапан', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
+const FACE_LABEL = { flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
 const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : FACE_LABEL[k];
 const BOARD = [['#f4f1e9', 'Белый'], ['#c39460', 'Крафт'], ['#2e3530', 'Графит'], ['#879c79', 'Шалфей'], ['#d28f84', 'Розовый'], ['#8aacca', 'Голубой']];
 const WHITE_INSIDE = '#f8f6ef';
@@ -439,7 +440,7 @@ function ensureFaces(o) {
   if (o.type === 'box') {
     o.lidType ??= 'flat';
     o.flapH ??= Math.round(o.dims.h * .35);
-    o.ears ??= 10;
+    o.earsOn ??= true; o.earFull ??= true; o.earLen ??= o.dims.d;
     o.lidH ??= Math.round(o.dims.h * .45);
   }
   if (!o.window) o.window = { on: false, w: Math.round(o.dims.w * .68), d: Math.round(o.dims.d * .85), h: Math.round(o.dims.h * .46), r: 6 };
@@ -452,7 +453,7 @@ function newObject(presetId = 'mailer') {
   const o = { id: uid(), name: p.label, type: p.type, dims: { ...p.dims }, lid: 0, thickness: p.thick ?? 2, finish: p.finish, edge: p.edge,
     grain: p.grain ?? (p.finish === 'kraft' ? .55 : .12), dieline: null, pos: { x: 0, z: 0 }, rotY: 0, faces: {},
     board: '#ffffff', whiteInside: true, window: p.window ? { ...p.window } : null,
-    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, ears: p.lid?.ears, lidH: p.lid?.lidH };
+    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH };
   ensureFaces(o);
   if (p.board) setBoard(o, p.board);
   return o;
@@ -474,6 +475,10 @@ function faceMM(o, k) {
   if (k === 'front' || k === 'back') return [w, h];
   if (k === 'left' || k === 'right') return [d, h];
   const tele = o.lidType === 'telescope', lw = w + 2 * o.thickness + 1, ld = d + 2 * o.thickness + 1;
+  if (o.lidType === 'flap' && ['flap', 'earLeft', 'earRight', 'top', 'inside'].includes(k)) {
+    const ld = lidDimsMM(o);
+    return k === 'flap' ? [ld.wl, ld.fh] : k.startsWith('ear') ? [ld.el, ld.fh] : [ld.wl, ld.dl];
+  }
   if (k === 'flap') return [w, clamp(o.flapH, 3, h)];
   if (k === 'lidFront' || k === 'lidBack') return [lw, clamp(o.lidH, 3, h)];
   if (k === 'lidLeft' || k === 'lidRight') return [ld, clamp(o.lidH, 3, h)];
@@ -496,19 +501,20 @@ function netLayout(o) {
       { key: 'bottom', x: C / 2 - D / 2, y: D + h, w: D, h: D, circle: true }] };
   }
   // base as a cross; the hinged lid sits above the front panel, other lid parts go in a row below
-  const keys = faceKeys(o), hinged = keys.includes('top') && o.lidType !== 'telescope', oy = hinged ? d : 0;
+  const keys = faceKeys(o), hinged = keys.includes('top') && o.lidType !== 'telescope';
+  const [tw, th] = hinged ? faceMM(o, 'top') : [0, 0], oy = th, tx = d + (w - tw) / 2;
   const panels = [
     { key: 'left', x: 0, y: oy, w: d, h }, { key: 'front', x: d, y: oy, w, h }, { key: 'right', x: d + w, y: oy, w: d, h },
     { key: 'back', x: 2 * d + w, y: oy, w, h }, { key: 'bottom', x: d, y: oy + h, w, h: d }];
-  if (hinged) panels.unshift({ key: 'top', x: d, y: 0, w, h: d });
-  let W = 2 * d + 2 * w, H = oy + h + d;
-  const extra = keys.filter(k => k === 'flap' || LID_WALLS.includes(k) || (k === 'top' && !hinged));
+  if (hinged) panels.unshift({ key: 'top', x: tx, y: 0, w: tw, h: th });
+  let W = Math.max(2 * d + 2 * w, tx + tw), H = oy + h + d;
+  const extra = keys.filter(k => k === 'flap' || k.startsWith('ear') || LID_WALLS.includes(k) || (k === 'top' && !hinged));
   if (extra.length) {
     const gap = 15, y = H + gap; let x = 0, rowH = 0;
     for (const k of extra) { const [pw, ph] = faceMM(o, k); panels.push({ key: k, x, y, w: pw, h: ph, part: true }); x += pw + gap; rowH = Math.max(rowH, ph); }
     W = Math.max(W, x - gap); H = y + rowH;
   }
-  return { W, H, panels, oy, hinged };
+  return { W, H, panels, oy, hinged, tx, tw };
 }
 
 /* ================================================================
@@ -670,7 +676,6 @@ function buildObject(o) {
   if (!rt) {
     rt = { group: new THREE.Group(), faces: {},
       edgeMat: new THREE.MeshStandardMaterial({ roughness: .92, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }),
-      earMat: new THREE.MeshStandardMaterial({ roughness: .9, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }),
       filmMat: new THREE.MeshPhysicalMaterial({ color: 0xf2f8f8, transparent: true, opacity: .22, roughness: .04, metalness: 0, clearcoat: 1, clearcoatRoughness: .02, side: THREE.DoubleSide, depthWrite: false }),
       innerMat: new THREE.MeshStandardMaterial({ roughness: .9, shadowSide: THREE.DoubleSide }), lidPivot: null };
     RT.set(o.id, rt); world.add(rt.group);
@@ -686,8 +691,24 @@ function disposeObject(id) {
   rt.group.traverse(m => { if (m.isMesh) m.geometry.dispose(); });
   world.remove(rt.group);
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
-  rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.earMat.dispose(); RT.delete(id);
+  rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); RT.delete(id);
 }
+/* lid outline in mm: an outer-flap lid overhangs the base by the board thickness on the sides and front */
+function lidDimsMM(o) {
+  const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4), e = .3;
+  const flap = o.lidType === 'flap';
+  const wl = flap ? w + 2 * (t + e) : w, dl = flap ? d + t + e : d;
+  const fh = clamp(o.flapH, 3, h);
+  const el = flap && o.earsOn ? (o.earFull ? dl : clamp(o.earLen, 5, dl)) : 0;
+  return { wl, dl, fh, el };
+}
+const contactMat = (() => {
+  const c = document.createElement('canvas'); c.width = 4; c.height = 64;
+  const x = c.getContext('2d'), gr = x.createLinearGradient(0, 0, 0, 64);
+  gr.addColorStop(0, 'rgba(0,0,0,.5)'); gr.addColorStop(.3, 'rgba(0,0,0,.16)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 4, 64);
+  return new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false });
+})();
 /* ---------- window cut-out (die-cut window with PET film over the lid/front edge) ---------- */
 function winMM(o) {
   if (o.type !== 'box' || !o.window?.on || (o.lidType && o.lidType !== 'flat')) return null;
@@ -766,8 +787,10 @@ function buildBox(o, rt) {
   const frontNotch = win && notchPts(W, H, ww / 2, wh, wr, 'top');
   addG(g, planeGeo(W, H, frontNotch, 'top'), F('front'), [0, H / 2, D / 2], [0, 0, 0], { face: 'front' });
   add(g, W, H, F('back'), [0, H / 2, -D / 2], [0, P, 0], { face: 'back' });
-  add(g, D, H, F('right'), [W / 2, H / 2, 0], [0, P / 2, 0], { face: 'right' });
-  add(g, D, H, F('left'), [-W / 2, H / 2, 0], [0, -P / 2, 0], { face: 'left' });
+  // side walls overlap the front and back by a hair so no seam opens at the corners
+  const seam = .06 * S;
+  add(g, D + 2 * seam, H, F('right'), [W / 2, H / 2, 0], [0, P / 2, 0], { face: 'right' });
+  add(g, D + 2 * seam, H, F('left'), [-W / 2, H / 2, 0], [0, -P / 2, 0], { face: 'left' });
   add(g, W, D, F('bottom'), [0, 0, 0], [P / 2, 0, 0], { face: 'bottom' });
   // inner walls & floor
   const ih = H - T, iy = (H + T) / 2;
@@ -807,35 +830,57 @@ function buildBox(o, rt) {
     for (const sx of [-1, 1]) add(lg, T, DL - 2 * T, rt.edgeMat, [sx * (WL / 2 - T / 2), T - LH, 0], [P / 2, 0, 0]);
     return;
   }
-  // hinged lid; an outer flap needs the lid to reach past the front wall
-  const flapOut = lt === 'flap', DL = flapOut ? D + T + eps : D;
+  // hinged lid; with an outer flap the lid is wider and deeper than the base by the board
+  // thickness, so the flap and its ears always wrap the walls from outside
+  const flapOut = lt === 'flap', ld = lidDimsMM(o);
+  const WL = ld.wl * S, DL = ld.dl * S;
   const pivot = new THREE.Group(); pivot.position.set(0, H, -D / 2); g.add(pivot); rt.lidPivot = pivot;
   const lidNotch = win && notchPts(W, D, ww / 2, wd, wr, 'bottom');
-  addG(pivot, planeGeo(W, DL, lidNotch, 'bottom'), F('top'), [0, T, DL / 2], [-P / 2, 0, 0], { face: 'top' });
-  addG(pivot, planeGeo(W, DL, win && notchPts(W, D, ww / 2, wd, wr, 'top'), 'top'), F('inside'), [0, 0, DL / 2], [P / 2, 0, 0], { face: 'inside' });
+  addG(pivot, planeGeo(WL, DL, lidNotch, 'bottom'), F('top'), [0, T, DL / 2], [-P / 2, 0, 0], { face: 'top' });
+  addG(pivot, planeGeo(WL, DL, win && notchPts(W, D, ww / 2, wd, wr, 'top'), 'top'), F('inside'), [0, 0, DL / 2], [P / 2, 0, 0], { face: 'inside' });
   if (win) {
     const sw = (W - ww) / 2;
     for (const sx of [-1, 1]) add(pivot, sw, T, rt.edgeMat, [sx * (ww / 2 + sw / 2), T / 2, D], [0, 0, 0]);
     addG(pivot, ribbonGeo(lidNotch.map(p => [p.x, T, D / 2 - p.y]), lidNotch.map(p => [p.x, 0, D / 2 - p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
     film(pivot, lidNotch, [0, T / 2, D / 2], [-P / 2, 0, 0]);
-  } else if (!flapOut) add(pivot, W, T, rt.edgeMat, [0, T / 2, DL], [0, 0, 0]);
-  add(pivot, W, T, rt.edgeMat, [0, T / 2, 0], [0, P, 0]);
-  add(pivot, DL, T, rt.edgeMat, [W / 2, T / 2, DL / 2], [0, P / 2, 0]);
-  add(pivot, DL, T, rt.edgeMat, [-W / 2, T / 2, DL / 2], [0, -P / 2, 0]);
+  } else if (!flapOut) add(pivot, WL, T, rt.edgeMat, [0, T / 2, DL], [0, 0, 0]);
+  add(pivot, WL, T, rt.edgeMat, [0, T / 2, 0], [0, P, 0]);
+  const EL = ld.el * S, sideEdge = DL - EL;   // lid side edges are only exposed where no ear hangs
+  if (sideEdge > 1e-4) for (const sx of [-1, 1]) add(pivot, sideEdge, T, rt.edgeMat, [sx * WL / 2, T / 2, sideEdge / 2], [0, sx * P / 2, 0]);
+  rt.contact = [];
   if (flapOut) {
-    // front flap folds down over the outside of the front wall, with ears wrapping the corners
-    // hinged at the lid's front edge and sprung slightly outward, as real board does
-    const FH = clamp(o.flapH, 3, o.dims.h) * S;
-    const fp = new THREE.Group(); fp.position.set(0, T, DL); fp.rotation.x = -3.5 * DEG; pivot.add(fp);
-    add(fp, W, FH, F('flap'), [0, -FH / 2, 0], [0, 0, 0], { face: 'flap' });
-    add(fp, W, FH - T, rt.innerMat, [0, -(FH + T) / 2, -T], [0, P, 0], { face: 'inside', wall: true });
-    add(fp, W, T, rt.edgeMat, [0, -FH, -T / 2], [P / 2, 0, 0]);
-    for (const sx of [-1, 1]) add(fp, T, FH, rt.edgeMat, [sx * W / 2, -FH / 2, -T / 2], [0, sx * P / 2, 0]);
-    const EW = clamp(o.ears, 0, o.dims.d / 2) * S;
-    if (EW > 0) for (const sx of [-1, 1]) {
-      const EH = (FH - T) * .92, shape = new THREE.Shape([V2(-EW / 2, EH / 2), V2(EW / 2, EH / 2), V2(EW / 2, -EH / 2), V2(-EW / 2 + EW * .35, -EH / 2)]);
-      const ear = addG(fp, new THREE.ShapeGeometry(shape), rt.earMat, [sx * (W / 2 + eps), -T - EH / 2, -T - EW / 2], [0, sx * P / 2, 0]);
-      if (sx < 0) ear.scale.x = -1;
+    const FH = ld.fh * S;
+    // the flap is hinged at the lid's front edge; without ears it springs slightly outward
+    const fp = new THREE.Group(); fp.position.set(0, T, DL); fp.rotation.x = EL > 0 ? 0 : -3.5 * DEG; pivot.add(fp);
+    add(fp, WL, FH, F('flap'), [0, -FH / 2, 0], [0, 0, 0], { face: 'flap' });
+    add(fp, WL, FH - T, rt.innerMat, [0, -(FH + T) / 2, -T], [0, P, 0], { face: 'inside', wall: true });
+    add(fp, WL, T, rt.edgeMat, [0, -FH, -T / 2], [P / 2, 0, 0]);
+    if (EL > 0) {
+      // ears fold back from the flap's side edges and run along the side walls
+      const ch = Math.min(FH, EL) * .3;
+      const earGeo = (mirror) => {
+        const m = mirror ? -1 : 1, pts = [V2(-EL / 2, FH / 2), V2(EL / 2, FH / 2), V2(EL / 2, -FH / 2 + ch), V2(EL / 2 - ch, -FH / 2), V2(-EL / 2, -FH / 2)].map(v => V2(v.x * m, v.y));
+        const geo = new THREE.ShapeGeometry(new THREE.Shape(mirror ? pts.reverse() : pts));
+        const pos = geo.attributes.position, uv = geo.attributes.uv;
+        for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / EL + .5, pos.getY(i) / FH + .5);
+        return geo;
+      };
+      for (const sx of [-1, 1]) {
+        const right = sx > 0, key = right ? 'earRight' : 'earLeft';
+        // outer plane: local +x runs toward the back on the right ear and toward the front on the left one
+        addG(fp, earGeo(!right), F(key), [sx * WL / 2, -FH / 2, -EL / 2], [0, sx * P / 2, 0], { face: key });
+        addG(fp, earGeo(right), rt.innerMat, [sx * (WL / 2 - T), -FH / 2, -EL / 2], [0, -sx * P / 2, 0], { face: 'inside', wall: true });
+        add(fp, T, EL - ch, rt.edgeMat, [sx * (WL / 2 - T / 2), -FH, -(EL - ch) / 2], [P / 2, 0, 0]);
+        add(fp, T, FH - ch, rt.edgeMat, [sx * (WL / 2 - T / 2), -(FH - ch) / 2, -EL], [0, P, 0]);
+      }
+    } else for (const sx of [-1, 1]) add(fp, T, FH, rt.edgeMat, [sx * WL / 2, -FH / 2, -T / 2], [0, sx * P / 2, 0]);
+    // soft contact shadow on the walls just under the closed flap and ears
+    const CH = Math.min(7 * S, H * .25), cy = H + T - FH - CH / 2, lift = .08 * S;
+    if (cy > CH / 2) {
+      const strip = (w, pos, rot) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, CH), contactMat); m.position.set(...pos); m.rotation.set(...rot); m.raycast = () => {}; m.renderOrder = 1; g.add(m); rt.contact.push(m); };
+      strip(W, [0, cy, D / 2 + lift], [0, 0, 0]);
+      const z0 = Math.max(-D / 2, -D / 2 + DL - EL);
+      if (EL > 0) for (const sx of [-1, 1]) strip(D / 2 - z0, [sx * (W / 2 + lift), cy, (D / 2 + z0) / 2], [0, sx * P / 2, 0]);
     }
   } else if (lt === 'tuck') {
     // tuck flap hangs inside the front wall
@@ -872,6 +917,7 @@ function applyTransform(o) {
 function applyLid(o) {
   const rt = RT.get(o.id); if (!rt) return;
   if (rt.lidPivot) rt.lidPivot.rotation.x = -o.lid * DEG;
+  for (const m of rt.contact || []) m.visible = o.lid < 1.5;
   if (rt.lidGroup) {
     // the separate lid lifts, slides back a little and tilts
     const f = clamp(o.lid / 125, 0, 1), H = o.dims.h * S, LH = clamp(o.lidH, 3, o.dims.h) * S;
@@ -885,9 +931,6 @@ function applyObjMaterials(o) {
   const inner = new THREE.Color(o.faces.inside?.bg || '#f4f1ea');
   if (FINISHES[o.finish]?.kraft) inner.multiply(new THREE.Color(FINISHES[o.finish].kraft));
   rt.innerMat.color.copy(inner);
-  const ear = new THREE.Color(o.faces.flap?.bg || o.board || '#ffffff');
-  if (FINISHES[o.finish]?.kraft) ear.multiply(new THREE.Color(FINISHES[o.finish].kraft));
-  rt.earMat.color.copy(ear);
   rt.innerMat.bumpMap = o.grain > 0 ? rt.faces.inside?.grain ?? null : null;
   rt.innerMat.bumpScale = o.grain * 1.2; rt.innerMat.needsUpdate = true;
 }
@@ -1317,7 +1360,9 @@ function renderModel() {
     ${box ? `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(LID_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : ''}
     ${box && o.lidType !== 'none' ? rangeField(o.lidType === 'telescope' ? 'Поднять крышку' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
     ${box && (o.lidType === 'flap' || o.lidType === 'tuck') ? rangeField('Клапан, мм', 'flapH', 3, 300, 1) : ''}
-    ${box && o.lidType === 'flap' ? rangeField('Ушки, мм', 'ears', 0, 40, 1) : ''}
+    ${box && o.lidType === 'flap' ? `<label class="check"><input type="checkbox" data-k="earsOn"> Боковые ушки клапана</label>` : ''}
+    ${box && o.lidType === 'flap' && o.earsOn ? `<label class="check"><input type="checkbox" data-k="earFull"> Ушки на всю глубину коробки</label>` : ''}
+    ${box && o.lidType === 'flap' && o.earsOn && !o.earFull ? rangeField('Длина ушек, мм', 'earLen', 5, 800, 1) : ''}
     ${box && o.lidType === 'telescope' ? rangeField('Высота крышки, мм', 'lidH', 3, 400, 1) : ''}
     ${box ? rangeField('Толщина, мм', 'thickness', .3, 6, .1) : ''}
     ${box && o.lidType === 'flat' ? `<label class="check"><input type="checkbox" data-k="window.on"> Окно с плёнкой (вырубка на крышке и передней стенке)</label>` : ''}
@@ -1339,7 +1384,8 @@ function renderModel() {
     if (k === 'name') { renderObjects(); $('#objBadge').textContent = o.name; return; }
     if (k === 'type') { o.dims = { ...PRESETS.find(p => p.type === o.type).dims }; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, faceKeys(o)[0]); renderModel(); renderObjects(); return; }
     if (k === 'lidType') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
-    if (k === 'flapH' || k === 'ears' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'earsOn' || k === 'earFull') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k.startsWith('dims') || k === 'thickness') { rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lid') { applyLid(o); return; }
     if (k.startsWith('pos') || k === 'rotY') { applyTransform(o); return; }
@@ -1358,7 +1404,8 @@ function renderModel() {
     o.window = p.window ? { ...p.window } : { ...o.window, on: false };
     if (o.type === 'box') {
       o.lidType = p.lid?.type ?? 'flat';
-      for (const [k, v] of [['flapH', p.lid?.flapH], ['ears', p.lid?.ears], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
+      for (const [k, v] of [['flapH', p.lid?.flapH], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
+      o.earsOn = true; o.earFull = true;
       ensureFaces(o); if (p.board) setBoard(o, p.board);
       applyObjMaterials(o); select(o.id, sel.face);
     }
@@ -1897,14 +1944,14 @@ function templateSVG(o) {
     const { w, h, d } = o.dims, oy = n.oy;
     // base cut outline (the lid row is cut as separate parts)
     const pts = n.hinged
-      ? [[d, 0], [d + w, 0], [d + w, d], [2 * d + 2 * w, d], [2 * d + 2 * w, d + h], [d + w, d + h], [d + w, 2 * d + h], [d, 2 * d + h], [d, d + h], [0, d + h], [0, d], [d, d]]
+      ? [[n.tx, 0], [n.tx + n.tw, 0], [n.tx + n.tw, oy], [2 * d + 2 * w, oy], [2 * d + 2 * w, oy + h], [d + w, oy + h], [d + w, oy + h + d], [d, oy + h + d], [d, oy + h], [0, oy + h], [0, oy], [n.tx, oy]]
       : [[0, 0], [2 * d + 2 * w, 0], [2 * d + 2 * w, h], [d + w, h], [d + w, h + d], [d, h + d], [d, h], [0, h]];
     body += `<polygon points="${pts.map(p => p.map(f).join(',')).join(' ')}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
     const nw = netWindow(o);
     const folds = [[d, oy + h, d + w, oy + h], [d, oy, d, oy + h], [d + w, oy, d + w, oy + h], [2 * d + w, oy, 2 * d + w, oy + h]];
     if (n.hinged) {
       if (nw) { folds.push([d, d, nw.x, d], [nw.x + nw.w, d, d + w, d]); body += `<rect x="${f(nw.x)}" y="${f(nw.y)}" width="${f(nw.w)}" height="${f(nw.h)}" rx="${f(nw.r)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`; }
-      else folds.push([d, d, d + w, d]);
+      else folds.push([d, oy, d + w, oy]);
     }
     for (const p of n.panels) if (p.part) body += `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
     body += folds.map(l => `<line x1="${f(l[0])}" y1="${f(l[1])}" x2="${f(l[2])}" y2="${f(l[3])}" stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"/>`).join('');
