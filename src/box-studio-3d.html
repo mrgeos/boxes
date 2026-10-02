@@ -506,7 +506,8 @@ function netLayout(o) {
   // A lid with a flap hangs off the back panel as one piece: lid, flap, and ears beside the flap;
   // that piece is drawn turned 180° (rot), as it lies on the real die.
   const keys = faceKeys(o), lt = o.lidType || 'flat';
-  const backLid = lt === 'flap' || lt === 'tuck';
+  // a window across the hinge needs the lid attached to the back panel too, so the cut is one opening
+  const backLid = lt === 'flap' || lt === 'tuck' || (lt === 'flat' && !!winMM(o) && windowPlace(o) === 'back');
   const hinged = keys.includes('top') && !backLid && lt !== 'telescope';
   const panels = [];
   let oy = 0, tx = 0, tw = 0, lid = null;
@@ -514,11 +515,12 @@ function netLayout(o) {
     const [w0, h0] = faceMM(o, 'top'); tw = w0; oy = h0; tx = d + (w - tw) / 2;
     panels.push({ key: 'top', x: tx, y: 0, w: tw, h: h0 });
   } else if (backLid) {
-    const [w0, th] = faceMM(o, 'top'), [fw, fh] = faceMM(o, 'flap');
+    const [w0, th] = faceMM(o, 'top'), hasFlap = keys.includes('flap'), [fw, fh] = hasFlap ? faceMM(o, 'flap') : [w0, 0];
     const el = keys.includes('earLeft') ? faceMM(o, 'earLeft')[0] : 0;
     tw = w0; tx = 2 * d + w + (w - tw) / 2; oy = th + fh;
     const fx = tx + (tw - fw) / 2;
-    panels.push({ key: 'top', x: tx, y: fh, w: tw, h: th, rot: true }, { key: 'flap', x: fx, y: 0, w: fw, h: fh, rot: true });
+    panels.push({ key: 'top', x: tx, y: fh, w: tw, h: th, rot: true });
+    if (hasFlap) panels.push({ key: 'flap', x: fx, y: 0, w: fw, h: fh, rot: true });
     if (el) panels.push({ key: 'earRight', x: fx - el, y: 0, w: el, h: fh, rot: true }, { key: 'earLeft', x: fx + fw, y: 0, w: el, h: fh, rot: true });
     lid = { th, fx, fw, fh, el, ch: el ? Math.min(fh, el) * .3 : 0 };
   }
@@ -740,8 +742,10 @@ const contactMat = (() => {
 function windowPlace(o) {
   const lt = o.lidType || 'flat';
   if (lt === 'none') return null;
-  if (lt === 'flat' || lt === 'flap') return o.window.place === 'lid' ? 'lid' : 'edge';
-  return 'lid';
+  if (lt === 'telescope') return 'lid';
+  const pl = o.window.place;
+  if (pl === 'lid' || pl === 'back') return pl;
+  return lt === 'flat' || lt === 'flap' ? 'edge' : 'lid';
 }
 function winMM(o) {
   if (o.type !== 'box' || !o.window?.on) return null;
@@ -756,6 +760,12 @@ function winMM(o) {
     const whFront = flap ? clamp(wh - t, 0, h - t - 2) : wh;
     const r = square ? 0 : clamp(wn.r, 0, Math.max(0, Math.min(ww / 2, wd, wh) - .5));
     return { place, ww, wd, wh, whFront, r, flap };
+  }
+  if (place === 'back') {
+    // across the hinge: from the lid's back edge down the back wall
+    const wd = clamp(wn.d, 5, lh - 4), wh = clamp(wn.h, 2, Math.max(2, h - t - 2));
+    const r = square ? 0 : clamp(wn.r, 0, Math.max(0, Math.min(ww / 2, wd, wh) - .5));
+    return { place, ww, wd, wh, r };
   }
   const wd = clamp(wn.d, 5, lh - 8), lim = Math.max(0, (lh - wd) / 2 - 4), off = clamp(wn.off || 0, -lim, lim);
   const r = square ? 0 : clamp(wn.r, 0, Math.max(0, Math.min(ww, wd) / 2 - .5));
@@ -786,6 +796,12 @@ function faceWindow(o, k) {
     if (k === 'flap') return { x, y: 0, w, h: win.wh / mh, rr: [0, 0, 1, 1], r };
     if (k === 'top') return { x, y: 1 - win.wd / mh, w, h: win.wd / mh, rr: [1, 1, 0, 0], r };
     if (k === 'inside') return { x, y: 0, w, h: win.wd / mh, rr: [0, 0, 1, 1], r };
+    return null;
+  }
+  if (win.place === 'back') {
+    if (k === 'back') return { x, y: 0, w, h: win.wh / mh, rr: [0, 0, 1, 1], r };
+    if (k === 'top') return { x, y: 0, w, h: win.wd / mh, rr: [0, 0, 1, 1], r };
+    if (k === 'inside') return { x, y: 1 - win.wd / mh, w, h: win.wd / mh, rr: [1, 1, 0, 0], r };
     return null;
   }
   // inside the lid: the top canvas has the back at the top, the lid's inner side has the front at the top
@@ -865,13 +881,15 @@ function buildBox(o, rt) {
     const m = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(pts)), rt.filmMat);
     m.position.set(...p); m.rotation.set(...r); m.renderOrder = 2; m.raycast = () => {}; parent.add(m);
   };
-  const win = winMM(o), edgeWin = win?.place === 'edge' ? win : null, lidWin = win?.place === 'lid' ? win : null;
+  const win = winMM(o), edgeWin = win?.place === 'edge' ? win : null, lidWin = win?.place === 'lid' ? win : null, backWin = win?.place === 'back' ? win : null;
   const ww = win ? win.ww * S : 0, wd = win ? win.wd * S : 0, wr = win ? win.r * S : 0;
   const wfH = edgeWin ? edgeWin.whFront * S : 0, wfR = Math.min(wr, wfH * .999);
   // outer shell — orientation matches the cross-shaped dieline
   const frontNotch = wfH > 1e-4 ? notchPts(W, H, ww / 2, wfH, wfR, 'top') : null;
   addG(g, planeGeo(W, H, frontNotch, 'top'), F('front'), [0, H / 2, D / 2], [0, 0, 0], { face: 'front' });
-  add(g, W, H, F('back'), [0, H / 2, -D / 2], [0, P, 0], { face: 'back' });
+  const wbH = backWin ? backWin.wh * S : 0, wbR = Math.min(wr, wbH * .999);
+  const backNotch = wbH > 1e-4 ? notchPts(W, H, ww / 2, wbH, wbR, 'top') : null;
+  addG(g, planeGeo(W, H, backNotch, 'top'), F('back'), [0, H / 2, -D / 2], [0, P, 0], { face: 'back' });
   // side walls overlap the front and back by a hair so no seam opens at the corners
   const seam = .06 * S;
   add(g, D + 2 * seam, H, F('right'), [W / 2, H / 2, 0], [0, P / 2, 0], { face: 'right' });
@@ -880,7 +898,7 @@ function buildBox(o, rt) {
   // inner walls & floor
   const ih = H - T, iy = (H + T) / 2;
   addG(g, planeGeo(W - 2 * T, ih, frontNotch && notchPts(W - 2 * T, ih, ww / 2, wfH, wfR, 'top'), 'top'), rt.innerMat, [0, iy, D / 2 - T], [0, P, 0], { face: 'inside', wall: true });
-  add(g, W - 2 * T, ih, rt.innerMat, [0, iy, -D / 2 + T], [0, 0, 0], { face: 'inside', wall: true });
+  addG(g, planeGeo(W - 2 * T, ih, backNotch && notchPts(W - 2 * T, ih, ww / 2, wbH, wbR, 'top'), 'top'), rt.innerMat, [0, iy, -D / 2 + T], [0, 0, 0], { face: 'inside', wall: true });
   add(g, D - 2 * T, ih, rt.innerMat, [W / 2 - T, iy, 0], [0, -P / 2, 0], { face: 'inside', wall: true });
   add(g, D - 2 * T, ih, rt.innerMat, [-W / 2 + T, iy, 0], [0, P / 2, 0], { face: 'inside', wall: true });
   add(g, W - 2 * T, D - 2 * T, F('insideBottom'), [0, T, 0], [-P / 2, 0, 0], { face: 'insideBottom' });
@@ -891,7 +909,12 @@ function buildBox(o, rt) {
     addG(g, ribbonGeo(frontNotch.map(p => [p.x, H / 2 + p.y, D / 2]), frontNotch.map(p => [p.x, H / 2 + p.y, D / 2 - T])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
     if (!edgeWin.flap) film(g, frontNotch, [0, H / 2, D / 2 - T / 2], [0, 0, 0]);   // behind a flap the film sits on the flap
   } else add(g, W, T, rt.edgeMat, [0, H, D / 2 - T / 2], [-P / 2, 0, 0]);
-  add(g, W, T, rt.edgeMat, [0, H, -D / 2 + T / 2], [-P / 2, 0, 0]);
+  if (backNotch) {
+    const sw = (W - ww) / 2;
+    for (const sx of [-1, 1]) add(g, sw, T, rt.edgeMat, [sx * (ww / 2 + sw / 2), H, -D / 2 + T / 2], [-P / 2, 0, 0]);
+    addG(g, ribbonGeo(backNotch.map(p => [-p.x, H / 2 + p.y, -D / 2]), backNotch.map(p => [-p.x, H / 2 + p.y, -D / 2 + T])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+    film(g, backNotch, [0, H / 2, -D / 2 + T / 2], [0, P, 0]);
+  } else add(g, W, T, rt.edgeMat, [0, H, -D / 2 + T / 2], [-P / 2, 0, 0]);
   add(g, T, D - 2 * T, rt.edgeMat, [W / 2 - T / 2, H, 0], [-P / 2, 0, 0]);
   add(g, T, D - 2 * T, rt.edgeMat, [-W / 2 + T / 2, H, 0], [-P / 2, 0, 0]);
   rt.lidPivot = rt.lidGroup = null;
@@ -926,12 +949,17 @@ function buildBox(o, rt) {
   const flapOut = lt === 'flap', ld = lidDimsMM(o);
   const WL = ld.wl * S, DL = ld.dl * S;
   const pivot = new THREE.Group(); pivot.position.set(0, H, -D / 2); g.add(pivot); rt.lidPivot = pivot;
-  const lidNotch = edgeWin && notchPts(WL, DL, ww / 2, wd, wr, 'bottom');
+  // an edge window notches the lid's front edge, a back window its hinge edge
+  const cut = edgeWin || backWin, outerEdge = edgeWin ? 'bottom' : 'top', innerEdge = edgeWin ? 'top' : 'bottom';
+  const lidNotch = cut && notchPts(WL, DL, ww / 2, wd, wr, outerEdge);
   const lidHole = lidWin && rrectPts(0, -lidWin.off * S, ww, wd, wr), lidHoleIn = lidHole && lidHole.map(v => V2(v.x, -v.y));
-  addG(pivot, lidHole ? planeGeoHole(WL, DL, lidHole) : planeGeo(WL, DL, lidNotch, 'bottom'), F('top'), [0, T, DL / 2], [-P / 2, 0, 0], { face: 'top' });
-  addG(pivot, lidHoleIn ? planeGeoHole(WL, DL, lidHoleIn) : planeGeo(WL, DL, edgeWin && notchPts(WL, DL, ww / 2, wd, wr, 'top'), 'top'), F('inside'), [0, 0, DL / 2], [P / 2, 0, 0], { face: 'inside' });
+  addG(pivot, lidHole ? planeGeoHole(WL, DL, lidHole) : planeGeo(WL, DL, lidNotch, outerEdge), F('top'), [0, T, DL / 2], [-P / 2, 0, 0], { face: 'top' });
+  addG(pivot, lidHoleIn ? planeGeoHole(WL, DL, lidHoleIn) : planeGeo(WL, DL, cut && notchPts(WL, DL, ww / 2, wd, wr, innerEdge), innerEdge), F('inside'), [0, 0, DL / 2], [P / 2, 0, 0], { face: 'inside' });
   if (lidNotch) {
-    if (!flapOut) { const sw = (WL - ww) / 2; for (const sx of [-1, 1]) add(pivot, sw, T, rt.edgeMat, [sx * (ww / 2 + sw / 2), T / 2, DL], [0, 0, 0]); }
+    const sw = (WL - ww) / 2;
+    if (edgeWin && !flapOut) for (const sx of [-1, 1]) add(pivot, sw, T, rt.edgeMat, [sx * (ww / 2 + sw / 2), T / 2, DL], [0, 0, 0]);
+    if (backWin) for (const sx of [-1, 1]) add(pivot, sw, T, rt.edgeMat, [sx * (ww / 2 + sw / 2), T / 2, 0], [0, P, 0]);
+    if (backWin && !flapOut) add(pivot, WL, T, rt.edgeMat, [0, T / 2, DL], [0, 0, 0]);
     addG(pivot, ribbonGeo(lidNotch.map(p => [p.x, T, DL / 2 - p.y]), lidNotch.map(p => [p.x, 0, DL / 2 - p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
     film(pivot, lidNotch, [0, T / 2, DL / 2], [-P / 2, 0, 0]);
   } else if (!flapOut) add(pivot, WL, T, rt.edgeMat, [0, T / 2, DL], [0, 0, 0]);
@@ -940,7 +968,7 @@ function buildBox(o, rt) {
     addG(pivot, ribbonGeo(loop.map(p => [p.x, T, DL / 2 - p.y]), loop.map(p => [p.x, 0, DL / 2 - p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
     film(pivot, lidHole, [0, T / 2, DL / 2], [-P / 2, 0, 0]);
   }
-  add(pivot, WL, T, rt.edgeMat, [0, T / 2, 0], [0, P, 0]);
+  if (!backWin) add(pivot, WL, T, rt.edgeMat, [0, T / 2, 0], [0, P, 0]);
   const EL = ld.el * S, sideEdge = DL - EL;   // lid side edges are only exposed where no ear hangs
   if (sideEdge > 1e-4) for (const sx of [-1, 1]) add(pivot, sideEdge, T, rt.edgeMat, [sx * WL / 2, T / 2, sideEdge / 2], [0, sx * P / 2, 0]);
   rt.contact = [];
@@ -1527,13 +1555,16 @@ function renderModel() {
   };
 }
 function windowFields(o) {
-  const place = windowPlace(o), canEdge = o.lidType === 'flat' || o.lidType === 'flap', flap = o.lidType === 'flap';
-  return (canEdge ? `<div class="field wide"><span class="fl">Окно</span><select data-k="window.place">
-      <option value="edge">${flap ? 'Через ребро на клапан' : 'Через ребро на переднюю стенку'}</option><option value="lid">В крышке</option></select></div>` : '')
+  const place = windowPlace(o), lt = o.lidType, flap = lt === 'flap';
+  const canEdge = lt === 'flat' || lt === 'flap', canBack = canEdge || lt === 'tuck';
+  if (canBack && o.window.place !== place) o.window.place = place;   // keep the menu on an option this lid offers
+  return (canBack ? `<div class="field wide"><span class="fl">Окно</span><select data-k="window.place">
+      ${canEdge ? `<option value="edge">${flap ? 'Через переднее ребро на клапан' : 'Через переднее ребро на переднюю стенку'}</option>` : ''}
+      <option value="back">Через заднее ребро на заднюю стенку</option><option value="lid">В крышке</option></select></div>` : '')
     + `<div class="field wide"><span class="fl">Углы окна</span><select data-k="window.corners"><option value="round">Скруглённые</option><option value="square">Прямые</option></select></div>`
     + rangeField('Окно: ширина, мм', 'window.w', 10, 800, 1)
-    + rangeField(place === 'edge' ? 'Окно: на крышке, мм' : 'Окно: глубина, мм', 'window.d', 5, 800, 1)
-    + (place === 'edge' ? rangeField(flap ? 'Окно: на клапане, мм' : 'Окно: на передней, мм', 'window.h', 2, 800, 1)
+    + rangeField(place === 'lid' ? 'Окно: глубина, мм' : 'Окно: на крышке, мм', 'window.d', 5, 800, 1)
+    + (place !== 'lid' ? rangeField(place === 'back' ? 'Окно: на задней, мм' : flap ? 'Окно: на клапане, мм' : 'Окно: на передней, мм', 'window.h', 2, 800, 1)
                         : rangeField('Окно: сдвиг к переду, мм', 'window.off', -400, 400, 1))
     + (o.window.corners !== 'square' ? rangeField('Окно: радиус, мм', 'window.r', 0, 60, .5) : '');
 }
@@ -2083,7 +2114,8 @@ function templateSVG(o) {
       body += `<path d="M${f(x + tl)},${f(y)} H${f(X - tr)} ${arc(tr, X, y + tr)} V${f(Y - br)} ${arc(br, X - br, Y)} H${f(x + bl)} ${arc(bl, x, Y - bl)} V${f(y + tl)} ${arc(tl, x + tl, y)} Z" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
     }
     if (n.backLid) {
-      folds.push([2 * d + w, oy, 2 * d + 2 * w, oy], [L.fx, ly, L.fx + L.fw, ly]);
+      folds.push([2 * d + w, oy, 2 * d + 2 * w, oy]);
+      if (ly > 0) folds.push([L.fx, ly, L.fx + L.fw, ly]);
       if (L.el) folds.push([L.fx, 0, L.fx, ly], [L.fx + L.fw, 0, L.fx + L.fw, ly]);
     }
     // folds stop where a window opening crosses them
