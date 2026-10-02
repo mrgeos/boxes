@@ -497,7 +497,7 @@ function ensureFaces(o) {
   if (o.type === 'bag') {
     o.bagStyle ??= 'flat'; o.bagTop ??= 'flap'; o.bagMat ??= 'frosty'; o.flapH ??= 35; o.rollTurns ??= 1; o.shoulder ??= 0;
     o.bagWin ??= defaultBagWin(o.dims);
-    o.ext ??= { on: false, h: 40, w: o.dims.w, staples: 2 };
+    o.ext ??= { on: false, h: 40, ov: 18, w: o.dims.w, staples: 2 };
     o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 6 };
   }
   if (!o.window) o.window = { on: false, w: Math.round(o.dims.w * .68), d: Math.round(o.dims.d * .85), h: Math.round(o.dims.h * .46), r: 6 };
@@ -520,7 +520,7 @@ function newObject(presetId = 'mailer') {
 const defaultBagWin = d => ({ on: false, w: Math.round(d.w * .5), h: Math.round(d.h * .35), y: Math.round(d.h * .2), x: 0, wrap: 'none', ws: Math.round((d.d || 20) * .6) });
 function applyBagPreset(o, p) {
   Object.assign(o, { bagStyle: p.bag.style, bagTop: p.bag.top, bagMat: p.bag.mat, flapH: p.bag.flapH, lid: 0, rollTurns: p.bag.turns ?? 1, shoulder: 0,
-    ext: { on: !!p.bag.ext, h: 40, w: p.dims.w, staples: 2 }, bagWin: { ...defaultBagWin(p.dims), ...(p.bag.win || { on: false }) } });
+    ext: { on: !!p.bag.ext, h: 40, ov: 18, w: p.dims.w, staples: 2 }, bagWin: { ...defaultBagWin(p.dims), ...(p.bag.win || { on: false }) } });
   if (o.product) o.product.w = Math.round(p.dims.w * .7);
 }
 /* unprinted board colour: outer faces take it, the inside stays white unless switched off */
@@ -734,12 +734,14 @@ function bagDims(o) {
   if (turns) fh = Math.min(fh, H * .6 / (2 * turns - 1));
   // paper rolled into the top: the visible band plus the turns hidden under it
   const roll = turns ? fh * (2 * turns - 1) : 0, Hv = H - roll, ext = !!o.ext?.on, eh = clamp(o.ext?.h ?? 40, 10, Hv * .5);
+  // how much of the bag sits inside the header card; the rest of the card stands above the bag
+  const ov = clamp(o.ext?.ov ?? Math.round(eh * .45), Math.min(8, eh), eh);
   const tk = turns > 1 ? .3 + turns * (film ? .5 : 1.1) : .18;
-  const B = { W, H, D, t, block, top, turns, fh, roll, Hv, tk, film, seam: block ? 0 : 6, sealTop: top === 'seal' ? 10 : 0, ext, ew: W, eh };
+  const B = { W, H, D, t, block, top, turns, fh, roll, Hv, tk, film, seam: block ? 0 : 6, sealTop: top === 'seal' ? 10 : 0, ext, ew: W, eh, ov };
   if (block) {
     // gable top: from the shoulder the front and back slope in to meet at the crest; above the crest
     // a flat neck holds the extender (or the seal)
-    B.dmin = 1.2; B.neck = ext ? eh + 3 : top === 'seal' ? 12 : 0;
+    B.dmin = 1.2; B.neck = ext ? ov + 3 : top === 'seal' ? 12 : 0;
     const run = (D - B.dmin) / 2, maxL = Math.max(1, Hv - B.neck - 15);
     let hp = o.shoulder > 0 ? clamp(o.shoulder, 3, 400) : D * .85, L = Math.hypot(hp, run);
     if (L > maxL) { hp = Math.sqrt(Math.max(1, maxL * maxL - run * run)); L = Math.hypot(hp, run); }
@@ -805,11 +807,11 @@ const smooth = (a, b, x) => { const q = clamp((x - a) / (b - a), 0, 1); return q
 function bagShape(o) {
   const B = bagDims(o), { W, D, fh, Hv } = B, S3 = {}, P = (c, u, v) => ({ c, u, v });
   // the strip folded over the top and the extender press the top of the bag flat
-  const cover = Math.max(B.top === 'seal' ? 0 : fh, B.ext ? B.eh : 0);
+  const cover = Math.max(B.top === 'seal' ? 0 : fh, B.ext ? B.ov : 0);
   let frontAt, backTop;   // a point and outward normal on the front at (x, paper s); the back's top edge
   if (!B.block) {
     // puff: zero along the sealed sides, the bottom fold and the mouth; a faint ripple in the film
-    const mx = Math.min(W * .25, 28), my = Math.min(Hv * .25, 28), top = Hv - Math.max(B.sealTop, B.ext ? B.eh * .9 : 0);
+    const mx = Math.min(W * .25, 28), my = Math.min(Hv * .25, 28), top = Hv - Math.max(B.sealTop, B.ext ? B.ov * .9 : 0);
     const puff = (x, y) => smooth(0, mx, W / 2 - B.seam - Math.abs(x)) * smooth(0, my, y) * smooth(0, my * .8, top - y);
     const rip = (x, y) => .3 * Math.sin(x * .13 + y * .07) * Math.sin(y * .11 - x * .05);
     const zFront = (x, y) => { const f = puff(x, y); return f * (B.t / 2 + rip(x, y)) + .06; };
@@ -872,10 +874,12 @@ function bagShape(o) {
   const zf = B.zTop + (B.top === 'fold' ? B.tk : B.top === 'flap' ? .36 : 0), zb = B.zBackTop;
   B.extZ = [zf + .35, zb - .35];
   if (B.ext) {
-    const yt = B.topY + (B.turns > 1 ? B.tk : 0);
-    B.extTop = yt;
-    S3.extFront = { f: (u, v) => [(u - .5) * B.ew, yt - (1 - v) * B.eh, B.extZ[0]], rest: P([0, Hv - B.eh / 2, z0 + .6], [1, 0, 0], [0, 1, 0]) };
-    S3.extBack = { f: (u, v) => [(.5 - u) * B.ew, yt - (1 - v) * B.eh, B.extZ[1]], rest: P([0, Hv - B.eh / 2, -z0 - .6], [-1, 0, 0], [0, 1, 0]) };
+    // the card hangs over the bag by the overlap; above the bag its two halves close up
+    const yb = B.topY + (B.turns > 1 ? B.tk : 0), yt = yb + B.eh - B.ov, zc = (B.extZ[0] + B.extZ[1]) / 2, half = (B.extZ[0] - B.extZ[1]) / 2, shut = .35;
+    const zAt = y => half + (shut - half) * smooth(yb, yb + Math.min(6, B.eh - B.ov + .01), y);
+    Object.assign(B, { extTop: yt, extBagTop: yb, extZc: zc, extShut: B.eh - B.ov > .5 ? shut : half });
+    S3.extFront = { f: (u, v) => { const y = yt - (1 - v) * B.eh; return [(u - .5) * B.ew, y, zc + zAt(y)]; }, rest: P([0, yt - B.eh / 2, z0 + .6], [1, 0, 0], [0, 1, 0]) };
+    S3.extBack = { f: (u, v) => { const y = yt - (1 - v) * B.eh; return [(.5 - u) * B.ew, y, zc - zAt(y)]; }, rest: P([0, yt - B.eh / 2, -z0 - .6], [-1, 0, 0], [0, 1, 0]) };
   }
   return { B, S3 };
 }
@@ -1589,13 +1593,13 @@ function buildBag(o, rt) {
   }
   if (B.ext) {
     face('extFront', rt.group); face('extBack', rt.group);
-    const [zf, zb] = B.extZ, zc = (zf + zb) / 2, r = (zf - zb) / 2, yt = B.extTop;
+    const [zf, zb] = B.extZ, zc = B.extZc, r = B.extShut, yt = B.extTop;
     const bend = new THREE.Mesh(gridGeo((u, v) => [(u - .5) * B.ew, yt + r * Math.sin(Math.PI * v), zc + r * Math.cos(Math.PI * v)], 2, 10), rt.cardMat);
     bend.castShadow = bend.receiveShadow = true; bend.userData = { objId: o.id, face: null }; rt.group.add(bend);
     const n = +o.ext.staples === 1 ? [0] : [-B.ew * .27, B.ew * .27];
     for (const x of n) for (const z of [zf + .25, zb - .25]) {
       const sp = new THREE.Mesh(new THREE.BoxGeometry(11 * S, .7 * S, .45 * S), rt.metalMat);
-      sp.position.set(x * S, (yt - B.eh * .55) * S, z * S); sp.castShadow = true; rt.group.add(sp);
+      sp.position.set(x * S, (B.extBagTop - B.ov / 2) * S, z * S); sp.castShadow = true; rt.group.add(sp);   // through card and bag
     }
   }
   // the product inside: a cut-out photo, softened behind frosty film or tracing paper
@@ -2597,7 +2601,7 @@ function bagFields(o) {
     + (block ? rangeField('Скат верха, мм (0 — авто)', 'shoulder', 0, 300, 1) : '')
     + `<div class="field wide"><span class="fl">Материал</span><select data-k="bagMat">${Object.entries(BAG_MATS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
     + `<label class="check"><input type="checkbox" data-k="ext.on"> Экстендер (картонный хедер на степлере)</label>`
-    + (o.ext?.on ? rangeField('Экстендер: высота, мм', 'ext.h', 10, 200, 1) + `<div class="field wide"><span class="fl">Скобы</span><select data-k="ext.staples"><option value="1">Одна по центру</option><option value="2">Две</option></select></div>` : '')
+    + (o.ext?.on ? rangeField('Экстендер: высота, мм', 'ext.h', 10, 200, 1) + rangeField('Экстендер: нахлёст на пакет, мм', 'ext.ov', 8, 200, 1) + `<div class="field wide"><span class="fl">Скобы</span><select data-k="ext.staples"><option value="1">Одна по центру</option><option value="2">Две</option></select></div>` : '')
     + (!bagFilm(o) ? `<label class="check"><input type="checkbox" data-k="bagWin.on"> Окно с плёнкой</label>`
       + (o.bagWin?.on ? (block ? `<div class="field wide"><span class="fl">Окно</span><select data-k="bagWin.wrap"><option value="none">На переде</option><option value="right">С заходом на правый фальц</option><option value="left">С заходом на левый фальц</option></select></div>` : '')
         + rangeField('Окно: ширина на переде, мм', 'bagWin.w', 5, 600, 1) + rangeField('Окно: высота, мм', 'bagWin.h', 5, 800, 1) + rangeField('Окно: от дна, мм', 'bagWin.y', 3, 800, 1)
