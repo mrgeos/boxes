@@ -1255,9 +1255,9 @@ function buildCup(o, rt) {
   add(wg, rt.faces.wrap.mat, { face: 'wrap' });
   const yB = Math.min(6, G.H * .07), tk = .35;
   if (G.dbl) {
-    // inner cup shows below the sleeve; the sleeve's lower edge is a small step
+    // inner cup shows below the sleeve; its lower edge closes the gap, flush with the sleeve (no lip)
     add(cone(G.rw(0), G.rw(G.yTop), 0, G.yTop), rt.foldMat);
-    const ring = new THREE.RingGeometry(G.rw(G.y0) * S, (G.r0 + tk) * S, 160); ring.rotateX(Math.PI / 2); ring.translate(0, G.y0 * S, 0);
+    const ring = new THREE.RingGeometry(G.rw(G.y0) * S, (G.r0 - .03) * S, 160); ring.rotateX(Math.PI / 2); ring.translate(0, G.y0 * S, 0);
     add(ring, rt.foldMat);
   }
   // inside wall and bottom, the base recess underneath, the rolled rim
