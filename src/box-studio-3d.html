@@ -1332,7 +1332,7 @@ function newSticker(kind, face, extra = {}) {
   return { id: uid(), kind, face, x: .5, y: .5, rot: 0, w: kind === 'rect' ? 60 : 40, h: kind === 'rect' ? 25 : 40, radius: 3,
     fill: '#ffffff', clear: false, stroke: '#1c1b19', strokeW: 0, src: null, aspect: 1, imgScale: .7, outline: 0,
     text: kind === 'custom' ? '' : 'Спасибо!', textColor: '#1c1b19', textSize: 7, font: 'Caveat', weight: 700,
-    finish: 'gloss', thick: .2, visible: true, ...extra };
+    finish: 'gloss', thick: .2, tension: .5, visible: true, ...extra };
 }
 const activeSticker = () => activeObj()?.stickers?.find(t => t.id === sel.sticker) || null;
 function stickerSize(st) {
@@ -1556,7 +1556,7 @@ function buildStickerFilms(o) {
     if (!st.visible) continue;
     const pls = placementsFor(o, st).filter(pl => rt.frames[pl.key]); if (!pls.length) continue;
     const look = stickerLook(rt, st), [ew, eh] = look.ext;
-    const step = Math.max(.6, Math.max(ew, eh) / 140), nx = Math.max(2, Math.ceil(ew / step) + 1), ny = Math.max(2, Math.ceil(eh / step) + 1), N = nx * ny;
+    const step = Math.max(.7, Math.max(ew, eh) / 110) * (dragSt ? 2 : 1), nx = Math.max(2, Math.ceil(ew / step) + 1), ny = Math.max(2, Math.ceil(eh / step) + 1), N = nx * ny;
     const P = new Array(N), Nn = new Array(N), own = new Array(N), sup = new Array(N);
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
       const sx = -ew / 2 + ew * i / (nx - 1), sy = -eh / 2 + eh * j / (ny - 1);
@@ -1572,26 +1572,54 @@ function buildStickerFilms(o) {
       const hit = best || near, k = j * nx + i;
       P[k] = hit.p.addScaledVector(hit.F.n, lift); Nn[k] = hit.F.n; own[k] = hit.F; sup[k] = !!best || nearD < 1;
     }
-    // bridge steps: upper envelope of the heights, then smoothed; never below the surface
-    const R = Math.max(1, Math.round(4 / step)), hgt = new Float32Array(N);
-    for (let k = 0; k < N; k++) hgt[k] = P[k].dot(Nn[k]);
-    const pass = (src, horiz, op) => {
-      const out = new Float32Array(N);
-      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
-        const k = j * nx + i, n = Nn[k]; let acc = op === 'max' ? -Infinity : 0, cnt = 0;
-        for (let d = -R; d <= R; d++) {
-          const ii = horiz ? i + d : i, jj = horiz ? j : j + d;
-          if (ii < 0 || jj < 0 || ii >= nx || jj >= ny) continue;
-          const q = jj * nx + ii; if (Nn[q].dot(n) < .99) continue;
-          const v = src[q] + (P[q].dot(n) - hgt[q]);   // neighbour height measured along this normal
-          if (op === 'max') acc = Math.max(acc, v); else { acc += v; cnt++; }
+    // tension as a rolling ball of radius r: the film follows what a ball pressed onto the sticker
+    // from outside can reach, so it fillets inner corners and ramps over steps, while flat areas and
+    // outer edges keep full contact. For each point: rest balls on nearby surface samples, keep the
+    // ones that don't dig into any other sample, and lift the point onto the nearest such ball.
+    const t = clamp(st.tension ?? .5, 0, 1), r = .3 + 15 * t * t;
+    const cell = Math.max(r, step * 1.5), X = new Float64Array(N * 3), CC = new Float64Array(N * 3);
+    for (let k = 0; k < N; k++) { X[k * 3] = P[k].x; X[k * 3 + 1] = P[k].y; X[k * 3 + 2] = P[k].z; }
+    // samples are hashed per surface: a ball resting on a plane can only be blocked by other surfaces
+    const key = (i, j, l) => ((i * 73856093) ^ (j * 19349663) ^ (l * 83492791)) | 0, planes = new Map();
+    const hashOf = F => { let h = planes.get(F); if (!h) planes.set(F, h = new Map()); return h; };
+    for (let k = 0; k < N; k++) {
+      const h = hashOf(own[k]), kk = key(Math.floor(X[k * 3] / cell), Math.floor(X[k * 3 + 1] / cell), Math.floor(X[k * 3 + 2] / cell));
+      let l = h.get(kk); if (!l) h.set(kk, l = []); l.push(k);
+    }
+    const near = (x, y, z, span, fn, skip = null, only = null) => {
+      const cx = Math.floor(x / cell), cy = Math.floor(y / cell), cz = Math.floor(z / cell);
+      for (const [F, hash] of planes) {
+        if (F === skip || (only && !only(F))) continue;
+        for (let a = -span; a <= span; a++) for (let b = -span; b <= span; b++) for (let c = -span; c <= span; c++) {
+          const list = hash.get(key(cx + a, cy + b, cz + c)); if (list) for (let i = 0; i < list.length; i++) if (fn(list[i]) === false) return;
         }
-        out[k] = op === 'max' ? acc : acc / cnt;
       }
-      return out;
     };
-    const env = pass(pass(pass(pass(hgt, true, 'max'), false, 'max'), true, 'avg'), false, 'avg');
-    for (let k = 0; k < N; k++) if (env[k] > hgt[k]) P[k].addScaledVector(Nn[k], env[k] - hgt[k]);
+    const ok = new Uint8Array(N), r2 = (r - .02) ** 2;
+    for (let q = 0; q < N; q++) {
+      const cx = X[q * 3] + Nn[q].x * r, cy = X[q * 3 + 1] + Nn[q].y * r, cz = X[q * 3 + 2] + Nn[q].z * r;
+      CC[q * 3] = cx; CC[q * 3 + 1] = cy; CC[q * 3 + 2] = cz;
+      let free = 1;
+      near(cx, cy, cz, 1, j => { const dx = X[j * 3] - cx, dy = X[j * 3 + 1] - cy, dz = X[j * 3 + 2] - cz; if (dx * dx + dy * dy + dz * dz < r2) { free = 0; return false; } }, own[q]);
+      ok[q] = free;
+    }
+    // points no free ball touches sit under the fillet: move each radially onto the nearest free ball,
+    // which keeps their order along the arc, so the film stays one continuous sheet
+    const moved = new Array(N);
+    for (let k = 0; k < N; k++) {
+      if (ok[k]) continue;
+      const px = X[k * 3], py = X[k * 3 + 1], pz = X[k * 3 + 2];
+      let best = Infinity, bq = -1;
+      near(px, py, pz, 2, q => {
+        if (!ok[q]) return;
+        const dx = px - CC[q * 3], dy = py - CC[q * 3 + 1], dz = pz - CC[q * 3 + 2], d = dx * dx + dy * dy + dz * dz;
+        if (d < best) { best = d; bq = q; }
+      });
+      if (bq < 0) continue;
+      const d = Math.sqrt(best); if (d - r >= r || d < 1e-9) continue;
+      const f = r / d; moved[k] = new THREE.Vector3(CC[bq * 3] + (px - CC[bq * 3]) * f, CC[bq * 3 + 1] + (py - CC[bq * 3 + 1]) * f, CC[bq * 3 + 2] + (pz - CC[bq * 3 + 2]) * f);
+    }
+    for (let k = 0; k < N; k++) if (moved[k]) P[k].copy(moved[k]);
     // one geometry per rigid part; a cell rides with the part under its first corner
     const byPart = new Map();
     for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
@@ -2205,6 +2233,8 @@ function renderStickers() {
         <div class="row"><input type="color" data-k="textColor" aria-label="Цвет текста"><span class="hint">цвет текста</span></div></div>
       ${rangeField('Кегль, мм', 'textSize', 1, 60, .5)}
       ${rangeField('Толщина, мм', 'thick', 0, 3, .05)}
+      ${rangeField('Натяжение плёнки, %', 'tension', 0, 100, 1, 100)}
+      <p class="hint">0 % — плотно облегает внутренние углы и ступеньки, 100 % — натянута и перекидывается через них (радиус до 15 мм).</p>
       <div class="field wide"><span class="fl">Покрытие</span><select data-k="finish">${Object.entries(STICKER_FINISH).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       <div class="field wide"><span class="fl">Грань</span><select data-k="face">${faceKeys(o).map(k => `<option value="${k}">${faceLabel(o, k)}</option>`).join('')}</select></div>
       ${rangeField('Центр X, %', 'x', -20, 120, .1, 100)}${rangeField('Центр Y, %', 'y', -20, 120, .1, 100)}${rangeField('Поворот, °', 'rot', -180, 180, 1)}
@@ -2542,7 +2572,7 @@ cvs.addEventListener('pointermove', e => {
   cvs.style.cursor = cur;
 });
 cvs.addEventListener('pointerup', e => {
-  if (dragSt) { dragSt = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.stickers = true; commit(); down = null; return; }
+  if (dragSt) { stickerDirty.add(dragSt.o.id); dragSt = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.stickers = true; commit(); down = null; return; }
   if (drag3) { drag3 = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.layers = true; commit(); down = null; return; }
   if (e.button !== 0 || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) { down = null; return; }
   down = null;
@@ -2946,5 +2976,5 @@ let booted = false;
 try { const saved = localStorage.getItem(LS_KEY); if (saved) { loadProject(JSON.parse(saved)); booted = true; } } catch {}
 if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
-window.__boxStudio = { state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target, placementsFor };
+window.__boxStudio = { state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target, placementsFor, __bsf: o => buildStickerFilms(o) };
 </script>
