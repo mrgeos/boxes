@@ -283,6 +283,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
       </div>
     </section>
     <section class="sec" id="layerSec"></section>
+    <section class="sec" id="stickerSec"></section>
     <section class="sec">
       <div class="sec-h"><h2>Развёртка</h2><span class="mono hint" id="netSize"></span></div>
       <canvas id="net" width="300" height="200" aria-label="Развёртка: клик по панели выбирает грань"></canvas>
@@ -438,7 +439,7 @@ const LIGHTS = {
    ================================================================ */
 // scene.v 2: lighting calibrated so a lit matte face renders close to its printed colour
 const state = { objects: [], scene: { v: 2, preset: 'studio', ...LIGHTS.studio, bg: 'gradient', bg1: '#f4f1eb', bg2: '#cec6b8', autoRotate: false }, fonts: [] };
-const sel = { obj: null, face: null, layer: null };
+const sel = { obj: null, face: null, layer: null, sticker: null };
 const assets = {};   // id -> dataURL
 const imgCache = {}; // id -> HTMLImageElement
 
@@ -447,6 +448,7 @@ const activeFaceData = () => { const o = activeObj(); return o && sel.face ? o.f
 const activeLayer = () => { const f = activeFaceData(); return f ? f.layers.find(l => l.id === sel.layer) || null : null; };
 
 function ensureFaces(o) {
+  o.stickers ??= [];
   if (o.type === 'box') {
     o.lidType ??= 'flat';
     o.flapH ??= Math.round(o.dims.h * .35);
@@ -582,8 +584,9 @@ function onAssetLoaded(id) {
   for (const o of state.objects) {
     if (o.dieline === id) markObj(o);
     for (const k in o.faces) if (o.faces[k].layers.some(l => l.src === id)) markFace(o, k);
+    for (const st of o.stickers || []) if (st.src === id) { tintCache.forEach((_, key) => key.startsWith(id + '|') && tintCache.delete(key)); touchSticker(o, st); }
   }
-  ui.layers = true;
+  ui.layers = true; ui.stickers = true;
 }
 const readURL = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
 const loadImage = url => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
@@ -685,7 +688,7 @@ grainTex.wrapS = grainTex.wrapT = THREE.RepeatWrapping;
 const RT = new Map();
 const dirtyFaces = new Set();
 const rebuildQueue = new Set();
-const ui = { editor: true, net: true, layers: false };
+const ui = { editor: true, net: true, layers: false, stickers: false };
 function markFace(o, k) { dirtyFaces.add(o.id + '|' + k); if (o.id === sel.obj) { ui.editor = true; ui.net = true; } }
 function markObj(o) { for (const k of faceKeys(o)) markFace(o, k); }
 
@@ -734,7 +737,7 @@ function buildObject(o) {
   rt.group.clear(); rt.lidPivot = null;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else buildTube(o, rt);
-  applyTransform(o); applyLid(o); applyObjMaterials(o); markObj(o);
+  applyTransform(o); computeFrames(o, rt); applyLid(o); applyObjMaterials(o); markObj(o);
 }
 function disposeObject(id) {
   const rt = RT.get(id); if (!rt) return;
@@ -1243,13 +1246,24 @@ function renderFace(o, k) {
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
   for (const L of fxl) if (isFoil(L.effect)) drawLayer(ctx, L, W, H, foilPaint(ctx, L.effect, W, H), 1);
+  // stickers sit on top of everything printed
+  const ops = [];
+  if (!skipStickers) for (const st of o.stickers || []) {
+    if (!st.visible) continue;
+    for (const pl of placementsFor(o, st)) if (pl.key === k) ops.push({ st, M: pl.M });
+  }
+  const ppx = W / faceMM(o, k)[0];
+  for (const { st, M } of ops) { ctx.setTransform(M[0] * ppx, M[1] * ppx, M[2] * ppx, M[3] * ppx, M[4] * ppx, M[5] * ppx); drawSticker(ctx, st, ppx); }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   f.tex.needsUpdate = true;
-  updateFaceMaterial(o, k, f, fxl, fin);
+  updateFaceMaterial(o, k, f, fxl, fin, ops);
 }
-function updateFaceMaterial(o, k, f, fxl, fin) {
+let skipStickers = false;
+function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
   const m = f.mat;
-  const needFx = fxl.some(L => isFoil(L.effect) || L.effect === 'spot-uv');
-  const needBump = fxl.some(L => isFoil(L.effect) || L.effect === 'emboss' || L.effect === 'deboss');
+  const needFx = ops.length > 0 || fxl.some(L => isFoil(L.effect) || L.effect === 'spot-uv');
+  const needBump = ops.length > 0 || fxl.some(L => isFoil(L.effect) || L.effect === 'emboss' || L.effect === 'deboss');
+  const opsDraw = (x, ppx, color) => { for (const { st, M } of ops) { x.setTransform(M[0] * ppx, M[1] * ppx, M[2] * ppx, M[3] * ppx, M[4] * ppx, M[5] * ppx); stickerMask(x, st, color(st)); } x.setTransform(1, 0, 0, 1, 0, 0); };
   if (needFx) {
     const c = aux(f, 'fx'), x = f.fxCtx, W = c.width, H = c.height;
     x.globalAlpha = 1; x.fillStyle = `rgb(0,${Math.round(fin.r * 255)},${Math.round(fin.m * 255)})`; x.fillRect(0, 0, W, H);
@@ -1257,6 +1271,7 @@ function updateFaceMaterial(o, k, f, fxl, fin) {
       if (isFoil(L.effect)) drawLayer(x, L, W, H, `rgb(0,${L.effect === 'foil-holo' ? 30 : 58},255)`, 1);
       else if (L.effect === 'spot-uv') drawLayer(x, L, W, H, `rgb(0,10,${Math.round(fin.m * 255)})`, 1);
     }
+    opsDraw(x, W / faceMM(o, k)[0], st => { const [r, mt] = STICKER_FX[st.finish] || STICKER_FX.gloss; return `rgb(0,${Math.round(r * 255)},${Math.round(mt * 255)})`; });
     f.fxTex.needsUpdate = true;
     m.roughnessMap = m.metalnessMap = f.fxTex; m.roughness = 1; m.metalness = 1;
   } else { m.roughnessMap = m.metalnessMap = null; m.roughness = fin.r; m.metalness = fin.m; }
@@ -1275,6 +1290,7 @@ function updateFaceMaterial(o, k, f, fxl, fin) {
       else if (L.effect === 'deboss') drawLayer(x, L, W, H, '#000000', 1);
       else if (isFoil(L.effect)) drawLayer(x, L, W, H, '#5c5c5c', 1);
     }
+    opsDraw(x, W / faceMM(o, k)[0], () => '#a6a6a6');   // a sticker stands a little proud of the board
     x.filter = 'none';
     f.bumpTex.needsUpdate = true;
     m.bumpMap = f.bumpTex; m.bumpScale = 4;
@@ -1285,6 +1301,172 @@ function updateFaceMaterial(o, k, f, fxl, fin) {
   m.transparent = !!f.clear; m.depthWrite = !f.clear;
   const sig = [!!m.roughnessMap, !!m.bumpMap, fin.cc > 0, !!fin.sheen, !!f.clear].join();
   if (sig !== f.sig) { f.sig = sig; m.needsUpdate = true; }
+}
+
+/* ================================================================
+   Stickers — applied on top of the print; they can run over an edge onto the next face
+   ================================================================ */
+const STICKER_FINISH = { gloss: 'Глянцевая', matte: 'Матовая', 'foil-gold': 'Фольга — золото', 'foil-silver': 'Фольга — серебро', 'foil-holo': 'Голография', clear: 'Прозрачная плёнка' };
+const STICKER_FX = { gloss: [.1, 0], matte: [.78, 0], 'foil-gold': [.22, 1], 'foil-silver': [.2, 1], 'foil-holo': [.14, 1], clear: [.06, 0] };
+const STICKER_KIND = { circle: 'Круг / овал', rect: 'Прямоугольник', custom: 'Своя форма (PNG / SVG)' };
+function newSticker(kind, face, extra = {}) {
+  return { id: uid(), kind, face, x: .5, y: .5, rot: 0, w: kind === 'rect' ? 60 : 40, h: kind === 'rect' ? 25 : 40, radius: 3,
+    fill: '#ffffff', clear: false, stroke: '#1c1b19', strokeW: 0, src: null, aspect: 1, imgScale: .7, outline: 0,
+    text: kind === 'custom' ? '' : 'Спасибо!', textColor: '#1c1b19', textSize: 7, font: 'Caveat', weight: 700,
+    finish: 'gloss', visible: true, ...extra };
+}
+const activeSticker = () => activeObj()?.stickers?.find(t => t.id === sel.sticker) || null;
+function stickerSize(st) {
+  if (st.kind !== 'custom') return [st.w, st.h];
+  const im = getImg(st.src), a = im ? im.naturalWidth / im.naturalHeight : (st.aspect || 1);
+  return [st.w, st.w / a];
+}
+
+/* closed-state frame of every printed face, in object space (mm): centre, axes and size.
+   Canvas x runs along u, canvas y runs against v. */
+function computeFrames(o, rt) {
+  rt.frames = null;
+  if (o.type !== 'box') return;
+  const saved = o.lid; o.lid = 0; applyLid(o);
+  rt.group.updateMatrixWorld(true);
+  const inv = rt.group.matrixWorld.clone().invert(), frames = {};
+  rt.group.traverse(m => {
+    const k = m.userData?.face;
+    if (!m.isMesh || !k || m.userData.wall || frames[k]) return;
+    const M = inv.clone().multiply(m.matrixWorld), [w, h] = faceMM(o, k);
+    const c = new THREE.Vector3().applyMatrix4(M).divideScalar(S);
+    const u = new THREE.Vector3(1, 0, 0).transformDirection(M), v = new THREE.Vector3(0, 1, 0).transformDirection(M);
+    frames[k] = { c, u, v, n: new THREE.Vector3().crossVectors(u, v).normalize(), w, h };
+  });
+  o.lid = saved; applyLid(o);
+  rt.frames = frames;
+}
+/* where a sticker lands: one affine map (sticker mm → face-canvas mm) per face it reaches.
+   Faces parallel to the anchor and within a board's reach get the sticker projected (a flap over
+   a wall, a lid over a tray); a face meeting the anchor at a convex edge gets it folded over. */
+function placementsFor(o, st) {
+  const [aw, ah] = faceMM(o, st.face), r = st.rot * DEG, cs = Math.cos(r), sn = Math.sin(r);
+  const fr = RT.get(o.id)?.frames, A = fr?.[st.face];
+  if (!A) return [{ key: st.face, M: [cs, sn, -sn, cs, st.x * aw, st.y * ah] }];
+  const V = () => new THREE.Vector3();
+  const su = V().addScaledVector(A.u, cs).addScaledVector(A.v, -sn), sv = V().addScaledVector(A.u, sn).addScaledVector(A.v, cs);
+  const c = A.c.clone().addScaledVector(A.u, st.x * aw - aw / 2).addScaledVector(A.v, ah / 2 - st.y * ah);
+  const [sw, sh] = stickerSize(st), R = Math.hypot(sw, sh) / 2 + 1, tol = Math.max(3, 2 * o.thickness + 2);
+  const inner = st.face === 'inside' || st.face === 'insideBottom';
+  const keys = inner ? [st.face] : outerKeys(o);
+  const out = [];
+  for (const k of keys) {
+    const F = fr[k]; if (!F) continue;
+    let c2, su2, sv2;
+    const dot = A.n.dot(F.n);
+    if (dot > .99) {
+      const dist = V().subVectors(c, F.c).dot(F.n);
+      if (Math.abs(dist) > tol) continue;
+      c2 = c.clone().addScaledVector(F.n, -dist); su2 = su; sv2 = sv;
+    } else if (Math.abs(dot) < .03 && k !== st.face) {
+      const hA = Math.abs(A.u.dot(F.n)) * A.w / 2 + Math.abs(A.v.dot(F.n)) * A.h / 2, dA = V().subVectors(F.c, A.c).dot(F.n);
+      const hF = Math.abs(F.u.dot(A.n)) * F.w / 2 + Math.abs(F.v.dot(A.n)) * F.h / 2, dF = V().subVectors(A.c, F.c).dot(A.n);
+      if (Math.abs(dA - hA) > tol || Math.abs(dF - hF) > tol) continue;
+      const s = V().subVectors(c, F.c).dot(F.n);
+      c2 = c.clone().addScaledVector(F.n, -s).addScaledVector(A.n, -s);
+      const fold = x => { const t = x.dot(F.n); return x.clone().addScaledVector(F.n, -t).addScaledVector(A.n, -t); };
+      su2 = fold(su); sv2 = fold(sv);
+    } else continue;
+    const d = V().subVectors(c2, F.c), M = [su2.dot(F.u), -su2.dot(F.v), -sv2.dot(F.u), sv2.dot(F.v), d.dot(F.u) + F.w / 2, F.h / 2 - d.dot(F.v)];
+    if (M[4] < -R || M[4] > F.w + R || M[5] < -R || M[5] > F.h + R) continue;
+    out.push({ key: k, M });
+  }
+  return out;
+}
+/* re-render only the faces a sticker touched before or touches now */
+const stickerKeys = new Map();
+function touchSticker(o, st) {
+  const now = st ? placementsFor(o, st).map(p => p.key) : [];
+  for (const k of new Set([...(stickerKeys.get(st?.id) || []), ...now])) markFace(o, k);
+  if (st) stickerKeys.set(st.id, now);
+}
+
+const tintCache = new Map();
+function tinted(src, color) {
+  const im = getImg(src); if (!im) return null;
+  const key = src + '|' + color; let c = tintCache.get(key);
+  if (!c) {
+    const k = Math.min(1, 1024 / Math.max(im.naturalWidth, im.naturalHeight));
+    c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.naturalWidth * k)); c.height = Math.max(1, Math.round(im.naturalHeight * k));
+    const x = c.getContext('2d'); x.drawImage(im, 0, 0, c.width, c.height); x.globalCompositeOperation = 'source-in'; x.fillStyle = color; x.fillRect(0, 0, c.width, c.height);
+    tintCache.set(key, c);
+  }
+  return c;
+}
+function stickerPath(c, st, w, h) {
+  c.beginPath();
+  if (st.kind === 'circle') c.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+  else c.roundRect(-w / 2, -h / 2, w, h, Math.min(st.radius || 0, w / 2, h / 2));
+}
+/* the sticker's outline filled with one colour: for its shadow and for the finish maps */
+function stickerMask(c, st, color) {
+  const [w, h] = stickerSize(st);
+  if (st.kind === 'custom') {
+    const t = tinted(st.src, color); if (!t) return;
+    const ol = st.outline || 0;
+    if (ol > 0) for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.drawImage(t, -w / 2 + Math.cos(a) * ol, -h / 2 + Math.sin(a) * ol, w, h); }
+    c.drawImage(t, -w / 2, -h / 2, w, h);
+  } else { stickerPath(c, st, w, h); c.fillStyle = color; c.fill(); }
+}
+function stickerFoil(c, finish, w, h) {
+  const g = c.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+  const cols = finish === 'foil-holo' ? ['#f9c5e4', '#c3e8ff', '#d9ffd2', '#fff6c2', '#e6ccff'] : FOILS[finish];
+  cols.forEach((col, i) => g.addColorStop(i / (cols.length - 1), col));
+  return g;
+}
+/* draws a sticker in its own mm space (origin at its centre); ppm sizes the shadow in pixels */
+function drawSticker(c, st, ppm) {
+  const [w, h] = stickerSize(st), foil = st.finish.startsWith('foil');
+  if (st.finish !== 'clear') {
+    c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = Math.max(1, .9 * ppm); c.shadowOffsetY = .35 * ppm;
+    stickerMask(c, st, '#ffffff'); c.restore();
+  }
+  if (st.kind === 'custom') {
+    const ol = st.outline || 0, im = getImg(st.src);
+    if (ol > 0) { const t = tinted(st.src, '#ffffff'); if (t) for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.drawImage(t, -w / 2 + Math.cos(a) * ol, -h / 2 + Math.sin(a) * ol, w, h); } }
+    if (im && foil) { const t = tinted(st.src, '#000000'); c.save(); c.drawImage(t, -w / 2, -h / 2, w, h); c.globalCompositeOperation = 'source-atop'; c.fillStyle = stickerFoil(c, st.finish, w, h); c.fillRect(-w / 2, -h / 2, w, h); c.restore(); }
+    else if (im) c.drawImage(im, -w / 2, -h / 2, w, h);
+  } else {
+    c.save(); stickerPath(c, st, w, h); c.clip();
+    if (!st.clear) { c.fillStyle = foil ? stickerFoil(c, st.finish, w, h) : st.fill; c.fillRect(-w / 2, -h / 2, w, h); }
+    const im = st.src && getImg(st.src);
+    if (im) {
+      const a = im.naturalWidth / im.naturalHeight, k = st.imgScale || .7;
+      let iw = w * k, ih = iw / a; if (ih > h * k) { ih = h * k; iw = ih * a; }
+      c.drawImage(im, -iw / 2, -ih / 2 - (st.text ? st.textSize * .45 : 0), iw, ih);
+    }
+    c.restore();
+    if (st.strokeW > 0) { stickerPath(c, st, w - st.strokeW, h - st.strokeW); c.lineWidth = st.strokeW; c.strokeStyle = st.stroke; c.stroke(); }
+  }
+  if (st.text) {
+    const L = { font: st.font, weight: st.weight, italic: false, text: st.text }; ensureFont(L);
+    c.save(); c.font = fontStr(L, st.textSize); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = st.textColor;
+    const im = st.kind !== 'custom' && st.src && getImg(st.src);
+    const lines = st.text.split('\n'), lh = st.textSize * 1.1, y0 = (im ? h * .28 : 0) - lh * (lines.length - 1) / 2;
+    lines.forEach((ln, i) => c.fillText(ln, 0, y0 + i * lh));
+    c.restore();
+  }
+}
+/* hit test in a face: which sticker sits under the point (face-canvas mm) */
+function stickerAt(o, key, px, py) {
+  const list = o.stickers || [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const st = list[i]; if (!st.visible) continue;
+    const [w, h] = stickerSize(st);
+    for (const pl of placementsFor(o, st)) {
+      if (pl.key !== key) continue;
+      const [a, b, c, d, e, f] = pl.M, det = a * d - b * c, X = px - e, Y = py - f;
+      const sx = (d * X - c * Y) / det, sy = (-b * X + a * Y) / det;
+      const inside = st.kind === 'circle' ? (sx / (w / 2)) ** 2 + (sy / (h / 2)) ** 2 <= 1 : Math.abs(sx) <= w / 2 && Math.abs(sy) <= h / 2;
+      if (inside) return st;
+    }
+  }
+  return null;
 }
 
 /* ================================================================
@@ -1408,6 +1590,7 @@ renderer.setAnimationLoop(now => {
   if (ui.editor) { ui.editor = false; drawEditor(); }
   if (ui.net) { ui.net = false; drawNet(); }
   if (ui.layers) { ui.layers = false; renderLayers(); }
+  if (ui.stickers) { ui.stickers = false; renderStickers(); }
 });
 
 /* ================================================================
@@ -1416,6 +1599,7 @@ renderer.setAnimationLoop(now => {
 function select(objId, face = undefined, layerId = null, { flash = false } = {}) {
   const changedObj = sel.obj !== objId;
   sel.obj = objId;
+  if (changedObj) sel.sticker = null;
   const o = activeObj();
   if (o) {
     if (face !== undefined && face && faceKeys(o).includes(face)) sel.face = face;
@@ -1423,11 +1607,11 @@ function select(objId, face = undefined, layerId = null, { flash = false } = {})
   } else sel.face = null;
   sel.layer = layerId;
   if (flash && o) { const f = RT.get(o.id)?.faces[sel.face]; if (f) { f.flash = 1; accent.set(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0a7aa1'); } }
-  if (changedObj) { renderObjects(); renderModel(); if (orbitLock) focusSelected(); }
+  if (changedObj) { renderObjects(); renderModel(); renderStickers(); if (orbitLock) focusSelected(); }
   renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps();
   ui.editor = ui.net = true;
 }
-function selectLayer(id) { sel.layer = id; renderLayers(); renderLayerProps(); ui.editor = true; }
+function selectLayer(id) { sel.layer = id; if (id && sel.sticker) { sel.sticker = null; ui.stickers = true; } renderLayers(); renderLayerProps(); ui.editor = true; }
 
 /* ================================================================
    History & persistence
@@ -1448,6 +1632,7 @@ function restore(s) {
   for (const o of state.objects) buildObject(o);
   if (!activeObj()) sel.obj = state.objects[0]?.id ?? null;
   const f = activeFaceData(); if (!f || !f.layers.some(l => l.id === sel.layer)) sel.layer = null;
+  if (!activeSticker()) sel.sticker = null;
   applyScene(); renderAll(); updateUndo(); scheduleSave();
 }
 function undo() { if (hist.i > 0) { hist.i--; restore(hist.stack[hist.i]); } }
@@ -1456,7 +1641,11 @@ function updateUndo() { $('#undoBtn').disabled = hist.i <= 0; $('#redoBtn').disa
 
 function usedAssets() {
   const used = new Set();
-  for (const o of state.objects) { if (o.dieline) used.add(o.dieline); for (const k in o.faces) for (const l of o.faces[k].layers) if (l.src) used.add(l.src); }
+  for (const o of state.objects) {
+    if (o.dieline) used.add(o.dieline);
+    for (const k in o.faces) for (const l of o.faces[k].layers) if (l.src) used.add(l.src);
+    for (const st of o.stickers || []) if (st.src) used.add(st.src);
+  }
   for (const f of state.fonts) used.add(f.asset);
   const out = {}; for (const id of used) if (assets[id]) out[id] = assets[id]; return out;
 }
@@ -1789,6 +1978,98 @@ function fitImage(cover) {
   markFace(o, sel.face); renderLayerProps(); ui.layers = true; commit();
 }
 
+/* ---------- stickers panel ---------- */
+/* a seal goes across the line where the box opens */
+function sealSpot(o) {
+  const lt = o.lidType || 'flat';
+  if (o.type !== 'box') return { face: faceKeys(o)[0], x: .5, y: .5 };
+  if (lt === 'flap') return { face: 'flap', x: .5, y: 1 };
+  if (lt === 'telescope') return clearLid(o) && o.lidFit === 'inside' ? { face: 'top', x: .5, y: .5 } : { face: 'lidFront', x: .5, y: 1 };
+  if (lt === 'none') return { face: 'front', x: .5, y: .5 };
+  return { face: 'front', x: .5, y: 0 };
+}
+function addSticker(st) {
+  const o = activeObj(); if (!o) return;
+  o.stickers.push(st); sel.sticker = st.id; sel.layer = null;
+  touchSticker(o, st); renderLayers(); renderLayerProps(); renderStickers(); commit();
+}
+function deleteSticker(id) {
+  const o = activeObj(); if (!o) return;
+  const st = o.stickers.find(t => t.id === id); if (!st) return;
+  o.stickers = o.stickers.filter(t => t.id !== id); touchSticker(o, { ...st, visible: false });
+  for (const k of stickerKeys.get(id) || []) markFace(o, k);
+  if (sel.sticker === id) sel.sticker = null;
+  renderStickers(); commit();
+}
+function renderStickers() {
+  const sec = $('#stickerSec'), o = activeObj();
+  if (!o) { sec.innerHTML = ''; return; }
+  const list = o.stickers || [], st = activeSticker();
+  const kindIcon = t => t.kind === 'circle' ? ICON.ell : t.kind === 'rect' ? ICON.rect : '★';
+  let html = `<div class="sec-h"><h2>Наклейки</h2><span class="hint">${list.length || ''}</span></div>
+    <p class="hint">Наклеиваются поверх печати. Выберите наклейку и тяните её по модели — у ребра она переходит на соседнюю грань, как настоящая.</p>
+    <div class="addrow">
+      <button class="btn" id="stCircle">${ICON.ell}Круг</button>
+      <button class="btn" id="stRect">${ICON.rect}Прямоуг.</button>
+      <button class="btn" id="stCustom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7Z"/></svg>Своя форма</button>
+      <button class="btn" id="stSeal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="20" rx="1"/><path d="M3 12h18" stroke-dasharray="2 2"/></svg>Пломба</button>
+    </div>`;
+  html += list.length ? `<div class="layers">${[...list].reverse().map(t => `<div class="layer ${t.id === sel.sticker ? 'on' : ''} ${t.visible ? '' : 'hidden'}" data-id="${t.id}">
+      <span class="th">${kindIcon(t)}</span><span class="ln">${esc(t.text || STICKER_KIND[t.kind])} · ${fmt(t.w)}×${fmt(stickerSize(t)[1])} мм</span>
+      <span class="badge">${esc(faceLabel(o, t.face))}</span>
+      <span class="acts"><button data-a="vis" aria-label="Видимость">${t.visible ? ICON.eye : ICON.eyeOff}</button><button data-a="dup" aria-label="Дублировать">${ICON.copy}</button><button data-a="del" aria-label="Удалить">${ICON.trash}</button></span></div>`).join('')}</div>`
+    : `<div class="empty">Наклеек пока нет. Круг, прямоугольник или своя форма из PNG/SVG с прозрачным фоном.</div>`;
+  if (st) {
+    const custom = st.kind === 'custom';
+    html += `<div class="sec-h" style="margin-top:6px"><h2>Наклейка</h2></div>
+      <div class="field wide"><span class="fl">Форма</span><select data-k="kind">${Object.entries(STICKER_KIND).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      ${rangeField(st.kind === 'circle' ? 'Ширина (Ø), мм' : 'Ширина, мм', 'w', 5, 400, .5)}
+      ${custom ? '' : rangeField('Высота, мм', 'h', 5, 400, .5)}
+      ${st.kind === 'rect' ? rangeField('Скругление, мм', 'radius', 0, 60, .5) : ''}
+      ${custom ? `<div class="row"><button class="btn sm" id="stShape">${st.src ? 'Заменить форму…' : 'Загрузить форму…'}</button></div>${rangeField('Белая окантовка, мм', 'outline', 0, 10, .1)}`
+        : `<div class="row"><span class="hint">Фон</span><input type="color" data-k="fill" aria-label="Цвет наклейки"><label class="check"><input type="checkbox" data-k="clear"> Без фона</label></div>
+           <div class="row"><span class="hint">Обводка</span><input type="color" data-k="stroke" aria-label="Цвет обводки"><span class="grow"></span></div>${rangeField('Обводка, мм', 'strokeW', 0, 10, .1)}
+           <div class="row"><button class="btn sm" id="stImg">${st.src ? 'Заменить логотип…' : 'Логотип…'}</button>${st.src ? '<button class="btn sm" id="stImgOff">Убрать</button>' : ''}</div>
+           ${st.src ? rangeField('Логотип, %', 'imgScale', 10, 100, 1, 100) : ''}`}
+      <textarea data-k="text" rows="1" aria-label="Текст наклейки" placeholder="Текст на наклейке"></textarea>
+      <div class="grid2"><select data-k="font" aria-label="Шрифт">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
+        <div class="row"><input type="color" data-k="textColor" aria-label="Цвет текста"><span class="hint">цвет текста</span></div></div>
+      ${rangeField('Кегль, мм', 'textSize', 1, 60, .5)}
+      <div class="field wide"><span class="fl">Покрытие</span><select data-k="finish">${Object.entries(STICKER_FINISH).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div class="field wide"><span class="fl">Грань</span><select data-k="face">${faceKeys(o).map(k => `<option value="${k}">${faceLabel(o, k)}</option>`).join('')}</select></div>
+      ${rangeField('Центр X, %', 'x', -20, 120, .1, 100)}${rangeField('Центр Y, %', 'y', -20, 120, .1, 100)}${rangeField('Поворот, °', 'rot', -180, 180, 1)}
+      <div class="grid2"><button class="btn sm" id="stSealPos">Пломбой на линию открытия</button><button class="btn sm danger" id="stDel">Удалить</button></div>`;
+  }
+  sec.innerHTML = html;
+  $('#stCircle').onclick = () => addSticker(newSticker('circle', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]));
+  $('#stRect').onclick = () => addSticker(newSticker('rect', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]));
+  $('#stSeal').onclick = () => addSticker(newSticker('rect', 'front', { ...sealSpot(o), w: 22, h: 50, radius: 2, text: '', fill: '#f3ead6', stroke: '#b8461b', strokeW: .8, finish: 'gloss' }));
+  $('#stCustom').onclick = () => pickImage(async file => {
+    const r = await importImageFile(file);
+    addSticker(newSticker('custom', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0], { src: r.id, aspect: r.aspect, w: 50, outline: 1.5 }));
+  });
+  $$('#stickerSec .layer').forEach(el => el.onclick = e => {
+    const a = e.target.closest('button')?.dataset.a, t = o.stickers.find(x => x.id === el.dataset.id); if (!t) return;
+    if (a === 'del') return deleteSticker(t.id);
+    if (a === 'vis') { t.visible = !t.visible; touchSticker(o, t); renderStickers(); return commit(); }
+    if (a === 'dup') { const c = { ...structuredClone(t), id: uid(), x: t.x + .05, y: t.y + .05 }; return addSticker(c); }
+    sel.sticker = t.id; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers();
+  });
+  if (!st) return;
+  bindFields(sec, activeSticker, k => {
+    const t = activeSticker(); if (!t) return;
+    if (k === 'kind' && t.kind === 'custom' && !t.src) { $('#stShape')?.click(); }
+    if (k === 'kind' || k === 'face' || k === 'text') { touchSticker(o, t); return renderStickers(); }
+    touchSticker(o, t);
+  });
+  $('#stDel').onclick = () => deleteSticker(st.id);
+  $('#stSealPos').onclick = () => { Object.assign(st, sealSpot(o)); touchSticker(o, st); renderStickers(); commit(); };
+  const pickInto = (key, after) => pickImage(async file => { const r = await importImageFile(file); st[key] = r.id; if (after) after(r); touchSticker(o, st); renderStickers(); commit(); });
+  $('#stShape') && ($('#stShape').onclick = () => pickInto('src', r => { st.aspect = r.aspect; }));
+  $('#stImg') && ($('#stImg').onclick = () => pickInto('src'));
+  $('#stImgOff') && ($('#stImgOff').onclick = () => { st.src = null; touchSticker(o, st); renderStickers(); commit(); });
+}
+
 /* ---------- layer ops ---------- */
 function addLayer(L, face = sel.face, obj = activeObj()) {
   if (!obj || !face) return;
@@ -1993,7 +2274,14 @@ function pick(clientX, clientY, only = null) {
   return { objId: ud.objId, face, wall: !!ud.wall, uv: h.uv, mesh: h.object, mi: h.face.materialIndex };
 }
 const cvs = renderer.domElement;
-let down = null, drag3 = null, hoverT = 0;
+let down = null, drag3 = null, dragSt = null, hoverT = 0;
+/* the sticker under a 3D hit, if any */
+function stickerHit(h) {
+  const o = state.objects.find(x => x.id === h?.objId);
+  if (!o || !h.face || !h.uv || h.wall || !o.stickers?.length) return null;
+  const [mw, mh] = faceMM(o, h.face);
+  return stickerAt(o, h.face, h.uv.x * mw, (1 - h.uv.y) * mh);
+}
 /* screen-space pan in orbit-lock mode: right button, Shift/Ctrl/Cmd + left button, or two fingers */
 const touches = new Map(); let pan = null;
 const touchMid = () => { const p = [...touches.values()]; return [(p[0][0] + p[1][0]) / 2, (p[0][1] + p[1][1]) / 2]; };
@@ -2025,6 +2313,12 @@ cvs.addEventListener('pointerdown', e => {
   if (recording || e.button !== 0 || pan) return;
   down = { x: e.clientX, y: e.clientY };
   const h = pick(e.clientX, e.clientY), L = activeLayer();
+  // a selected sticker is dragged across the model, face to face
+  const hs = sel.sticker && h?.objId === sel.obj ? stickerHit(h) : null;
+  if (hs && hs.id === sel.sticker) {
+    dragSt = { st: hs, o: activeObj() }; controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'grabbing';
+    return;
+  }
   if (h && L && h.objId === sel.obj && h.face === sel.face && h.uv && !h.wall) {
     const o = activeObj(), [W, H] = facePx(o, sel.face);
     const hit = hitLayer(o.faces[sel.face], W, H, h.uv.x * W, (1 - h.uv.y) * H);
@@ -2035,6 +2329,15 @@ cvs.addEventListener('pointerdown', e => {
   }
 });
 cvs.addEventListener('pointermove', e => {
+  if (dragSt) {
+    const { st, o } = dragSt, h = pick(e.clientX, e.clientY, RT.get(o.id).group);
+    if (h && h.face && h.uv && !h.wall && faceKeys(o).includes(h.face)) {
+      st.face = h.face; st.x = h.uv.x; st.y = 1 - h.uv.y;
+      touchSticker(o, st); refreshFields($('#stickerSec'), st);
+      const fs = $('#stickerSec [data-k="face"]'); if (fs) fs.value = st.face;
+    }
+    return;
+  }
   if (drag3) {
     const h = pick(e.clientX, e.clientY, drag3.mesh);
     if (h && h.uv && h.mi === drag3.mi) {
@@ -2052,21 +2355,30 @@ cvs.addEventListener('pointermove', e => {
       const o = activeObj(), [W, H] = facePx(o, sel.face);
       if (hitLayer(o.faces[sel.face], W, H, h.uv.x * W, (1 - h.uv.y) * H)?.id === L.id) cur = 'move';
     }
+    if (sel.sticker && h.objId === sel.obj && stickerHit(h)?.id === sel.sticker) cur = 'move';
   }
   cvs.style.cursor = cur;
 });
 cvs.addEventListener('pointerup', e => {
+  if (dragSt) { dragSt = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.stickers = true; commit(); down = null; return; }
   if (drag3) { drag3 = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.layers = true; commit(); down = null; return; }
   if (e.button !== 0 || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) { down = null; return; }
   down = null;
   const h = pick(e.clientX, e.clientY);
   if (!h) return;
   const o = state.objects.find(x => x.id === h.objId); if (!o) return;
+  const hs = stickerHit(h);
+  if (hs) {
+    if (o.id !== sel.obj || (h.face && h.face !== sel.face)) select(o.id, h.face || undefined, null, { flash: false });
+    sel.sticker = hs.id; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers(); ui.editor = true;
+    return;
+  }
+  if (sel.sticker) { sel.sticker = null; ui.stickers = true; }
   let layerId = null;
   if (h.face && h.uv && !h.wall) { const [W, H] = facePx(o, h.face); layerId = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H)?.id ?? null; }
   select(o.id, h.face || undefined, layerId, { flash: true });
 });
-cvs.addEventListener('pointercancel', () => { if (drag3) { drag3 = null; controls.enabled = true; } down = null; });
+cvs.addEventListener('pointercancel', () => { if (drag3) { drag3 = null; controls.enabled = true; } if (dragSt) { dragSt = null; controls.enabled = true; } down = null; });
 
 /* drag & drop images onto the model, the editor, or anywhere */
 let dragDepth = 0;
@@ -2104,6 +2416,19 @@ document.addEventListener('keydown', e => {
     const key = e.key.toLowerCase();
     if (key === 'f' || key === 'а') { e.preventDefault(); return activeObj() ? focusSelected({ frame: true }) : setView('fit'); }
     if (key === 'h' || key === 'р' || e.key === 'Home') { e.preventDefault(); return setView('fit'); }
+  }
+  const ST = !activeLayer() && activeSticker();
+  if (ST) {
+    const o = activeObj();
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return deleteSticker(ST.id); }
+    if (e.key === 'Escape') { sel.sticker = null; return renderStickers(); }
+    if (e.key.startsWith('Arrow')) {
+      e.preventDefault(); const [mw, mh] = faceMM(o, ST.face), mm = e.shiftKey ? 5 : .5;
+      if (e.key === 'ArrowLeft') ST.x -= mm / mw; if (e.key === 'ArrowRight') ST.x += mm / mw;
+      if (e.key === 'ArrowUp') ST.y -= mm / mh; if (e.key === 'ArrowDown') ST.y += mm / mh;
+      touchSticker(o, ST); refreshFields($('#stickerSec'), ST); clearTimeout(nudgeT); nudgeT = setTimeout(commit, 400);
+    }
+    return;
   }
   const L = activeLayer(); if (!L) return;
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteLayer(L.id); }
@@ -2234,6 +2559,8 @@ function exportFlat() {
   const n = netLayout(o), k = Math.min(6000 / Math.max(n.W, n.H), 300 / 25.4);
   const out = document.createElement('canvas'); out.width = Math.round(n.W * k); out.height = Math.round(n.H * k);
   const c = out.getContext('2d'), rt = RT.get(o.id);
+  // stickers are applied after printing, so the print sheet leaves them out
+  skipStickers = true; for (const key of faceKeys(o)) renderFace(o, key); skipStickers = false;
   for (const p of n.panels) {
     const fc = rt.faces[p.key]?.canvas, x = p.x * k, y = p.y * k, w = p.w * k, h = p.h * k;
     c.save(); c.beginPath(); if (p.circle) c.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2); else c.rect(x, y, w, h); c.clip();
@@ -2241,6 +2568,7 @@ function exportFlat() {
     c.restore();
   }
   cutNetWindow(c, o, 0, k);
+  markObj(o);
   out.toBlob(b => saveFile(`${slug(o.name)}-razvertka-dizain.png`, b), 'image/png');
 }
 
@@ -2323,6 +2651,7 @@ function sampleProject() {
     T('Заварите 1 ч. л. на 200 мл воды 90 °C, 4 минуты', { font: 'Montserrat', weight: 500, size: .045, color: '#4e6b58', y: .6 }),
   ];
   m.faces.insideBottom.layers = [Object.assign(newImage(green, 1), { w: .22, effect: 'deboss', opacity: .35 })];
+  m.stickers = [newSticker('circle', 'front', { x: .5, y: 0, w: 30, h: 30, fill: '#e8d9a8', finish: 'foil-gold', text: 'С', font: 'Unbounded', weight: 700, textSize: 13, textColor: '#20392b' })];
 
   const t = newObject('tube');
   Object.assign(t, { name: 'Пример: тубус «Иван-чай»', dims: { w: 80, h: 180, d: 80 }, finish: 'matte', grain: .2, pos: { x: 215, z: 70 }, rotY: 0 });
@@ -2350,7 +2679,7 @@ function sampleProject() {
 /* ================================================================
    Wiring
    ================================================================ */
-function renderAll() { renderObjects(); renderModel(); renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); renderFonts(); refreshFields($('#sceneSec'), state.scene); $('#lightPreset').value = state.scene.preset; ui.editor = ui.net = true; }
+function renderAll() { renderObjects(); renderModel(); renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); renderStickers(); renderFonts(); refreshFields($('#sceneSec'), state.scene); $('#lightPreset').value = state.scene.preset; ui.editor = ui.net = true; }
 
 $('#addPreset').innerHTML = PRESETS.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
 $('#addObjBtn').onclick = () => {
