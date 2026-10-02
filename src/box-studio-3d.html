@@ -349,6 +349,7 @@ const ICON = {
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
   box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>',
   tube: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="7" ry="2.5"/><path d="M5 5v14c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5"/></svg>',
+  cup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4.5 6.5h15M6 4.5h12l1.5 2-2 14.5h-11L4.5 6.5z"/><path d="M6.6 11h10.8"/></svg>',
   rect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>',
   ell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>',
 };
@@ -392,7 +393,12 @@ const PRESETS = [
   { id: 'flat', label: 'Плоская (пицца, одежда)', type: 'box', dims: { w: 330, h: 45, d: 330 }, finish: 'kraft', edge: '#a87f50', thick: 3 },
   { id: 'tube', label: 'Тубус', type: 'tube', dims: { w: 80, h: 200, d: 80 }, finish: 'matte', edge: '#cdb08a' },
   { id: 'can', label: 'Низкая банка', type: 'tube', dims: { w: 100, h: 60, d: 100 }, finish: 'metal', edge: '#cccccc' },
+  // paper cups: w = rim diameter, d = bottom diameter, h = height
+  { id: 'cup250', label: 'Бумажный стакан 250 мл', type: 'cup', dims: { w: 80, h: 92, d: 54 }, finish: 'matte', edge: '#ece8e0', thick: .4, board: '#f7f5f0', grain: .1 },
+  { id: 'cup350', label: 'Бумажный стакан 350 мл', type: 'cup', dims: { w: 90, h: 110, d: 60 }, finish: 'matte', edge: '#ece8e0', thick: .4, board: '#f7f5f0', grain: .1 },
+  { id: 'cup450', label: 'Бумажный стакан 450 мл', type: 'cup', dims: { w: 90, h: 130, d: 60 }, finish: 'matte', edge: '#ece8e0', thick: .4, board: '#f7f5f0', grain: .1 },
 ];
+const LID_COLORS = [['#1d1d1f', 'Чёрная'], ['#f4f4f1', 'Белая']];
 const LID_TYPES = {
   flat: 'Откидная крышка',
   flap: 'Откидная с клапаном снаружи',
@@ -404,6 +410,7 @@ const LID_WALLS = ['lidFront', 'lidRight', 'lidLeft', 'lidBack'];
 /* printed faces of an object, in tab order; depends on the lid construction */
 function faceKeys(o) {
   if (o.type === 'tube') return ['wrap', 'top', 'bottom'];
+  if (o.type === 'cup') return ['wrap'];
   const lt = o.lidType || 'flat';
   const k = ['front'];
   if (lt !== 'none') k.push('top');
@@ -423,7 +430,7 @@ const clearLid = o => o.type === 'box' && o.lidType === 'telescope' && o.lidMat 
 const isClearFace = (o, k) => clearLid(o) && (k === 'top' || LID_WALLS.includes(k));
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
 const FACE_LABEL = { fold: 'Внутренний борт', flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
-const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : FACE_LABEL[k];
+const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : FACE_LABEL[k];
 const BOARD = [['#f4f1e9', 'Белый'], ['#c39460', 'Крафт'], ['#2e3530', 'Графит'], ['#879c79', 'Шалфей'], ['#d28f84', 'Розовый'], ['#8aacca', 'Голубой']];
 const WHITE_INSIDE = '#f8f6ef';
 const SWATCHES = ['#ffffff', '#f3ead6', '#1c1b19', '#20392b', '#0a7aa1', '#b8461b', '#e6007e', '#ffe500'];
@@ -458,6 +465,7 @@ function ensureFaces(o) {
     o.wallT ??= o.thickness;
     o.lidFit ??= 'over';
   }
+  if (o.type === 'cup') { o.cupWall ??= 'double'; o.cupLid ??= true; o.lidColor ??= LID_COLORS[0][0]; }
   if (!o.window) o.window = { on: false, w: Math.round(o.dims.w * .68), d: Math.round(o.dims.d * .85), h: Math.round(o.dims.h * .46), r: 6 };
   o.window.place ??= 'edge'; o.window.off ??= 0; o.window.corners ??= 'round';
   if (o.whiteInside === undefined) o.whiteInside = true;
@@ -488,6 +496,7 @@ const newShape = (kind = 'rect') => ({ id: uid(), type: 'shape', kind, w: kind =
 function faceMM(o, k) {
   const { w, h, d } = o.dims;
   if (o.type === 'tube') return k === 'wrap' ? [Math.PI * w, h] : [w, w];
+  if (o.type === 'cup') { const G = cupGeom(o); return [G.Wr, G.Hr]; }
   if (k === 'front' || k === 'back') return [w, h];
   if (k === 'left' || k === 'right') return [d, h];
   const tele = o.lidType === 'telescope', inLid = tele && o.lidMat === 'clear' && o.lidFit === 'inside';
@@ -517,6 +526,11 @@ function netLayout(o) {
       { key: 'top', x: C / 2 - D / 2, y: 0, w: D, h: D, circle: true },
       { key: 'wrap', x: 0, y: D, w: C, h },
       { key: 'bottom', x: C / 2 - D / 2, y: D + h, w: D, h: D, circle: true }] };
+  }
+  if (o.type === 'cup') {
+    // the side wall is printed flat as a fan (an annular sector), with a glue overlap on the left
+    const G = cupGeom(o), F = cupFan(G);
+    return { W: F.W, H: F.H, fan: F, panels: [{ key: 'wrap', x: 0, y: 0, w: F.W, h: F.H, fan: F }] };
   }
   // base as a cross. A flat lid sits above the front panel (so a window can run across the fold).
   // A lid with a flap hangs off the back panel as one piece: lid, flap, and ears beside the flap;
@@ -558,8 +572,112 @@ function netLayout(o) {
   }
   return { W, H, panels, oy, hinged, backLid, tx, tw, lid, folds };
 }
+/* ---------- paper cup ----------
+   The printed side wall is a cone. It is designed on a rectangle that maps onto the cone conformally:
+   shapes keep their proportions, horizontal lines stay horizontal, and things grow toward the wider rim
+   (scale 1 at the middle). For print the wall unrolls exactly into a fan (annular sector). */
+function cupGeom(o) {
+  const Dt = o.dims.w, H = o.dims.h, Db = Math.min(o.dims.d, Dt);
+  const rr = clamp(Dt * .021, 1, 2.4), Rc = Dt / 2 - rr, yTop = H - rr;          // rolled rim: tube radius, centre
+  const dbl = o.cupWall !== 'single', gap = dbl ? 1.3 : .05;
+  const rw0 = Db / 2, rw1 = Rc - rr * .7, rw = y => rw0 + (rw1 - rw0) * y / yTop;  // inner cup wall
+  // double wall: the printed sleeve starts above the base and stops under the rim
+  const y0 = dbl ? clamp(H * .085, 4, 14) : 0, y1 = yTop - rr * (dbl ? 1.25 : .8);
+  const r0 = rw(y0) + gap, r1 = rw(y1) + gap, L = Math.hypot(r1 - r0, y1 - y0), sa = (r1 - r0) / L, ca = (y1 - y0) / L;
+  const G = { Dt, Db, H, rr, Rc, yTop, dbl, gap, rw, y0, y1, r0, r1, L, sa, ca, cone: sa > .002 };
+  if (G.cone) {
+    G.s0 = r0 / sa; G.s1 = r1 / sa; G.Phi = 2 * Math.PI * sa; G.lnk = Math.log(G.s1 / G.s0); G.Sm = Math.sqrt(G.s0 * G.s1);
+    G.Wr = G.Phi * G.Sm; G.Hr = G.Sm * G.lnk;
+  } else { G.Wr = Math.PI * (r0 + r1); G.Hr = L; }
+  return G;
+}
+/* distance along the slant from the bottom of the print for design height v (0 bottom … 1 top) */
+const cupSlant = (G, v) => G.cone ? G.s0 * Math.exp(v * G.lnk) - G.s0 : v * G.L;
+const CUP_GLUE = 8;   // mm of overlap at the seam
+/* flat layout of the printed wall: apex below the sheet, the rim edge is the upper arc */
+function cupFan(G) {
+  if (!G.cone) { const gU = CUP_GLUE / G.Wr; return { G, cone: false, gU, W: G.Wr * (1 + gU), H: G.Hr }; }
+  const gU = CUP_GLUE / (G.Phi * G.Sm), pts = [];
+  for (let i = 0; i <= 200; i++) {
+    const psi = (-gU + (1 + gU) * i / 200 - .5) * G.Phi;
+    for (const s of [G.s0, G.s1]) pts.push([s * Math.sin(psi), -s * Math.cos(psi)]);
+  }
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), mx = Math.min(...xs), my = Math.min(...ys);
+  return { G, cone: true, gU, ax: -mx, ay: -my, W: Math.max(...xs) - mx, H: Math.max(...ys) - my };
+}
+/* sheet point (mm) → design uv; u runs past 0 into the glue overlap */
+function fanUV(F, X, Y) {
+  const G = F.G;
+  if (!F.cone) { const u = X / G.Wr - F.gU, v = 1 - Y / G.Hr; return v < 0 || v > 1 || u < -F.gU || u > 1 ? null : [u, v]; }
+  const dx = X - F.ax, dy = F.ay - Y, u = Math.atan2(dx, dy) / G.Phi + .5, v = Math.log(Math.hypot(dx, dy) / G.s0) / G.lnk;
+  return v < 0 || v > 1 || u < -F.gU || u > 1 ? null : [u, v];
+}
+function fanXY(F, u, v) {
+  const G = F.G;
+  if (!F.cone) return [(u + F.gU) * G.Wr, (1 - v) * G.Hr];
+  const s = G.s0 * Math.exp(v * G.lnk), psi = (u - .5) * G.Phi;
+  return [F.ax + s * Math.sin(psi), F.ay - s * Math.cos(psi)];
+}
+/* pixels of an image, scaled to fit within max px */
+function pixelsOf(src, max) {
+  const sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height, k = Math.min(1, max / Math.max(sw, sh));
+  const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(sw * k)); c.height = Math.max(1, Math.round(sh * k));
+  const x = c.getContext('2d'); x.drawImage(src, 0, 0, c.width, c.height);
+  return x.getImageData(0, 0, c.width, c.height);
+}
+/* bilinear sample; wrapX repeats horizontally (the wall is a closed loop) */
+function sampleInto(D, o, S, fx, fy, wrapX) {
+  const w = S.width, h = S.height, s = S.data;
+  fx = fx * w - .5; fy = clamp(fy * h - .5, 0, h - 1);
+  let x0 = Math.floor(fx); const tx = fx - x0, y0 = Math.floor(fy), ty = fy - y0, y1 = Math.min(h - 1, y0 + 1);
+  let x1 = x0 + 1;
+  if (wrapX) { x0 = ((x0 % w) + w) % w; x1 = ((x1 % w) + w) % w; } else { x0 = clamp(x0, 0, w - 1); x1 = clamp(x1, 0, w - 1); }
+  const a = (y0 * w + x0) * 4, b = (y0 * w + x1) * 4, c = (y1 * w + x0) * 4, d = (y1 * w + x1) * 4;
+  for (let i = 0; i < 4; i++) D[o + i] = (s[a + i] * (1 - tx) + s[b + i] * tx) * (1 - ty) + (s[c + i] * (1 - tx) + s[d + i] * tx) * ty;
+}
+/* the wall design (rectangle) warped onto the fan, as a canvas of pw × ph px covering F.W × F.H mm */
+function fanImage(F, src, pw, ph) {
+  const S = pixelsOf(src, Math.max(pw, ph) * 2), out = document.createElement('canvas');
+  out.width = pw; out.height = ph;
+  const x = out.getContext('2d'), img = x.createImageData(pw, ph), D = img.data;
+  for (let j = 0; j < ph; j++) for (let i = 0; i < pw; i++) {
+    const uv = fanUV(F, (i + .5) / pw * F.W, (j + .5) / ph * F.H); if (!uv) continue;
+    sampleInto(D, (j * pw + i) * 4, S, uv[0] - Math.floor(uv[0]), 1 - uv[1], true);
+  }
+  x.putImageData(img, 0, 0);
+  return out;
+}
+/* the reverse: a full fan layout (e.g. an uploaded print file) cut back into the wall rectangle */
+const fanCache = new Map();
+function fanToRect(F, im, W, H, key) {
+  const k = `${key}|${W}x${H}|${F.W.toFixed(3)}x${F.H.toFixed(3)}`;
+  if (fanCache.has(k)) return fanCache.get(k);
+  const S = pixelsOf(im, 4096), out = document.createElement('canvas'); out.width = W; out.height = H;
+  const x = out.getContext('2d'), img = x.createImageData(W, H), D = img.data;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const [X, Y] = fanXY(F, (i + .5) / W, 1 - (j + .5) / H);
+    sampleInto(D, (j * W + i) * 4, S, X / F.W, Y / F.H, false);
+  }
+  x.putImageData(img, 0, 0);
+  fanCache.clear(); fanCache.set(k, out);
+  return out;
+}
+/* outline of the fan as an SVG/canvas path in mm: rim arc, seam side, base arc, glue side */
+function fanOutline(F, u0 = -F.gU, u1 = 1, n = 96) {
+  const pts = [];
+  for (let i = 0; i <= n; i++) pts.push(fanXY(F, u0 + (u1 - u0) * i / n, 1));
+  for (let i = n; i >= 0; i--) pts.push(fanXY(F, u0 + (u1 - u0) * i / n, 0));
+  return pts;
+}
+
 /* draw a face canvas into its dieline rectangle, turned if the panel lies upside down on the die */
 function drawNetPanel(c, src, p, x, y, w, h, crop = null) {
+  if (p.fan) {
+    // the wall unrolls into a fan; render it at the canvas' real pixel density
+    const t = c.getTransform(), sc = Math.hypot(t.a, t.b) || 1;
+    c.drawImage(fanImage(p.fan, src, Math.max(1, Math.round(w * sc)), Math.max(1, Math.round(h * sc))), x, y, w, h);
+    return;
+  }
   c.save();
   if (p.rot) { c.translate(x + w / 2, y + h / 2); c.rotate(Math.PI); x = -w / 2; y = -h / 2; }
   if (crop) c.drawImage(src, ...crop, x, y, w, h); else c.drawImage(src, x, y, w, h);
@@ -735,13 +853,16 @@ function buildObject(o) {
       foldMat: new THREE.MeshStandardMaterial({ roughness: .88, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }),
       petEdgeMat: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: .85, depthWrite: false }),
       filmMat: new THREE.MeshPhysicalMaterial({ color: 0xf2f8f8, transparent: true, opacity: .22, roughness: .04, metalness: 0, clearcoat: 1, clearcoatRoughness: .02, side: THREE.DoubleSide, depthWrite: false }),
-      innerMat: new THREE.MeshStandardMaterial({ roughness: .9, shadowSide: THREE.DoubleSide }), lidPivot: null };
+      innerMat: new THREE.MeshStandardMaterial({ roughness: .9, shadowSide: THREE.DoubleSide }),
+      cupLidMat: new THREE.MeshPhysicalMaterial({ roughness: .38, clearcoat: .35, clearcoatRoughness: .22, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide }),
+      holeMat: new THREE.MeshBasicMaterial({ color: 0x060606, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), lidPivot: null };
     RT.set(o.id, rt); world.add(rt.group);
   }
   rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null;
+  rt.group.clear(); rt.lidPivot = null; rt.cupLid = null;
+  rt.innerMat.side = o.type === 'cup' ? THREE.DoubleSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
-  if (o.type === 'box') buildBox(o, rt); else buildTube(o, rt);
+  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else buildTube(o, rt);
   applyTransform(o); computeFrames(o, rt); applyLid(o); applyObjMaterials(o); markObj(o);
   rt.stickerMeshes = []; buildStickerFilms(o);
 }
@@ -751,7 +872,7 @@ function disposeObject(id) {
   world.remove(rt.group);
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
   for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
-  rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); RT.delete(id);
+  rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); rt.cupLidMat.dispose(); rt.holeMat.dispose(); RT.delete(id);
 }
 /* clear PET: black diffuse, so only reflections remain (stronger at grazing angles). The shader turns
    their brightness into coverage, so plain plastic stays see-through even over the page background
@@ -1110,6 +1231,65 @@ function buildTube(o, rt) {
   m.userData = { objId: o.id, faces: ['wrap', 'top', 'bottom'] };
   rt.group.add(m);
 }
+function buildCup(o, rt) {
+  const G = cupGeom(o), ud = { objId: o.id, face: null };
+  const add = (geo, mat, extra = {}) => { const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; m.userData = { ...ud, ...extra }; rt.group.add(m); return m; };
+  // a cone band between heights ya and yb (mm) with radius r(y), open at both ends
+  const cone = (ra, rb, ya, yb) => { const g = new THREE.CylinderGeometry(rb * S, ra * S, (yb - ya) * S, 160, 1, true); g.translate(0, (ya + yb) / 2 * S, 0); return g; };
+  // printed wall: u around (seam at the back), v up the slant (conformal on a cone)
+  const nu = 160, nv = 40, P = [], N = [], UV = [], I = [];
+  for (let j = 0; j <= nv; j++) {
+    const v = j / nv, d = cupSlant(G, v), r = G.r0 + d * G.sa, y = G.y0 + d * G.ca;
+    for (let i = 0; i <= nu; i++) {
+      const u = i / nu, th = Math.PI + u * Math.PI * 2, sn = Math.sin(th), cs = Math.cos(th);
+      P.push(r * sn * S, y * S, r * cs * S); N.push(G.ca * sn, -G.sa, G.ca * cs); UV.push(u, v);
+    }
+  }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+    const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1;
+    I.push(a, b, d, a, d, c);
+  }
+  const wg = new THREE.BufferGeometry();
+  wg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); wg.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  wg.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2)); wg.setIndex(I);
+  add(wg, rt.faces.wrap.mat, { face: 'wrap' });
+  const yB = Math.min(6, G.H * .07), tk = .35;
+  if (G.dbl) {
+    // inner cup shows below the sleeve; the sleeve's lower edge is a small step
+    add(cone(G.rw(0), G.rw(G.yTop), 0, G.yTop), rt.foldMat);
+    const ring = new THREE.RingGeometry(G.rw(G.y0) * S, (G.r0 + tk) * S, 160); ring.rotateX(Math.PI / 2); ring.translate(0, G.y0 * S, 0);
+    add(ring, rt.foldMat);
+  }
+  // inside wall and bottom, the base recess underneath, the rolled rim
+  add(cone(G.rw(yB) - tk, G.rw(G.yTop) - tk, yB, G.yTop), rt.innerMat);
+  const ib = new THREE.CircleGeometry((G.rw(yB) - tk) * S, 96); ib.rotateX(-Math.PI / 2); ib.translate(0, yB * S, 0); add(ib, rt.innerMat);
+  const ub = new THREE.CircleGeometry(G.rw(1.5) * S, 96); ub.rotateX(Math.PI / 2); ub.translate(0, 1.5 * S, 0); add(ub, rt.foldMat);
+  const rim = new THREE.TorusGeometry(G.Rc * S, G.rr * S, 16, 160); rim.rotateX(Math.PI / 2); rim.translate(0, G.yTop * S, 0); add(rim, rt.foldMat);
+  if (o.cupLid) buildCupLid(o, rt, G);
+}
+/* sip lid: a sunken centre, a raised drinking ring with the sip slot, a riser, and a skirt that snaps over the rim */
+function buildCupLid(o, rt, G) {
+  const R = G.Dt / 2, k = clamp(R / 42, .85, 1.2), g = new THREE.Group();
+  const prof = [[0, 9.6], [.6, 9.6], [.66, 10.3], [.7, 12.5], [.74, 13.2], [.8, 13.2], [.85, 12.8], [.88, 11.6], [.9, 9.4], [.91, 5.2], [.93, 4.3]]
+    .map(([r, y]) => [r * R, y * k])
+    .concat([[R - .5, 3.9], [R + .9, 3.3], [R + 1.4, 1.8], [R + 1.4, -.6], [R + 1.9, -1.4], [R + 1.9, -2.6], [R + 2.8, -5], [R + 3, -6.4], [R + 2.4, -6.7]].map(([r, y]) => [r, y * k]));
+  const curve = new THREE.CatmullRomCurve3(prof.map(([r, y]) => new THREE.Vector3(r * S, y * S, 0)), false, 'centripetal', .2);
+  const pts = curve.getSpacedPoints(220).map(p => new THREE.Vector2(Math.max(0, p.x), p.y));
+  pts[0].x = 0;
+  const lid = new THREE.Mesh(new THREE.LatheGeometry(pts, 128), rt.cupLidMat);
+  lid.castShadow = lid.receiveShadow = true; lid.userData = { objId: o.id, face: null }; g.add(lid);
+  // sip slot on the outer slope of the ring, facing the front
+  const a = prof[6], b = prof[7], phi = Math.atan2(b[0] - a[0], a[1] - b[1]);
+  const sh = new THREE.Shape(), sw = 4.6 * k, sr = 1.5 * k;
+  sh.absarc(sw / 2, 0, sr, -Math.PI / 2, Math.PI / 2, false); sh.absarc(-sw / 2, 0, sr, Math.PI / 2, Math.PI * 1.5, false);
+  const slot = new THREE.Mesh(new THREE.ShapeGeometry(sh.clone(), 24).scale(S, S, S), rt.holeMat);
+  slot.position.set(0, ((a[1] + b[1]) / 2 + .15) * S, ((a[0] + b[0]) / 2 + .15) * S); slot.rotation.x = -phi;
+  slot.userData = { objId: o.id, face: null }; g.add(slot);
+  // vent pinhole in the centre well
+  const vent = new THREE.Mesh(new THREE.CircleGeometry(.75 * k * S, 16), rt.holeMat);
+  vent.rotation.x = -Math.PI / 2; vent.position.set(-R * .3 * S, (9.6 * k + .05) * S, -R * .12 * S); vent.userData = { objId: o.id, face: null }; g.add(vent);
+  rt.cupLid = g; rt.group.add(g);
+}
 function applyTransform(o) {
   const rt = RT.get(o.id); if (!rt) return;
   const before = rt.group.position.clone();
@@ -1121,6 +1301,12 @@ function applyTransform(o) {
 }
 function applyLid(o) {
   const rt = RT.get(o.id); if (!rt) return;
+  if (rt.cupLid) {
+    // the cup lid lifts off and tilts back
+    const f = clamp(o.lid / 125, 0, 1);
+    rt.cupLid.position.set(0, (o.dims.h + f * (o.dims.h * .12 + 22)) * S, -f * o.dims.w * .55 * S);
+    rt.cupLid.rotation.x = -f * .45;
+  }
   if (rt.lidPivot) rt.lidPivot.rotation.x = -o.lid * DEG;
   for (const m of rt.contact || []) m.visible = o.lid < 1.5;
   if (rt.lidGroup) {
@@ -1139,6 +1325,7 @@ function applyObjMaterials(o) {
   const fold = new THREE.Color(o.faces.front?.bg || o.board || '#ffffff');
   if (FINISHES[o.finish]?.kraft) fold.multiply(new THREE.Color(FINISHES[o.finish].kraft));
   rt.foldMat.color.copy(fold);
+  rt.cupLidMat.color.set(o.lidColor || LID_COLORS[0][0]);
   rt.foldMat.bumpMap = o.grain > 0 ? rt.faces.front?.grain ?? null : null; rt.foldMat.bumpScale = o.grain * 1.2; rt.foldMat.needsUpdate = true;
   rt.innerMat.bumpMap = o.grain > 0 ? rt.faces.inside?.grain ?? null : null;
   rt.innerMat.bumpScale = o.grain * 1.2; rt.innerMat.needsUpdate = true;
@@ -1235,7 +1422,8 @@ function renderFace(o, k) {
   else { ctx.fillStyle = face.bg; ctx.fillRect(0, 0, W, H); }
   if (!clear && o.dieline && outerKeys(o).includes(k)) {
     const im = getImg(o.dieline), net = netLayout(o), p = net.panels.find(p => p.key === k);
-    if (im && p) drawNetPanel(ctx, im, p, 0, 0, W, H, [p.x / net.W * im.naturalWidth, p.y / net.H * im.naturalHeight, p.w / net.W * im.naturalWidth, p.h / net.H * im.naturalHeight]);
+    if (im && p?.fan) ctx.drawImage(fanToRect(p.fan, im, W, H, o.dieline), 0, 0);
+    else if (im && p) drawNetPanel(ctx, im, p, 0, 0, W, H, [p.x / net.W * im.naturalWidth, p.y / net.H * im.naturalHeight, p.w / net.W * im.naturalWidth, p.h / net.H * im.naturalHeight]);
   }
   const fxl = [];
   for (const L of face.layers) {
@@ -1926,9 +2114,9 @@ function refreshFields(root, t) { $$('[data-k]', root).forEach(el => { if (el !=
    ================================================================ */
 function renderObjects() {
   $('#objList').innerHTML = state.objects.map(o => `<div class="obj ${o.id === sel.obj ? 'on' : ''}" data-id="${o.id}" tabindex="0" role="button">
-    ${o.type === 'tube' ? ICON.tube : ICON.box}<span class="nm">${esc(o.name)}</span>
-    <span class="dm mono">${o.type === 'tube' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : `${fmt(o.dims.w)}×${fmt(o.dims.d)}×${fmt(o.dims.h)}`}</span></div>`).join('')
-    || '<div class="empty">Добавьте коробку или тубус</div>';
+    ${ICON[o.type] || ICON.box}<span class="nm">${esc(o.name)}</span>
+    <span class="dm mono">${o.type === 'tube' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'cup' ? `⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)}` : `${fmt(o.dims.w)}×${fmt(o.dims.d)}×${fmt(o.dims.h)}`}</span></div>`).join('')
+    || '<div class="empty">Добавьте коробку, стакан или тубус</div>';
   $$('#objList .obj').forEach(el => {
     const go = () => { select(el.dataset.id, undefined, null); };
     el.onclick = go; el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
@@ -1938,14 +2126,21 @@ function renderObjects() {
 function renderModel() {
   const o = activeObj(), sec = $('#modelSec');
   if (!o) { sec.innerHTML = '<div class="sec-h"><h2>Форма</h2></div><div class="empty">Нет выбранного объекта</div>'; return; }
-  const box = o.type === 'box';
+  const box = o.type === 'box', cup = o.type === 'cup';
   sec.innerHTML = `
     <div class="sec-h"><h2>Форма и размеры</h2></div>
     <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="name" aria-label="Название"></div>
-    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="tube">Тубус / банка</option></select></div>
+    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="cup">Бумажный стакан</option><option value="tube">Тубус / банка</option></select></div>
     <div class="field wide"><span class="fl">Заготовка</span><select id="presetSel"><option value="">— выбрать размер —</option>${PRESETS.filter(p => p.type === o.type).map(p => `<option value="${p.id}">${p.label}</option>`).join('')}</select></div>
     ${box ? rangeField('Ширина, мм', 'dims.w', 20, 800, 1) + rangeField('Глубина, мм', 'dims.d', 20, 800, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)
-          : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
+      : cup ? rangeField('Диаметр верха, мм', 'dims.w', 40, 160, 1) + rangeField('Диаметр дна, мм', 'dims.d', 30, 160, 1) + rangeField('Высота, мм', 'dims.h', 40, 250, 1)
+          + `<div class="field wide"><span class="fl">Стенка</span><select data-k="cupWall"><option value="double">Двухслойная (внешний слой выше дна)</option><option value="single">Однослойная</option></select></div>`
+          + `<label class="check"><input type="checkbox" data-k="cupLid"> Крышка</label>`
+          + (o.cupLid ? `<div class="field wide"><span class="fl">Цвет крышки</span><div class="row">
+              <div class="swatches" id="lidSw">${LID_COLORS.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.lidColor === c}"></button>`).join('')}</div>
+              <input type="color" data-k="lidColor" aria-label="Свой цвет крышки"></div></div>` + rangeField('Снять крышку', 'lid', 0, 125, 1) : '')
+          + `<p class="hint">Дизайн стенки рисуется на прямоугольнике: середина — лицевая сторона, края сходятся на шве сзади. К верхнему краю элементы на стакане крупнее, к нижнему — мельче (стакан расширяется), пропорции не искажаются. Для типографии — «Шаблон SVG» и «Развёртка PNG» веером.</p>`
+      : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
     ${box ? `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(LID_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : ''}
     ${box && o.lidType !== 'none' ? rangeField(o.lidType === 'telescope' ? 'Поднять крышку' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
     ${box && (o.lidType === 'flap' || o.lidType === 'tuck') ? rangeField('Клапан, мм', 'flapH', 3, 300, 1) : ''}
@@ -1984,6 +2179,8 @@ function renderModel() {
     if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k.startsWith('dims') || k === 'thickness') { rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lid') { applyLid(o); return; }
+    if (k === 'cupWall' || k === 'cupLid') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'cupLid') renderModel(); return; }
+    if (k === 'lidColor') { applyObjMaterials(o); $$('#lidSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.lidColor)); return; }
     if (k.startsWith('pos') || k === 'rotY') { applyTransform(o); return; }
     if (k === 'finish' || k === 'grain') { applyObjMaterials(o); markObj(o); return; }
     if (k === 'edge') applyObjMaterials(o);
@@ -2003,6 +2200,7 @@ function renderModel() {
   }, (k) => { commit(); if (k.startsWith('dims')) updateShadowCam(); });
   const board = c => { setBoard(o, c); applyObjMaterials(o); markObj(o); renderFacePanel(); $$('#boardSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === c)); $('#boardColor').value = c; };
   $$('#boardSw .sw').forEach(b => b.onclick = () => { board(b.dataset.c); commit(); });
+  $$('#lidSw .sw').forEach(b => b.onclick = () => { o.lidColor = b.dataset.c; applyObjMaterials(o); renderModel(); commit(); });
   $('#boardColor').addEventListener('input', e => board(e.target.value));
   $('#boardColor').addEventListener('change', () => commit());
   $('#presetSel').onchange = e => {
@@ -2018,6 +2216,7 @@ function renderModel() {
       ensureFaces(o); if (p.board) setBoard(o, p.board);
       applyObjMaterials(o); select(o.id, sel.face);
     }
+    if (o.type === 'cup' && p.board) { setBoard(o, p.board); applyObjMaterials(o); }
     rebuildQueue.add(o.id); renderModel(); renderObjects(); commit(); setTimeout(() => setView(lastView), 50);
   };
 }
@@ -2459,7 +2658,12 @@ function drawNet() {
     c.save(); c.beginPath(); if (p.circle) c.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2); else c.rect(x, y, w, h); c.clip();
     if (fc) drawNetPanel(c, fc, p, x, y, w, h); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
     c.restore();
-    c.beginPath(); if (p.circle) c.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2); else c.rect(x + .5, y + .5, w - 1, h - 1);
+    c.beginPath();
+    if (p.fan) {
+      fanOutline(p.fan).forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](x + X * k, y + Y * k)); c.closePath();
+      const [ax, ay] = fanXY(p.fan, 0, 0), [bx, by] = fanXY(p.fan, 0, 1);   // seam: glue overlap to the left
+      c.save(); c.setLineDash([2, 2]); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; const q = new Path2D(); q.moveTo(x + ax * k, y + ay * k); q.lineTo(x + bx * k, y + by * k); c.stroke(q); c.restore();
+    } else if (p.circle) c.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2); else c.rect(x + .5, y + .5, w - 1, h - 1);
     c.setLineDash(p.key === sel.face ? [] : [3, 3]); c.lineWidth = p.key === sel.face ? 2.5 : 1; c.strokeStyle = p.key === sel.face ? accentCss : 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]);
   }
   cutNetWindow(c, o, pad, k);
@@ -2708,7 +2912,16 @@ function templateSVG(o) {
   let body = '';
   const label = (p) => { const [mw, mh] = p.fold ? [p.w, p.h] : faceMM(o, p.key), pet = isClearFace(o, p.key) ? ' · ПЭТ' : ''; const fs = Math.max(3, Math.min(p.w, p.h) * .07);
     return `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}"${p.rot ? ` transform="rotate(180 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''} font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(faceLabel(o, p.key).toUpperCase())} · ${fmt(mw, 1)}×${fmt(mh, 1)} мм${pet}</text>`; };
-  if (o.type === 'tube') {
+  if (o.type === 'cup') {
+    const F = n.fan, G = F.G, P = pts => pts.map(([X, Y], i) => `${i ? 'L' : 'M'}${f(X)},${f(Y)}`).join(' ');
+    body += `<path d="${P(fanOutline(F, -F.gU, 1, 240))} Z" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+    body += `<path d="${P([fanXY(F, 0, 0), fanXY(F, 0, 1)])}" fill="none" stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"/>`;
+    const [cx, cy] = fanXY(F, .5, .5), fs = Math.max(3, G.Hr * .05);
+    const [gx, gy] = fanXY(F, -F.gU / 2, .5), ga = F.cone ? (-F.gU / 2 - .5) * G.Phi / DEG : 0;
+    body += `<text x="${f(cx)}" y="${f(cy)}" font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">СТЕНКА СТАКАНА · ⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)} мм${G.dbl ? ' · ВНЕШНИЙ СЛОЙ' : ''}</text>`;
+    body += `<text x="${f(gx)}" y="${f(gy)}" transform="rotate(${f(ga - 90)} ${f(gx)} ${f(gy)})" font-family="Arial, sans-serif" font-size="${f(Math.min(fs, CUP_GLUE * .45))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">НАХЛЁСТ ${CUP_GLUE} мм</text>`;
+    if (F.cone) body += `<text x="${f(cx)}" y="${f(cy + fs * 1.6)}" font-family="Arial, sans-serif" font-size="${f(fs * .7)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">R ${fmt(G.s1, 1)} / ${fmt(G.s0, 1)} мм · угол ${fmt(G.Phi / DEG, 2)}° + нахлёст · высота по образующей ${fmt(G.L, 1)} мм</text>`;
+  } else if (o.type === 'tube') {
     for (const p of n.panels) {
       body += p.circle ? `<circle cx="${f(p.x + p.w / 2)}" cy="${f(p.y + p.h / 2)}" r="${f(p.w / 2)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`
         : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
@@ -2758,7 +2971,7 @@ function templateSVG(o) {
   }
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${f(n.W)}mm" height="${f(n.H)}mm" viewBox="0 0 ${f(n.W)} ${f(n.H)}">
-<!-- Box Studio 3D — ${esc(o.name)}. Голубой: линия реза, пурпурный пунктир: биговка. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете. Крышка с клапаном и ушками крепится к задней стенке и лежит на развёртке вверх ногами — подписи повёрнуты так же. -->
+<!-- Box Studio 3D — ${esc(o.name)}. ${o.type === 'cup' ? 'Голубой: линия реза стенки стакана (веер), пурпурный пунктир: край нахлёста на шве. Верхняя дуга — край у бортика, нижняя — у дна. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете.' : 'Голубой: линия реза, пурпурный пунктир: биговка. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете. Крышка с клапаном и ушками крепится к задней стенке и лежит на развёртке вверх ногами — подписи повёрнуты так же.'} -->
 <g id="dieline">${body}</g>
 </svg>`;
 }
