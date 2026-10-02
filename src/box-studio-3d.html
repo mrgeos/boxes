@@ -1286,7 +1286,7 @@ function buildCupLid(o, rt, G) {
     return top + .07;
   };
   // sip slot: a capsule bent along the ring, on its flat top at the front (+z)
-  const rc = .81 * R, sw = 9.4 * k, sr = 2.3 * k, sh = new THREE.Shape();
+  const rc = .78 * R, sw = 9.4 * k, sr = 2.3 * k, sh = new THREE.Shape();
   sh.absarc(sw / 2, 0, sr, -Math.PI / 2, Math.PI / 2, false); sh.absarc(-sw / 2, 0, sr, Math.PI / 2, Math.PI * 1.5, false);
   const sg = new THREE.ShapeGeometry(sh, 24), sp = sg.attributes.position;
   for (let i = 0; i < sp.count; i++) {
@@ -1296,7 +1296,7 @@ function buildCupLid(o, rt, G) {
   const slot = new THREE.Mesh(sg, rt.holeMat); slot.userData = { objId: o.id, face: null }; g.add(slot);
   // vent pinhole on the ring, opposite the slot
   const vent = new THREE.Mesh(new THREE.CircleGeometry(.8 * k * S, 16), rt.holeMat);
-  vent.rotation.x = -Math.PI / 2; vent.position.set(0, yAt(rc) * S, -rc * S); vent.userData = { objId: o.id, face: null }; g.add(vent);
+  vent.rotation.x = -Math.PI / 2; const rv = .755 * R; vent.position.set(0, yAt(rv) * S, -rv * S); vent.userData = { objId: o.id, face: null }; g.add(vent);
   rt.cupLid = g; rt.group.add(g);
 }
 function applyTransform(o) {
