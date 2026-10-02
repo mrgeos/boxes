@@ -960,15 +960,15 @@ function buildBox(o, rt) {
     for (const sx of [-1, 1]) add(g, sw, WT, rimMat, [sx * (ww / 2 + sw / 2), H, D / 2 - WT / 2], [-P / 2, 0, 0]);
     addG(g, ribbonGeo(frontNotch.map(p => [p.x, H / 2 + p.y, D / 2]), frontNotch.map(p => [p.x, H / 2 + p.y, D / 2 - WT])), rimMat, [0, 0, 0], [0, 0, 0]);
     if (!edgeWin.flap) film(g, frontNotch, [0, H / 2, D / 2 - WT / 2], [0, 0, 0]);   // behind a flap the film sits on the flap
-  } else add(g, W, WT, rimMat, [0, H, D / 2 - WT / 2], [-P / 2, 0, 0]);
+  } else add(g, W, WT, rimMat, [0, H, D / 2 - WT / 2], [-P / 2, 0, 0], { support: 'rimFront' });
   if (backNotch) {
     const sw = (W - ww) / 2;
     for (const sx of [-1, 1]) add(g, sw, WT, rimMat, [sx * (ww / 2 + sw / 2), H, -D / 2 + WT / 2], [-P / 2, 0, 0]);
     addG(g, ribbonGeo(backNotch.map(p => [-p.x, H / 2 + p.y, -D / 2]), backNotch.map(p => [-p.x, H / 2 + p.y, -D / 2 + WT])), rimMat, [0, 0, 0], [0, 0, 0]);
     film(g, backNotch, [0, H / 2, -D / 2 + WT / 2], [0, P, 0]);
-  } else add(g, W, WT, rimMat, [0, H, -D / 2 + WT / 2], [-P / 2, 0, 0]);
-  add(g, WT, D - 2 * WT, rimMat, [W / 2 - WT / 2, H, 0], [-P / 2, 0, 0]);
-  add(g, WT, D - 2 * WT, rimMat, [-W / 2 + WT / 2, H, 0], [-P / 2, 0, 0]);
+  } else add(g, W, WT, rimMat, [0, H, -D / 2 + WT / 2], [-P / 2, 0, 0], { support: 'rimBack' });
+  add(g, WT, D - 2 * WT, rimMat, [W / 2 - WT / 2, H, 0], [-P / 2, 0, 0], { support: 'rimRight' });
+  add(g, WT, D - 2 * WT, rimMat, [-W / 2 + WT / 2, H, 0], [-P / 2, 0, 0], { support: 'rimLeft' });
   rt.lidPivot = rt.lidGroup = null;
   const lt = o.lidType || 'flat', eps = .3 * S;
   if (lt === 'none') return;
@@ -1263,6 +1263,7 @@ function renderFace(o, k) {
       if (pl.key !== k) continue;
       // under a flap or lid the board is hidden by the outer face; no shadow there (it would show once opened)
       const F = frs?.[k];
+      if (isClearFace(o, k)) continue;
       if (F && pls.some(q => q.key !== k && frs[q.key] && frs[q.key].n.dot(F.n) > .99 && frs[q.key].c.dot(F.n) > F.c.dot(F.n) + .2)) continue;
       ops.push({ st, M: pl.M });
     }
@@ -1349,9 +1350,10 @@ function computeFrames(o, rt) {
   rt.group.updateMatrixWorld(true);
   const inv = rt.group.matrixWorld.clone().invert(), frames = {};
   rt.group.traverse(m => {
-    const k = m.userData?.face;
+    const k = m.userData?.face || m.userData?.support;
     if (!m.isMesh || !k || m.userData.wall || frames[k]) return;
-    const M = inv.clone().multiply(m.matrixWorld), [w, h] = faceMM(o, k);
+    const gp = m.geometry.parameters;
+    const M = inv.clone().multiply(m.matrixWorld), [w, h] = m.userData.face ? faceMM(o, k) : [gp.width / S, gp.height / S];
     const c = new THREE.Vector3().applyMatrix4(M).divideScalar(S);
     const u = new THREE.Vector3(1, 0, 0).transformDirection(M), v = new THREE.Vector3(0, 1, 0).transformDirection(M);
     const pinv = inv.clone().multiply(m.parent.matrixWorld).invert();   // object space → the part's own space (closed)
@@ -1360,42 +1362,69 @@ function computeFrames(o, rt) {
   o.lid = saved; applyLid(o);
   rt.frames = frames;
 }
-/* where a sticker lands: one affine map (sticker mm → face-canvas mm) per face it reaches.
-   Faces parallel to the anchor and within a board's reach get the sticker projected (a flap over
-   a wall, a lid over a tray); a face meeting the anchor at a convex edge gets it folded over. */
+/* where a sticker lands: one affine map (sticker mm → face mm) per surface it reaches, found by
+   walking from the anchor face to its neighbours and on (up to four steps). A neighbour can lie
+   just above/below (a flap over a wall, a lid over a tray: projected) or meet at a corner, convex
+   or concave (folded over). Where a corner sits inside a face, the part of that face beyond the
+   corner is clipped off, so the film turns the corner instead of running through it. */
+const SUPPORTS = ['rimFront', 'rimBack', 'rimRight', 'rimLeft'];
+const extent = (F, d) => Math.abs(F.u.dot(d)) * F.w / 2 + Math.abs(F.v.dot(d)) * F.h / 2;
+function mapAcross(A, F, cur, tol) {
+  const V = () => new THREE.Vector3(), dot = A.n.dot(F.n);
+  if (dot > .99) {
+    const dist = V().subVectors(cur.c, F.c).dot(F.n);
+    if (Math.abs(dist) > tol) return null;
+    return { c: cur.c.clone().addScaledVector(F.n, -dist), su: cur.su, sv: cur.sv };
+  }
+  if (Math.abs(dot) > .03) return null;
+  const hA = extent(A, F.n), dA = V().subVectors(F.c, A.c).dot(F.n);
+  const hF = extent(F, A.n), dF = V().subVectors(A.c, F.c).dot(A.n);
+  // is the corner line on each face's outline (either side) or inside it?
+  const onA = Math.abs(Math.abs(dA) - hA) <= tol, inA = Math.abs(dA) <= hA + tol;
+  const onF = Math.abs(Math.abs(dF) - hF) <= tol, inF = Math.abs(dF) <= hF + tol;
+  if (!inA || !inF) return null;
+  if (onA && onF) { if (dA < 0 || dF < 0) return null; }                                // a convex fold
+  else if (onF) { if (V().subVectors(F.c, A.c).dot(A.n) <= 0) return null; }            // F stands out in front of A (inner corner)
+  else if (onA) { if (V().subVectors(A.c, F.c).dot(F.n) <= 0) return null; }            // A stands on F's front side
+  else return null;
+  const e = V().crossVectors(A.n, F.n).normalize(), ae = A.c.dot(e), fe = F.c.dot(e), ea = extent(A, e), ef = extent(F, e);
+  if (Math.min(ae + ea, fe + ef) - Math.max(ae - ea, fe - ef) < 1) return null;   // they must share some of the edge
+  const s = V().subVectors(cur.c, F.c).dot(F.n);
+  const fold = x => { const t = x.dot(F.n); return x.clone().addScaledVector(F.n, -t).addScaledVector(A.n, -t); };
+  return {
+    c: cur.c.clone().addScaledVector(F.n, -s).addScaledVector(A.n, -s), su: fold(cur.su), sv: fold(cur.sv),
+    // at an inner corner the face carrying the corner line keeps only the side the other face looks at
+    clipA: onA ? null : { n: F.n, d: F.c.dot(F.n), sign: 1 },
+    clipF: onF ? null : { n: A.n, d: A.c.dot(A.n), sign: 1 },
+  };
+}
 function placementsFor(o, st) {
   const [aw, ah] = faceMM(o, st.face), r = st.rot * DEG, cs = Math.cos(r), sn = Math.sin(r);
   const fr = RT.get(o.id)?.frames, A = fr?.[st.face];
-  if (!A) return [{ key: st.face, M: [cs, sn, -sn, cs, st.x * aw, st.y * ah] }];
+  if (!A) return [{ key: st.face, M: [cs, sn, -sn, cs, st.x * aw, st.y * ah], clips: [] }];
   const V = () => new THREE.Vector3();
   const su = V().addScaledVector(A.u, cs).addScaledVector(A.v, -sn), sv = V().addScaledVector(A.u, sn).addScaledVector(A.v, cs);
   const c = A.c.clone().addScaledVector(A.u, st.x * aw - aw / 2).addScaledVector(A.v, ah / 2 - st.y * ah);
-  const [sw, sh] = stickerSize(st), R = Math.hypot(sw, sh) / 2 + 1, tol = Math.max(3, 2 * o.thickness + 2);
+  const [sw, sh] = stickerSize(st), R = Math.hypot(sw, sh) / 2 + stickerMargin(st) + 1, tol = Math.max(3, 2 * o.thickness + 2);
   const inner = st.face === 'inside' || st.face === 'insideBottom';
-  const keys = inner ? [st.face] : outerKeys(o);
-  const out = [];
-  for (const k of keys) {
-    const F = fr[k]; if (!F) continue;
-    let c2, su2, sv2;
-    const dot = A.n.dot(F.n);
-    if (dot > .99) {
-      const dist = V().subVectors(c, F.c).dot(F.n);
-      if (Math.abs(dist) > tol) continue;
-      c2 = c.clone().addScaledVector(F.n, -dist); su2 = su; sv2 = sv;
-    } else if (Math.abs(dot) < .03 && k !== st.face) {
-      const hA = Math.abs(A.u.dot(F.n)) * A.w / 2 + Math.abs(A.v.dot(F.n)) * A.h / 2, dA = V().subVectors(F.c, A.c).dot(F.n);
-      const hF = Math.abs(F.u.dot(A.n)) * F.w / 2 + Math.abs(F.v.dot(A.n)) * F.h / 2, dF = V().subVectors(A.c, F.c).dot(A.n);
-      if (Math.abs(dA - hA) > tol || Math.abs(dF - hF) > tol) continue;
-      const s = V().subVectors(c, F.c).dot(F.n);
-      c2 = c.clone().addScaledVector(F.n, -s).addScaledVector(A.n, -s);
-      const fold = x => { const t = x.dot(F.n); return x.clone().addScaledVector(F.n, -t).addScaledVector(A.n, -t); };
-      su2 = fold(su); sv2 = fold(sv);
-    } else continue;
-    const d = V().subVectors(c2, F.c), M = [su2.dot(F.u), -su2.dot(F.v), -sv2.dot(F.u), sv2.dot(F.v), d.dot(F.u) + F.w / 2, F.h / 2 - d.dot(F.v)];
-    if (M[4] < -R || M[4] > F.w + R || M[5] < -R || M[5] > F.h + R) continue;
-    out.push({ key: k, M });
+  const keys = inner ? [] : [...outerKeys(o), ...SUPPORTS].filter(k => fr[k]);
+  const toM = (e, F) => { const d = V().subVectors(e.c, F.c); return [e.su.dot(F.u), -e.su.dot(F.v), -e.sv.dot(F.u), e.sv.dot(F.v), d.dot(F.u) + F.w / 2, F.h / 2 - d.dot(F.v)]; };
+  const start = { key: st.face, c, su, sv, depth: 0, clips: [] };
+  const seen = new Map([[st.face, start]]), queue = [start];
+  while (queue.length) {
+    const cur = queue.shift(), Af = fr[cur.key];
+    if (cur.depth >= 4) continue;
+    for (const k of keys) {
+      if (seen.has(k)) continue;
+      const F = fr[k], m = mapAcross(Af, F, cur, tol); if (!m) continue;
+      const ent = { key: k, c: m.c, su: m.su, sv: m.sv, depth: cur.depth + 1, clips: m.clipF ? [m.clipF] : [] };
+      const M = toM(ent, F);
+      if (M[4] < -R || M[4] > F.w + R || M[5] < -R || M[5] > F.h + R) continue;
+      if (m.clipA) cur.clips.push(m.clipA);
+      seen.set(k, ent); queue.push(ent);
+    }
   }
-  return out;
+  return [...seen.values()].map(e => ({ key: e.key, M: toM(e, fr[e.key]), clips: e.clips }));
 }
 const stickerDirty = new Set();
 /* re-render only the faces a sticker touched before or touches now */
@@ -1528,19 +1557,20 @@ function buildStickerFilms(o) {
     const pls = placementsFor(o, st).filter(pl => rt.frames[pl.key]); if (!pls.length) continue;
     const look = stickerLook(rt, st), [ew, eh] = look.ext;
     const step = Math.max(.6, Math.max(ew, eh) / 140), nx = Math.max(2, Math.ceil(ew / step) + 1), ny = Math.max(2, Math.ceil(eh / step) + 1), N = nx * ny;
-    const P = new Array(N), Nn = new Array(N), own = new Array(N);
+    const P = new Array(N), Nn = new Array(N), own = new Array(N), sup = new Array(N);
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
       const sx = -ew / 2 + ew * i / (nx - 1), sy = -eh / 2 + eh * j / (ny - 1);
       let best = null, near = null, nearD = Infinity;
-      for (const { key, M } of pls) {
+      for (const { key, M, clips } of pls) {
         const F = rt.frames[key], X = M[0] * sx + M[2] * sy + M[4], Y = M[1] * sx + M[3] * sy + M[5];
         const p = F.c.clone().addScaledVector(F.u, X - F.w / 2).addScaledVector(F.v, F.h / 2 - Y);
-        const out = Math.max(0, -X, X - F.w) + Math.max(0, -Y, Y - F.h);
+        let out = Math.max(0, -X, X - F.w) + Math.max(0, -Y, Y - F.h);
+        for (const cl of clips || []) out += Math.max(0, -cl.sign * (p.dot(cl.n) - cl.d));
         if (out < 1e-6) { if (!best || (best.F.n.dot(F.n) > .99 && p.dot(F.n) > best.p.dot(F.n))) best = { p, F }; }
         else if (out < nearD) { nearD = out; near = { p, F }; }
       }
       const hit = best || near, k = j * nx + i;
-      P[k] = hit.p.addScaledVector(hit.F.n, lift); Nn[k] = hit.F.n; own[k] = hit.F;
+      P[k] = hit.p.addScaledVector(hit.F.n, lift); Nn[k] = hit.F.n; own[k] = hit.F; sup[k] = !!best || nearD < 1;
     }
     // bridge steps: upper envelope of the heights, then smoothed; never below the surface
     const R = Math.max(1, Math.round(4 / step)), hgt = new Float32Array(N);
@@ -1566,6 +1596,7 @@ function buildStickerFilms(o) {
     const byPart = new Map();
     for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
       const a = j * nx + i, F = own[a];
+      if (!sup[a] || !sup[a + 1] || !sup[a + nx] || !sup[a + nx + 1]) continue;   // nothing underneath: no film in the air
       if (!byPart.has(F.parent)) byPart.set(F.parent, { F, idx: [] });
       byPart.get(F.parent).idx.push(a, a + nx, a + 1, a + 1, a + nx, a + nx + 1);
     }
@@ -2915,5 +2946,5 @@ let booted = false;
 try { const saved = localStorage.getItem(LS_KEY); if (saved) { loadProject(JSON.parse(saved)); booted = true; } } catch {}
 if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
-window.__boxStudio = { state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target };
+window.__boxStudio = { state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target, placementsFor };
 </script>
