@@ -400,6 +400,8 @@ const PRESETS = [
   { id: 'cake', label: 'Коробка для торта, белая', type: 'box', dims: { w: 220, h: 45, d: 220 }, finish: 'matte', edge: '#ece8e0', thick: .8, wallT: 6, board: '#f7f5f0', lid: { type: 'telescope', lidH: 120, mat: 'clear', fit: 'inside' } },
   { id: 'cakeKraft', label: 'Коробка для торта, крафт', type: 'box', dims: { w: 220, h: 45, d: 220 }, finish: 'matte', edge: '#b88d5c', thick: .8, wallT: 6, board: '#c39460', grain: .45, whiteInside: false, lid: { type: 'telescope', lidH: 120, mat: 'clear', fit: 'inside' } },
   { id: 'gift', label: 'Подарочная коробка', type: 'box', dims: { w: 200, h: 120, d: 200 }, finish: 'soft', edge: '#e2ddd4', thick: 1.5, lid: { type: 'telescope', lidH: 40 } },
+  { id: 'cakeHandle', label: 'Коробка для торта с ручкой 216×216×146', type: 'box', dims: { w: 216, h: 146, d: 216 }, finish: 'matte', edge: '#ece8e0', thick: .8, board: '#f7f5f0', lid: { type: 'handle' }, window: { on: true, place: 'lid', w: 130, d: 130, h: 20, r: 65, off: 0, corners: 'round' }, handle: { shape: 'arch', w: 120, h: 62 } },
+  { id: 'cakeHandleKraft', label: 'Коробка для торта с ручкой 300×300×190, крафт', type: 'box', dims: { w: 300, h: 190, d: 300 }, finish: 'matte', edge: '#b88d5c', thick: 1.2, board: '#c39460', grain: .45, whiteInside: true, lid: { type: 'handle' }, window: { on: true, place: 'lid', w: 200, d: 170, h: 20, r: 10, off: 0, corners: 'round' }, handle: { shape: 'rect', w: 120, h: 60 } },
   { id: 'tray', label: 'Лоток без крышки', type: 'box', dims: { w: 240, h: 60, d: 160 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'none' } },
   { id: 'flat', label: 'Плоская (пицца, одежда)', type: 'box', dims: { w: 330, h: 45, d: 330 }, finish: 'kraft', edge: '#a87f50', thick: 3 },
   { id: 'tube', label: 'Тубус', type: 'tube', dims: { w: 80, h: 200, d: 80 }, finish: 'matte', edge: '#cdb08a' },
@@ -449,9 +451,15 @@ const LID_TYPES = {
   flap: 'Откидная с клапаном снаружи',
   tuck: 'Откидная с клапаном внутрь (мейлер)',
   telescope: 'Отдельная крышка (крышка-дно)',
+  handle: 'С ручкой: крышка с передней стенкой (торт)',
   none: 'Без крышки (лоток)',
 };
 const LID_WALLS = ['lidFront', 'lidRight', 'lidLeft', 'lidBack'];
+const HANDLE_KEYS = ['handleFront', 'handleBack'];
+const HANDLE_SHAPES = { arch: 'Арка', rect: 'Прямоугольная с прорезью' };
+const defaultHandle = dims => { const w = Math.round(clamp(dims.w * .45, 50, 140)); return { on: true, shape: 'arch', w, h: Math.round(w * .52), up: true }; };
+/* the hinged lid has a flap that hangs over the front: an outer flap, or (handle box) the whole front wall */
+const flapLid = o => o.lidType === 'flap' || o.lidType === 'handle';
 /* printed faces of an object, in tab order; depends on the lid construction */
 function faceKeys(o) {
   if (o.type === 'tube') return ['wrap', 'top', 'bottom'];
@@ -467,9 +475,11 @@ function faceKeys(o) {
     return k;
   }
   const lt = o.lidType || 'flat';
-  const k = ['front'];
+  // a handle box has no front wall on the base: its front is the lid's flap
+  const k = lt === 'handle' ? ['flap'] : ['front'];
   if (lt !== 'none') k.push('top');
   if (lt === 'flap' || lt === 'tuck') k.push('flap');
+  if (lt === 'handle' && o.handle?.on) k.push(...HANDLE_KEYS);
   if (lt === 'flap' && o.earsOn) k.push('earLeft', 'earRight');
   if (lt === 'telescope') k.push(...LID_WALLS);
   k.push('right', 'left', 'back', 'bottom');
@@ -484,9 +494,9 @@ const doubleWall = o => o.type === 'box' && wallMM(o) > o.thickness * 1.6 + .2;
 const clearLid = o => o.type === 'box' && o.lidType === 'telescope' && o.lidMat === 'clear';
 const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k))) || o.type === 'torte';
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
-const FACE_LABEL = { extFront: 'Экстендер: перед', extBack: 'Экстендер: зад', fold: 'Внутренний борт', flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
+const FACE_LABEL = { handleFront: 'Ручка: перед', handleBack: 'Ручка: зад', extFront: 'Экстендер: перед', extBack: 'Экстендер: зад', fold: 'Внутренний борт', flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
 const BAG_LABEL = { fold: 'Отворот', left: 'Левый фальц', right: 'Правый фальц' };
-const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : (o.type === 'bag' && BAG_LABEL[k]) || FACE_LABEL[k];
+const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : (o.type === 'bag' && BAG_LABEL[k]) || (o.lidType === 'handle' && k === 'flap' ? 'Перед (откидной)' : FACE_LABEL[k]);
 const BOARD = [['#f4f1e9', 'Белый'], ['#c39460', 'Крафт'], ['#2e3530', 'Графит'], ['#879c79', 'Шалфей'], ['#d28f84', 'Розовый'], ['#8aacca', 'Голубой']];
 const WHITE_INSIDE = '#f8f6ef';
 const SWATCHES = ['#ffffff', '#f3ead6', '#1c1b19', '#20392b', '#0a7aa1', '#b8461b', '#e6007e', '#ffe500'];
@@ -520,6 +530,7 @@ function ensureFaces(o) {
     o.lidMat ??= 'board';
     o.wallT ??= o.thickness;
     o.lidFit ??= 'over';
+    o.handle ??= defaultHandle(o.dims);
   }
   if (o.type === 'torte') { o.lidD ??= Math.round(o.dims.w * .88); o.baseH ??= Math.round(clamp(o.dims.w * .075, 10, 25)); o.lidR ??= Math.round(o.lidD * .06); o.lidDraft ??= .03; o.baseColor ??= TORTE_COLORS[0][0]; o.baseFin ??= 'metal'; }
   if (o.type === 'dome') { o.trayH ??= Math.round(o.dims.h * .45); o.botK ??= .66; o.flangeW ??= 8; o.domeTop ??= .6; o.cornerR ??= 12; }
@@ -543,6 +554,7 @@ function newObject(presetId = 'mailer') {
   const o = { id: uid(), name: p.label, type: p.type, dims: { ...p.dims }, lid: 0, thickness: p.thick ?? 2, finish: p.finish, edge: p.edge,
     grain: p.grain ?? (p.finish === 'kraft' ? .55 : .12), dieline: null, pos: { x: 0, z: 0 }, rotY: 0, faces: {},
     board: '#ffffff', whiteInside: p.whiteInside ?? true, window: p.window ? { ...p.window } : null,
+    handle: p.handle ? { ...defaultHandle(p.dims), ...p.handle } : undefined,
     lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2 };
   if (p.bag) applyBagPreset(o, p);
   if (p.dome) applyDomePreset(o, p);
@@ -598,7 +610,8 @@ function faceMM(o, k) {
   if (k === 'left' || k === 'right') return [d, h];
   const tele = o.lidType === 'telescope', inLid = tele && o.lidMat === 'clear' && o.lidFit === 'inside';
   const lw = inLid ? w - 2 * (wallMM(o) + .6) : w + 2 * o.thickness + 1, ld = inLid ? d - 2 * (wallMM(o) + .6) : d + 2 * o.thickness + 1;
-  if (o.lidType === 'flap' && ['flap', 'earLeft', 'earRight', 'top', 'inside'].includes(k)) {
+  if (HANDLE_KEYS.includes(k)) return [clamp(o.handle?.w ?? 100, 20, w), clamp(o.handle?.h ?? 50, 15, 300)];
+  if (flapLid(o) && ['flap', 'earLeft', 'earRight', 'top', 'inside'].includes(k)) {
     const ld = lidDimsMM(o);
     return k === 'flap' ? [ld.wl, ld.fh] : k.startsWith('ear') ? [ld.el, ld.fh] : [ld.wl, ld.dl];
   }
@@ -641,7 +654,7 @@ function netLayout(o) {
   // that piece is drawn turned 180° (rot), as it lies on the real die.
   const keys = faceKeys(o), lt = o.lidType || 'flat';
   // a window across the hinge needs the lid attached to the back panel too, so the cut is one opening
-  const backLid = lt === 'flap' || lt === 'tuck' || (lt === 'flat' && !!winMM(o) && windowPlace(o) === 'back');
+  const hb = lt === 'handle', backLid = lt === 'flap' || lt === 'tuck' || hb || (lt === 'flat' && !!winMM(o) && windowPlace(o) === 'back');
   const hinged = keys.includes('top') && !backLid && lt !== 'telescope';
   const panels = [];
   let oy = 0, tx = 0, tw = 0, lid = null;
@@ -651,7 +664,7 @@ function netLayout(o) {
   } else if (backLid) {
     const [w0, th] = faceMM(o, 'top'), hasFlap = keys.includes('flap'), [fw, fh] = hasFlap ? faceMM(o, 'flap') : [w0, 0];
     const el = keys.includes('earLeft') ? faceMM(o, 'earLeft')[0] : 0;
-    tw = w0; tx = 2 * d + w + (w - tw) / 2; oy = th + fh;
+    tw = w0; tx = (hb ? d : 2 * d + w) + (w - tw) / 2; oy = th + fh;
     const fx = tx + (tw - fw) / 2;
     panels.push({ key: 'top', x: tx, y: fh, w: tw, h: th, rot: true });
     if (hasFlap) panels.push({ key: 'flap', x: fx, y: 0, w: fw, h: fh, rot: true });
@@ -664,17 +677,19 @@ function netLayout(o) {
     const hf = Math.max(1, h - o.thickness); oy = hf;
     for (const [x, pw] of [[0, d], [d, w], [d + w, d], [2 * d + w, w]]) panels.push({ key: 'fold', x, y: 0, w: pw, h: hf, fold: true });
   }
-  panels.push(
+  // handle box: right, back, left in a row (seen from outside), the floor under the back wall
+  if (hb) panels.push({ key: 'right', x: 0, y: oy, w: d, h }, { key: 'back', x: d, y: oy, w, h }, { key: 'left', x: d + w, y: oy, w: d, h }, { key: 'bottom', x: d, y: oy + h, w, h: d, rot: true });
+  else panels.push(
     { key: 'left', x: 0, y: oy, w: d, h }, { key: 'front', x: d, y: oy, w, h }, { key: 'right', x: d + w, y: oy, w: d, h },
     { key: 'back', x: 2 * d + w, y: oy, w, h }, { key: 'bottom', x: d, y: oy + h, w, h: d });
   let W = Math.max(...panels.map(p => p.x + p.w)), H = oy + h + d;
-  const extra = keys.filter(k => LID_WALLS.includes(k) || (k === 'top' && !hinged && !backLid));
+  const extra = keys.filter(k => LID_WALLS.includes(k) || HANDLE_KEYS.includes(k) || (k === 'top' && !hinged && !backLid));
   if (extra.length) {
     const gap = 15, y = H + gap; let x = 0, rowH = 0;
     for (const k of extra) { const [pw, ph] = faceMM(o, k); panels.push({ key: k, x, y, w: pw, h: ph, part: true }); x += pw + gap; rowH = Math.max(rowH, ph); }
     W = Math.max(W, x - gap); H = y + rowH;
   }
-  return { W, H, panels, oy, hinged, backLid, tx, tw, lid, folds };
+  return { W, H, panels, oy, hinged, backLid, tx, tw, lid, folds, hb };
 }
 /* ---------- tray with a clear domed lid ----------
    A pressed board tray whose walls flare outward from a smaller floor, closed by a thermoformed PET lid:
@@ -1395,10 +1410,11 @@ function makePetMaterial() {
 /* lid outline in mm: an outer-flap lid overhangs the base by the board thickness on the sides and front */
 function lidDimsMM(o) {
   const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4), e = .3;
-  const flap = o.lidType === 'flap';
+  const flap = flapLid(o);
   const wl = flap ? w + 2 * (t + e) : w, dl = flap ? d + t + e : d;
-  const fh = clamp(o.flapH, 3, h);
-  const el = flap && o.earsOn ? (o.earFull ? dl : clamp(o.earLen, 5, dl)) : 0;
+  // a handle box's front flap is the front wall: from the lid down to the table
+  const fh = o.lidType === 'handle' ? h + t : clamp(o.flapH, 3, h);
+  const el = o.lidType === 'flap' && o.earsOn ? (o.earFull ? dl : clamp(o.earLen, 5, dl)) : 0;
   return { wl, dl, fh, el };
 }
 const contactMat = (() => {
@@ -1414,7 +1430,7 @@ const contactMat = (() => {
 function windowPlace(o) {
   const lt = o.lidType || 'flat';
   if (lt === 'none' || clearLid(o)) return null;
-  if (lt === 'telescope') return 'lid';
+  if (lt === 'telescope' || lt === 'handle') return 'lid';
   const pl = o.window.place;
   if (pl === 'lid' || pl === 'back') return pl;
   return lt === 'flat' || lt === 'flap' ? 'edge' : 'lid';
@@ -1558,7 +1574,8 @@ function buildBox(o, rt) {
   const wfH = edgeWin ? edgeWin.whFront * S : 0, wfR = Math.min(wr, wfH * .999);
   // outer shell — orientation matches the cross-shaped dieline
   const frontNotch = wfH > 1e-4 ? notchPts(W, H, ww / 2, wfH, wfR, 'top') : null;
-  addG(g, planeGeo(W, H, frontNotch, 'top'), F('front'), [0, H / 2, D / 2], [0, 0, 0], { face: 'front' });
+  const noFront = o.lidType === 'handle';
+  if (!noFront) addG(g, planeGeo(W, H, frontNotch, 'top'), F('front'), [0, H / 2, D / 2], [0, 0, 0], { face: 'front' });
   const wbH = backWin ? backWin.wh * S : 0, wbR = Math.min(wr, wbH * .999);
   const backNotch = wbH > 1e-4 ? notchPts(W, H, ww / 2, wbH, wbR, 'top') : null;
   addG(g, planeGeo(W, H, backNotch, 'top'), F('back'), [0, H / 2, -D / 2], [0, P, 0], { face: 'back' });
@@ -1572,26 +1589,32 @@ function buildBox(o, rt) {
   // so its inner face and the fold show the board's outer colour
   const WT = wallMM(o) * S, dbl = doubleWall(o), inMat = dbl ? rt.foldMat : rt.innerMat, rimMat = dbl ? rt.foldMat : rt.edgeMat;
   const ih = H - T, iy = (H + T) / 2;
-  addG(g, planeGeo(W - 2 * WT, ih, frontNotch && notchPts(W - 2 * WT, ih, ww / 2, wfH, wfR, 'top'), 'top'), inMat, [0, iy, D / 2 - WT], [0, P, 0], { face: 'inside', wall: true });
+  if (!noFront) addG(g, planeGeo(W - 2 * WT, ih, frontNotch && notchPts(W - 2 * WT, ih, ww / 2, wfH, wfR, 'top'), 'top'), inMat, [0, iy, D / 2 - WT], [0, P, 0], { face: 'inside', wall: true });
   addG(g, planeGeo(W - 2 * WT, ih, backNotch && notchPts(W - 2 * WT, ih, ww / 2, wbH, wbR, 'top'), 'top'), inMat, [0, iy, -D / 2 + WT], [0, 0, 0], { face: 'inside', wall: true });
   add(g, D - 2 * WT, ih, inMat, [W / 2 - WT, iy, 0], [0, -P / 2, 0], { face: 'inside', wall: true });
   add(g, D - 2 * WT, ih, inMat, [-W / 2 + WT, iy, 0], [0, P / 2, 0], { face: 'inside', wall: true });
-  add(g, W - 2 * WT, D - 2 * WT, F('insideBottom'), [0, T, 0], [-P / 2, 0, 0], { face: 'insideBottom' });
+  if (noFront) {
+    // the floor runs out to the open front; the cut edges of the side walls and the floor show there
+    add(g, W - 2 * WT, D - WT, F('insideBottom'), [0, T, WT / 2], [-P / 2, 0, 0], { face: 'insideBottom' });
+    for (const sx of [-1, 1]) add(g, WT, H, rt.edgeMat, [sx * (W / 2 - WT / 2), H / 2, D / 2], [0, 0, 0]);
+    add(g, W, T, rt.edgeMat, [0, T / 2, D / 2], [0, 0, 0]);
+  } else add(g, W - 2 * WT, D - 2 * WT, F('insideBottom'), [0, T, 0], [-P / 2, 0, 0], { face: 'insideBottom' });
   // top edges of the walls (cut edge, or the fold of a double wall), split where a window runs through
   if (frontNotch) {
     const sw = (W - ww) / 2;
     for (const sx of [-1, 1]) add(g, sw, WT, rimMat, [sx * (ww / 2 + sw / 2), H, D / 2 - WT / 2], [-P / 2, 0, 0]);
     addG(g, ribbonGeo(frontNotch.map(p => [p.x, H / 2 + p.y, D / 2]), frontNotch.map(p => [p.x, H / 2 + p.y, D / 2 - WT])), rimMat, [0, 0, 0], [0, 0, 0]);
     if (!edgeWin.flap) film(g, frontNotch, [0, H / 2, D / 2 - WT / 2], [0, 0, 0]);   // behind a flap the film sits on the flap
-  } else add(g, W, WT, rimMat, [0, H, D / 2 - WT / 2], [-P / 2, 0, 0], { support: 'rimFront' });
+  } else if (!noFront) add(g, W, WT, rimMat, [0, H, D / 2 - WT / 2], [-P / 2, 0, 0], { support: 'rimFront' });
   if (backNotch) {
     const sw = (W - ww) / 2;
     for (const sx of [-1, 1]) add(g, sw, WT, rimMat, [sx * (ww / 2 + sw / 2), H, -D / 2 + WT / 2], [-P / 2, 0, 0]);
     addG(g, ribbonGeo(backNotch.map(p => [-p.x, H / 2 + p.y, -D / 2]), backNotch.map(p => [-p.x, H / 2 + p.y, -D / 2 + WT])), rimMat, [0, 0, 0], [0, 0, 0]);
     film(g, backNotch, [0, H / 2, -D / 2 + WT / 2], [0, P, 0]);
   } else add(g, W, WT, rimMat, [0, H, -D / 2 + WT / 2], [-P / 2, 0, 0], { support: 'rimBack' });
-  add(g, WT, D - 2 * WT, rimMat, [W / 2 - WT / 2, H, 0], [-P / 2, 0, 0], { support: 'rimRight' });
-  add(g, WT, D - 2 * WT, rimMat, [-W / 2 + WT / 2, H, 0], [-P / 2, 0, 0], { support: 'rimLeft' });
+  const sideRim = noFront ? D - WT : D - 2 * WT, sideZ = noFront ? WT / 2 : 0;
+  add(g, WT, sideRim, rimMat, [W / 2 - WT / 2, H, sideZ], [-P / 2, 0, 0], { support: 'rimRight' });
+  add(g, WT, sideRim, rimMat, [-W / 2 + WT / 2, H, sideZ], [-P / 2, 0, 0], { support: 'rimLeft' });
   rt.lidPivot = rt.lidGroup = null;
   const lt = o.lidType || 'flat', eps = .3 * S;
   if (lt === 'none') return;
@@ -1643,7 +1666,7 @@ function buildBox(o, rt) {
   }
   // hinged lid; with an outer flap the lid is wider and deeper than the base by the board
   // thickness, so the flap and its ears always wrap the walls from outside
-  const flapOut = lt === 'flap', ld = lidDimsMM(o);
+  const flapOut = flapLid(o), ld = lidDimsMM(o);
   const WL = ld.wl * S, DL = ld.dl * S;
   const pivot = new THREE.Group(); pivot.position.set(0, H, -D / 2); g.add(pivot); rt.lidPivot = pivot;
   // an edge window notches the lid's front edge, a back window its hinge edge
@@ -1672,7 +1695,7 @@ function buildBox(o, rt) {
   if (flapOut) {
     const FH = ld.fh * S;
     // the flap is hinged at the lid's front edge; without ears it springs slightly outward
-    const fp = new THREE.Group(); fp.position.set(0, T, DL); fp.rotation.x = EL > 0 ? 0 : -3.5 * DEG; pivot.add(fp);
+    const fp = new THREE.Group(); fp.position.set(0, T, DL); fp.rotation.x = EL > 0 || noFront ? 0 : -3.5 * DEG; pivot.add(fp);
     // a window across the lid edge continues down the flap
     const fwh = edgeWin ? edgeWin.wh * S : 0, iwh = fwh - T;
     const flapNotch = fwh > 0 ? notchPts(WL, FH, ww / 2, fwh, Math.min(wr, fwh * .999), 'top') : null;
@@ -1702,6 +1725,7 @@ function buildBox(o, rt) {
         add(fp, T, FH - ch, rt.edgeMat, [sx * (WL / 2 - T / 2), -(FH - ch) / 2, -EL], [0, P, 0]);
       }
     } else for (const sx of [-1, 1]) add(fp, T, FH, rt.edgeMat, [sx * WL / 2, -FH / 2, -T / 2], [0, sx * P / 2, 0]);
+    if (noFront && o.handle?.on) buildHandle(o, rt, pivot, T, DL / 2, addG);
     // soft contact shadow on the walls just under the closed flap and ears
     const CH = Math.min(7 * S, H * .25), cy = H + T - FH - CH / 2, lift = .08 * S;
     if (cy > CH / 2) {
@@ -1786,6 +1810,42 @@ function buildDome(o, rt) {
   const pg = new THREE.ShapeGeometry(new THREE.Shape(rrectPts(0, 0, tw * S, th * S, rf * S))), pp = pg.attributes.position, pu = pg.attributes.uv;
   for (let i = 0; i < pp.count; i++) pu.setXY(i, pp.getX(i) / (tw * S) + .5, pp.getY(i) / (th * S) + .5);
   const print = mesh(lg, pg, F('top'), { face: 'top' }, false); print.rotation.x = -P / 2; print.position.y = (top.y + .06) * S; print.renderOrder = 3;
+}
+/* carry handle of a cake box: two leaves standing up from the middle of the lid, back to back, printed
+   on their outer sides; folded down they lie flat on the lid */
+function handleShape(w, h, shape) {
+  const sh = new THREE.Shape(), x0 = -w / 2, y0 = -h / 2;
+  if (shape === 'rect') {
+    const r = Math.min(w, h) * .18;
+    sh.moveTo(x0, y0); sh.lineTo(-x0, y0); sh.lineTo(-x0, -y0 - r); sh.quadraticCurveTo(-x0, -y0, -x0 - r, -y0); sh.lineTo(x0 + r, -y0); sh.quadraticCurveTo(x0, -y0, x0, -y0 - r); sh.lineTo(x0, y0);
+    // hand hole: a rounded slot in the upper part
+    const hw = w * .56, hh = clamp(h * .3, 6, 30), cy = y0 + h * .62, hr = hh / 2, hole = new THREE.Path();
+    hole.absarc(hw / 2 - hr, cy, hr, -Math.PI / 2, Math.PI / 2, false); hole.absarc(-hw / 2 + hr, cy, hr, Math.PI / 2, Math.PI * 1.5, false);
+    sh.holes.push(hole);
+    return sh;
+  }
+  // arch: an outer half-ellipse with a narrower one cut out, standing on two legs
+  const band = clamp(Math.min(w, h) * .2, 5, 25), N = 40;
+  for (let i = 0; i <= N; i++) { const a = Math.PI * i / N, p = [-Math.cos(a) * w / 2, y0 + Math.sin(a) * h]; i ? sh.lineTo(...p) : sh.moveTo(...p); }
+  for (let i = N; i >= 0; i--) { const a = Math.PI * i / N; sh.lineTo(-Math.cos(a) * (w / 2 - band), y0 + Math.sin(a) * (h - band)); }
+  sh.lineTo(x0, y0);
+  return sh;
+}
+function buildHandle(o, rt, pivot, T, zc, addG) {
+  const [w, h] = faceMM(o, 'handleFront'), up = o.handle.up !== false;
+  // the outline is drawn in mm (its hand hole and band have sizes in mm), then scaled into the scene
+  const geo = mirror => {
+    const g = new THREE.ShapeGeometry(handleShape(w, h, o.handle.shape), 24), pos = g.attributes.position, uv = g.attributes.uv;
+    for (let i = 0; i < pos.count; i++) { if (mirror) pos.setX(i, -pos.getX(i)); uv.setXY(i, pos.getX(i) / w + .5, pos.getY(i) / h + .5); }
+    if (mirror) g.index.array.reverse();
+    g.scale(S, S, S);
+    return g;
+  };
+  for (const [key, sz] of [['handleFront', 1], ['handleBack', -1]]) {
+    const hinge = new THREE.Group(); hinge.position.set(0, T, zc + sz * .5 * S); hinge.rotation.x = up ? 0 : sz * (Math.PI / 2 - .02); pivot.add(hinge);
+    addG(hinge, geo(false), rt.faces[key].mat, [0, h / 2 * S, 0], [0, sz > 0 ? 0 : Math.PI, 0], { face: key });
+    addG(hinge, geo(true), rt.foldMat, [0, h / 2 * S, -sz * .05 * S], [0, sz > 0 ? Math.PI : 0, 0]);   // the unprinted back of the leaf
+  }
 }
 function buildTube(o, rt) {
   const R = o.dims.w / 2 * S, H = o.dims.h * S;
@@ -2954,6 +3014,11 @@ function renderModel() {
     ${box ? `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(LID_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : ''}
     ${box && o.lidType !== 'none' ? rangeField(o.lidType === 'telescope' ? 'Поднять крышку' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
     ${box && (o.lidType === 'flap' || o.lidType === 'tuck') ? rangeField('Клапан, мм', 'flapH', 3, 300, 1) : ''}
+    ${box && o.lidType === 'handle' ? `<label class="check"><input type="checkbox" data-k="handle.on"> Ручка</label>` : ''}
+    ${box && o.lidType === 'handle' && o.handle?.on ? `<div class="field wide"><span class="fl">Форма ручки</span><select data-k="handle.shape">${Object.entries(HANDLE_SHAPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+      + rangeField('Ручка: ширина, мм', 'handle.w', 20, 400, 1) + rangeField('Ручка: высота, мм', 'handle.h', 15, 200, 1)
+      + `<label class="check"><input type="checkbox" data-k="handle.up"> Ручка поднята</label>`
+      + `<p class="hint">Крышка вместе с передней стенкой откидывается от заднего ребра. Ручка — два лепестка на крышке, у каждого своя грань для печати.</p>` : ''}
     ${box && o.lidType === 'flap' ? `<label class="check"><input type="checkbox" data-k="earsOn"> Боковые ушки клапана</label>` : ''}
     ${box && o.lidType === 'flap' && o.earsOn ? `<label class="check"><input type="checkbox" data-k="earFull"> Ушки на всю глубину коробки</label>` : ''}
     ${box && o.lidType === 'flap' && o.earsOn && !o.earFull ? rangeField('Длина ушек, мм', 'earLen', 5, 800, 1) : ''}
@@ -2989,6 +3054,7 @@ function renderModel() {
     if (k === 'lidType') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'wallT' || k === 'lidFit') { rebuildQueue.add(o.id); applyObjMaterials(o); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lidMat') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+    if (k.startsWith('handle.')) { ensureFaces(o); rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'handle.on' || k === 'handle.shape') { select(o.id, sel.face); renderModel(); } return; }
     if (k === 'earsOn' || k === 'earFull') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k.startsWith('dims') || k === 'thickness') { rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
@@ -3048,6 +3114,7 @@ function renderModel() {
       for (const [k, v] of [['flapH', p.lid?.flapH], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
       o.lidMat = p.lid?.mat ?? 'board'; o.lidFit = p.lid?.fit ?? 'over'; o.wallT = p.wallT ?? o.thickness;
       o.earsOn = true; o.earFull = true;
+      if (o.lidType === 'handle') o.handle = { ...defaultHandle(o.dims), ...(p.handle || {}) };
       if (p.whiteInside != null) o.whiteInside = p.whiteInside;
       ensureFaces(o); if (p.board) setBoard(o, p.board);
       applyObjMaterials(o); select(o.id, sel.face);
@@ -3249,6 +3316,7 @@ function sealSpot(o) {
   if (o.type === 'torte') return { face: 'lidWrap', x: .5, y: .97 };
   if (o.type !== 'box') return { face: faceKeys(o)[0], x: .5, y: .5 };
   if (lt === 'flap') return { face: 'flap', x: .5, y: 1 };
+  if (lt === 'handle') return { face: 'flap', x: 1, y: .55, rot: 90 };
   if (lt === 'telescope') return clearLid(o) && o.lidFit === 'inside' ? { face: 'top', x: .5, y: .5 } : { face: 'lidFront', x: .5, y: 1 };
   if (lt === 'none') return { face: 'front', x: .5, y: .5 };
   return { face: 'front', x: .5, y: 0 };
@@ -3832,7 +3900,9 @@ function templateSVG(o) {
     const { w, h, d } = o.dims, oy = n.oy;
     // base cut outline (the lid row is cut as separate parts)
     const L = n.lid, ly = L ? L.fh : 0, fx0 = L ? L.fx - L.el : 0, fx1 = L ? L.fx + L.fw + L.el : 0;
-    const pts = n.backLid
+    const pts = n.hb
+      ? [[0, oy], [n.tx, oy], [n.tx, 0], [n.tx + n.tw, 0], [n.tx + n.tw, oy], [2 * d + w, oy], [2 * d + w, oy + h], [d + w, oy + h], [d + w, oy + h + d], [d, oy + h + d], [d, oy + h], [0, oy + h]]
+      : n.backLid
       ? [[0, oy], [n.tx, oy], [n.tx, ly], [fx0, ly], ...(L.el ? [[fx0, L.ch], [fx0 + L.ch, 0], [fx1 - L.ch, 0], [fx1, L.ch]] : [[fx0, 0], [fx1, 0]]), [fx1, ly], [n.tx + n.tw, ly], [n.tx + n.tw, oy],
          [2 * d + 2 * w, oy], [2 * d + 2 * w, oy + h], [d + w, oy + h], [d + w, oy + h + d], [d, oy + h + d], [d, oy + h], [0, oy + h]]
       : n.hinged
@@ -3840,7 +3910,8 @@ function templateSVG(o) {
       : [[0, 0], [2 * d + 2 * w, 0], [2 * d + 2 * w, oy + h], [d + w, oy + h], [d + w, oy + h + d], [d, oy + h + d], [d, oy + h], [0, oy + h]];
     body += `<polygon points="${pts.map(p => p.map(f).join(',')).join(' ')}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
     const wins = netWindows(o, n);
-    let folds = [[d, oy + h, d + w, oy + h], [d, oy, d, oy + h], [d + w, oy, d + w, oy + h], [2 * d + w, oy, 2 * d + w, oy + h]];
+    let folds = n.hb ? [[d, oy + h, d + w, oy + h], [d, oy, d, oy + h], [d + w, oy, d + w, oy + h], [d, oy, d + w, oy], [n.lid.fx, n.lid.fh, n.lid.fx + n.lid.fw, n.lid.fh]]
+      : [[d, oy + h, d + w, oy + h], [d, oy, d, oy + h], [d + w, oy, d + w, oy + h], [2 * d + w, oy, 2 * d + w, oy + h]];
     if (n.hinged) folds.push([d, oy, d + w, oy]);
     if (n.folds) {
       folds.push([0, oy, 2 * d + 2 * w, oy]);
@@ -3850,7 +3921,7 @@ function templateSVG(o) {
       const [tl, tr, br, bl] = q.radii, x = q.x, y = q.y, X = q.x + q.w, Y = q.y + q.h, arc = (r, ex, ey) => r ? `A${f(r)},${f(r)} 0 0 1 ${f(ex)},${f(ey)}` : '';
       body += `<path d="M${f(x + tl)},${f(y)} H${f(X - tr)} ${arc(tr, X, y + tr)} V${f(Y - br)} ${arc(br, X - br, Y)} H${f(x + bl)} ${arc(bl, x, Y - bl)} V${f(y + tl)} ${arc(tl, x + tl, y)} Z" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
     }
-    if (n.backLid) {
+    if (n.backLid && !n.hb) {
       folds.push([2 * d + w, oy, 2 * d + 2 * w, oy]);
       if (ly > 0) folds.push([L.fx, ly, L.fx + L.fw, ly]);
       if (L.el) folds.push([L.fx, 0, L.fx, ly], [L.fx + L.fw, 0, L.fx + L.fw, ly]);
