@@ -405,6 +405,7 @@ const PRESETS = [
   { id: 'cakeHandleFront', label: 'Коробка для торта с ручкой и окном спереди 200×200×190', type: 'box', dims: { w: 200, h: 190, d: 200 }, finish: 'matte', edge: '#ece8e0', thick: .8, board: '#f7f5f0', lid: { type: 'handle' }, window: { on: true, place: 'lid', w: 150, d: 150, h: 20, r: 6, off: 0, corners: 'round' }, handle: { shape: 'photo', w: 130, h: 75, bridge: 26 }, frontWin: { on: true, w: 140, h: 110, y: 100, r: 3 } },
   { id: 'mailerSleeve', label: 'Мейлер крафт с рукавом', type: 'box', dims: { w: 260, h: 90, d: 190 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'tuck', flapH: 45 }, sleeve: { axis: 'x', w: 170, bg: '#d32f2f', fin: 'matte' } },
   { id: 'boxBand', label: 'Коробка крафт с узкой бандеролью', type: 'box', dims: { w: 260, h: 110, d: 200 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'telescope', lidH: 50 }, sleeve: { axis: 'z', w: 55, x: 30, bg: '#2a2a2a', fin: 'soft' } },
+  { id: 'cakeSleeveHandle', label: 'Коробка для торта крафт с рукавом-ручкой', type: 'box', dims: { w: 260, h: 140, d: 260 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'telescope', lidH: 70 }, sleeve: { axis: 'x', w: 120, bg: '#f2a9b4', fin: 'matte', handle: { on: true, h: 80, r: 22, hole: { w: 70, h: 22, y: 44, r: 11 } } } },
   { id: 'matchbox', label: 'Коробка-пенал: лоток в рукаве', type: 'box', dims: { w: 180, h: 50, d: 120 }, finish: 'matte', edge: '#e2ddd4', thick: 1, board: '#f4f1e9', lid: { type: 'none' }, sleeve: { axis: 'x', w: 182, bg: '#1f3b57', fin: 'soft' } },
   { id: 'tray', label: 'Лоток без крышки', type: 'box', dims: { w: 240, h: 60, d: 160 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'none' } },
   { id: 'flat', label: 'Плоская (пицца, одежда)', type: 'box', dims: { w: 330, h: 45, d: 330 }, finish: 'kraft', edge: '#a87f50', thick: 3 },
@@ -568,6 +569,7 @@ function ensureFaces(o) {
     o.lidFit ??= 'over';
     o.handle ??= defaultHandle(o.dims);
     o.sleeve ??= defaultSleeve(o.dims);
+    o.sleeve.handle ??= defaultSleeveHandle();
     if (o.handle.rTop == null) applyHandlePreset(o.handle, o.handle.shape || 'arch');   // projects from before adjustable handles
     o.frontWin ??= defaultFrontWin(o.dims);
     if (o.lidType === 'handle') { o.hbSides ??= 'right'; o.tray ??= { out: 0, fin: 'board' }; o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 0, cake: true }; }
@@ -594,7 +596,7 @@ function newObject(presetId = 'mailer') {
   const o = { id: uid(), name: p.label, type: p.type, dims: { ...p.dims }, lid: 0, thickness: p.thick ?? 2, finish: p.finish, edge: p.edge,
     grain: p.grain ?? (p.finish === 'kraft' ? .55 : .12), dieline: null, pos: { x: 0, z: 0 }, rotY: 0, faces: {},
     board: '#ffffff', whiteInside: p.whiteInside ?? true, window: p.window ? { ...p.window } : null,
-    sleeve: p.sleeve ? { ...defaultSleeve(p.dims), ...p.sleeve, on: true } : undefined,
+    sleeve: p.sleeve ? { ...defaultSleeve(p.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true } : undefined,
     handle: p.handle ? applyHandlePreset({ ...defaultHandle(p.dims), ...p.handle }, p.handle.shape || 'arch') : undefined,
     frontWin: p.frontWin ? { ...defaultFrontWin(p.dims), ...p.frontWin } : undefined,
     lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2 };
@@ -735,8 +737,8 @@ function netLayout(o) {
     W = Math.max(W, x - gap); H = y + rowH;
   }
   if (sleeveOn(o)) {
-    const SD = sleeveDims(o), y = H + 15;
-    panels.push({ key: 'sleeve', x: 0, y, w: SD.bw, h: SD.P, part: true, creases: SD.stops.slice(1, 4).map(s => [0, y + s, SD.bw, y + s]) },
+    const SD = sleeveDims(o), y = H + 15, sh = sleeveSheet(SD), m = q => q.map(([a, b]) => [a, y + b]);
+    panels.push({ key: 'sleeve', x: 0, y, w: SD.bw, h: SD.P, part: true, creases: sh.creases.map(([a, b, c, d]) => [a, y + b, c, y + d]), ...(sh.outline ? { poly: m(sh.outline), holes: sh.holes.map(m) } : {}) },
       { key: 'glue', blank: 'клеевой клапан', x: 0, y: y + SD.P, w: SD.bw, h: SLEEVE_GLUE, part: true, crease: true });
     W = Math.max(W, SD.bw); H = y + SD.P + SLEEVE_GLUE;
   }
@@ -2174,7 +2176,8 @@ const SLEEVE_AXES = { x: 'Поперёк ширины: верх, перед, д�
 const SLEEVE_FIN = { matte: 'Матовая бумага', gloss: 'Глянцевая ламинация', soft: 'Soft-touch', kraft: 'Крафт' };
 const SLEEVE_GLUE = 15;   // mm of glue flap on the die
 const sleeveOn = o => o.type === 'box' && o.lidType !== 'handle' && !!o.sleeve?.on;
-const defaultSleeve = dims => ({ on: false, axis: 'x', w: Math.round(dims.w * .5), x: 0, slide: 0, fin: 'matte' });
+const defaultSleeveHandle = () => ({ on: false, h: 75, r: 18, hole: { w: 70, h: 22, y: 38, r: 11 } });
+const defaultSleeve = dims => ({ on: false, axis: 'x', w: Math.round(dims.w * .5), x: 0, slide: 0, fin: 'matte', handle: defaultSleeveHandle() });
 /* the closed box's outline the sleeve wraps (mm): x half width, z front/back, y top */
 function boxEnvelope(o) {
   const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4), lt = o.lidType || 'flat';
@@ -2196,44 +2199,93 @@ function sleeveDims(o) {
   const len = ax === 'x' ? 2 * E.hx : E.zf - E.zb, mid = ax === 'x' ? 0 : (E.zf + E.zb) / 2;
   const bw = clamp(S0.w ?? len * .5, 10, len + 2 * g), c = mid + clamp(S0.x || 0, -(len - bw) / 2 - g, (len - bw) / 2 + g);
   const A = a1 - a0, Hh = y1 - y0;
-  // panels in path order, each with its length; the path starts at the top's back (x) / left (z) edge
-  const names = ax === 'x' ? ['top', 'front', 'bottom', 'back'] : ['top', 'right', 'bottom', 'left'];
-  const lens = [A, Hh, A, Hh], P = 2 * (A + Hh), stops = [0];
+  // a carry handle: the band rises from the middle of the top in two layers and comes down again
+  const hh = S0.handle?.on ? clamp(S0.handle.h ?? 70, 15, 300) : 0;
+  const names = hh ? ['topA', 'handleA', 'handleB', 'topB', ...(ax === 'x' ? ['front', 'bottom', 'back'] : ['right', 'bottom', 'left'])]
+    : ax === 'x' ? ['top', 'front', 'bottom', 'back'] : ['top', 'right', 'bottom', 'left'];
+  const lens = hh ? [A / 2, hh, hh, A / 2, Hh, A, Hh] : [A, Hh, A, Hh], stops = [0];
   for (const l of lens) stops.push(stops[stops.length - 1] + l);
-  return { ax, y0, y1, a0, a1, A, Hh, P, bw, c, len, names, lens, stops, st, E };
+  const P = stops[stops.length - 1];
+  return { ax, y0, y1, a0, a1, am: (a0 + a1) / 2, A, Hh, P, bw, c, len, names, lens, stops, st, E, hh, leaf: hh ? sleeveLeaf(S0.handle, bw, hh) : null };
+}
+/* the handle leaf of a sleeve (mm, x across the band from its centre, y up from the top of the box): the
+   outline's top corners are rounded, the hand hole sits y above the box */
+function sleeveLeaf(H, bw, hh) {
+  const r = clamp(H.r ?? 18, 0, Math.min(bw / 2, hh) - .5), hl = H.hole || {};
+  const hw = clamp(hl.w ?? bw * .55, 0, bw - 8), hhh = clamp(hl.h ?? 22, 0, hh - 6), hy = clamp(hl.y ?? hh - hhh - 14, 3, Math.max(3, hh - hhh - 3)), hr = clamp(hl.r ?? hhh / 2, 0, Math.min(hw, hhh) / 2);
+  const P = Math.PI, outer = [[bw / 2, 0], ...arcPts(bw / 2 - r, hh - r, r, 0, P / 2), ...arcPts(-bw / 2 + r, hh - r, r, P / 2, P), [-bw / 2, 0]];
+  const hole = hw > 1 && hhh > 1 ? rrPoly(-hw / 2, hy, hw / 2, hy + hhh, hr, hr).map(v => [v.x, v.y]) : null;
+  // half width of the leaf at height y (the outline narrows only in the rounded corners)
+  const half = y => y <= hh - r ? bw / 2 : bw / 2 - r + Math.sqrt(Math.max(0, r * r - (y - hh + r) ** 2));
+  return { r, outer, hole, half };
 }
 const SLEEVE_PANEL = { top: 'верх', front: 'перед', bottom: 'дно', back: 'зад', right: 'правый бок', left: 'левый бок' };
+const sleevePanelLabel = (SD, k) => k === 'topA' ? `верх: ${SD.ax === 'x' ? 'задняя' : 'левая'} половина` : k === 'topB' ? `верх: ${SD.ax === 'x' ? 'передняя' : 'правая'} половина`
+  : k === 'handleA' ? `ручка: ${SD.ax === 'x' ? 'задняя' : 'левая'} сторона` : k === 'handleB' ? `ручка: ${SD.ax === 'x' ? 'передняя' : 'правая'} сторона` : SLEEVE_PANEL[k];
+/* the sleeve on the sheet: canvas mm (x across, y along the band from its start), as the outline with the
+   handle's rounded corners, the hand holes and the creases */
+function sleeveSheet(SD) {
+  const { bw, P, stops, leaf, hh } = SD;
+  if (!leaf) return { outline: null, holes: [], creases: stops.slice(1, -1).map(s => [0, s, bw, s]) };
+  const sA = stops[1], N = 16, side = sg => {
+    const pts = [];
+    for (let i = 0; i <= N; i++) { const y = hh * i / N; pts.push([bw / 2 + sg * leaf.half(y), sA + y]); }
+    for (let i = N - 1; i >= 0; i--) { const y = hh * i / N; pts.push([bw / 2 + sg * leaf.half(y), sA + 2 * hh - y]); }
+    return pts;
+  };
+  const L = side(-1), R = side(1).reverse();
+  const outline = [[0, 0], ...L, [0, P + SLEEVE_GLUE], [bw, P + SLEEVE_GLUE], ...R, [bw, 0]];
+  const holes = leaf.hole ? [leaf.hole.map(([x, y]) => [bw / 2 + x, sA + y]), leaf.hole.map(([x, y]) => [bw / 2 + x, sA + 2 * hh - y])] : [];
+  const fold = leaf.half(hh);
+  const creases = stops.slice(1, -1).map((s, i) => i === 1 ? [bw / 2 - fold, s, bw / 2 + fold, s] : [0, s, bw, s]);
+  return { outline, holes, creases };
+}
 function buildSleeve(o, rt) {
   rt.sleeve = null;
   if (!sleeveOn(o)) return;
-  const D = sleeveDims(o), g = new THREE.Group(), st = D.st, P = Math.PI;
+  const D = sleeveDims(o), g = new THREE.Group(), st = D.st;
   sleeveColors(o, rt);
-  // a point of the path at distance s (mm), with the outward normal; b runs across the band (canvas x)
-  const corners = [[D.a0, D.y1], [D.a1, D.y1], [D.a1, D.y0], [D.a0, D.y0]];   // (a, y): top-back, top-front, bottom-front, bottom-back
-  const at = (i, out) => { const [a, y] = corners[i % 4], na = a > (D.a0 + D.a1) / 2 ? 1 : -1, ny = y > 0 ? 1 : -1; return [a + na * out, y + ny * out]; };
   // map (along-axis b, section a, y) to box space; across the band runs to the right as seen from the front (x) / right (z)
   const X = (b, a, y) => D.ax === 'x' ? [b, y, a] : [a, y, b];
-  const b0 = D.c - D.bw / 2, b1 = D.c + D.bw / 2, mat = rt.faces.sleeve.mat;
+  const b0 = D.c - D.bw / 2, b1 = D.c + D.bw / 2, mat = rt.faces.sleeve.mat, [L, R] = D.ax === 'x' ? [b0, b1] : [b1, b0];
+  const toV3 = (na, ny) => new THREE.Vector3(...X(0, na, ny)).sub(new THREE.Vector3(...X(0, 0, 0))).normalize();
   const quad = (pts, uvs, m, face, outward) => {
     let geo = quadGeo(pts, uvs);
     const n = new THREE.Vector3().fromBufferAttribute(geo.attributes.normal, 0);
     if (n.dot(outward) < 0) { geo.dispose(); geo = quadGeo([pts[0], pts[3], pts[2], pts[1]], uvs && [uvs[0], uvs[3], uvs[2], uvs[1]]); }
     const mesh = new THREE.Mesh(geo, m); mesh.castShadow = mesh.receiveShadow = true; mesh.userData = { objId: o.id, face }; g.add(mesh); return mesh;
   };
-  for (let i = 0; i < 4; i++) {
-    const [pa, py] = at(i, st), [qa, qy] = at(i + 1, st), [ia, iy] = at(i, 0), [ja, jy] = at(i + 1, 0);
-    const v0 = 1 - D.stops[i] / D.P, v1 = 1 - D.stops[i + 1] / D.P;
-    const mid = [(pa + qa) / 2, (py + qy) / 2], cen = [(D.a0 + D.a1) / 2, (D.y0 + D.y1) / 2];
-    const out = new THREE.Vector3(...X(0, mid[0] - cen[0], mid[1] - cen[1])).sub(new THREE.Vector3(...X(0, 0, 0)));
-    if (D.ax === 'x') out.x = 0; else out.z = 0;
-    out.normalize();
-    // across the band: canvas x = 0 is the left edge seen from outside; on the far half of the loop that flips
-    const [L, R] = D.ax === 'x' ? [b0, b1] : [b1, b0];
+  // the flat parts of the loop, as (a, y) points out by `out`, with their stretch of the band
+  const pts = out => ({ TB: [D.a0 - out, D.y1 + out], M: [D.am, D.y1 + out], TF: [D.a1 + out, D.y1 + out], BF: [D.a1 + out, D.y0 - out], BB: [D.a0 - out, D.y0 - out] });
+  const s = D.stops, segs = D.hh ? [['TB', 'M', s[0], s[1]], ['M', 'TF', s[3], s[4]], ['TF', 'BF', s[4], s[5]], ['BF', 'BB', s[5], s[6]], ['BB', 'TB', s[6], s[7]]]
+    : [['TB', 'TF', s[0], s[1]], ['TF', 'BF', s[1], s[2]], ['BF', 'BB', s[2], s[3]], ['BB', 'TB', s[3], s[4]]];
+  const O = pts(st), I = pts(0);
+  for (const [k0, k1, s0, s1] of segs) {
+    const [pa, py] = O[k0], [qa, qy] = O[k1], [ia, iy] = I[k0], [ja, jy] = I[k1], v0 = 1 - s0 / D.P, v1 = 1 - s1 / D.P;
+    const ta = qa - pa, ty = qy - py, tl = Math.hypot(ta, ty) || 1, out = toV3(-ty / tl, ta / tl);
     quad([X(L, pa, py), X(R, pa, py), X(R, qa, qy), X(L, qa, qy)], [[0, v0], [1, v0], [1, v1], [0, v1]], mat, 'sleeve', out);
     quad([X(L, ia, iy), X(R, ia, iy), X(R, ja, jy), X(L, ja, jy)], null, rt.sleeveIn, null, out.clone().negate());
     for (const [b, sg] of [[b0, -1], [b1, 1]]) {
       const e = new THREE.Vector3(...(D.ax === 'x' ? [sg, 0, 0] : [0, 0, sg]));
       quad([X(b, ia, iy), X(b, pa, py), X(b, qa, qy), X(b, ja, jy)], null, rt.sleeveEdge, null, e);
+    }
+  }
+  if (D.leaf) {
+    // the handle: two leaves back to back standing on the middle of the top, the hand hole through both
+    const sh = new THREE.Shape(D.leaf.outer.map(p => V2(...p)));
+    if (D.leaf.hole) sh.holes.push(new THREE.Path(D.leaf.hole.map(p => V2(...p))));
+    for (const [sg, outA] of [[-1, -1], [1, 1]]) {
+      const geo = new THREE.ShapeGeometry(sh, 16), pos = geo.attributes.position, uv = geo.attributes.uv, base = D.y1 + st;
+      for (let i = 0; i < pos.count; i++) {
+        const xs = pos.getX(i), ys = pos.getY(i), b = D.c + xs, sp = sg < 0 ? s[1] + ys : s[1] + 2 * D.hh - ys;
+        uv.setXY(i, D.ax === 'x' ? (b - b0) / D.bw : (b1 - b) / D.bw, 1 - sp / D.P);
+        const p = X(b, D.am + sg * .2, base + ys); pos.setXYZ(i, p[0] * S, p[1] * S, p[2] * S);
+      }
+      geo.computeVertexNormals();
+      const want = toV3(outA, 0), n = new THREE.Vector3().fromBufferAttribute(geo.attributes.normal, 0);
+      if (n.dot(want) < 0) { geo.index.array.reverse(); geo.computeVertexNormals(); }
+      const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; m.userData = { objId: o.id, face: 'sleeve' }; g.add(m);
+      const back = new THREE.Mesh(geo.clone(), rt.sleeveIn); back.geometry.index.array.reverse(); back.geometry.computeVertexNormals(); back.userData = { objId: o.id, face: null }; g.add(back);
     }
   }
   rt.sleeve = g; rt.group.add(g);
@@ -3468,6 +3520,10 @@ function renderModel() {
     ${box && sleeveOn(o) ? (() => { const SD = sleeveDims(o); return `<div class="field wide"><span class="fl">Рукав опоясывает</span><select data-k="sleeve.axis">${Object.entries(SLEEVE_AXES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + rangeField('Рукав: ширина ленты, мм', 'sleeve.w', 10, Math.ceil(SD.len + 1), 1) + rangeField('Рукав: смещение от центра, мм', 'sleeve.x', -Math.ceil(SD.len / 2), Math.ceil(SD.len / 2), 1)
       + rangeField('Сдвинуть рукав, мм', 'sleeve.slide', 0, Math.ceil(SD.len + SD.bw), 1)
+      + `<label class="check"><input type="checkbox" data-k="sleeve.handle.on"> Ручка из рукава (лента поднимается над крышкой)</label>`
+      + (o.sleeve.handle?.on ? rangeField('Ручка: высота, мм', 'sleeve.handle.h', 15, 300, 1) + rangeField('Ручка: скругление верхних углов, мм', 'sleeve.handle.r', 0, 100, .5)
+        + rangeField('Пройма: ширина, мм', 'sleeve.handle.hole.w', 0, 400, 1) + rangeField('Пройма: высота, мм', 'sleeve.handle.hole.h', 0, 200, 1)
+        + rangeField('Пройма: от крышки, мм', 'sleeve.handle.hole.y', 3, 300, .5) + rangeField('Пройма: скругление, мм', 'sleeve.handle.hole.r', 0, 100, .5) : '')
       + `<div class="field wide"><span class="fl">Бумага рукава</span><select data-k="sleeve.fin">${Object.entries(SLEEVE_FIN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + `<p class="hint">Дизайн рукава — грань «Рукав»: одна лента, на ней отмечены сгибы (${SD.names.map(k => SLEEVE_PANEL[k]).join(', ')}). Цвет бумаги — фон этой грани. На развёртке рукав — отдельная деталь с биговками и клеевым клапаном.${o.lidType !== 'none' ? ' Перед открытием крышки сдвиньте рукав.' : ' Лоток в рукаве — коробка-пенал: сдвиньте рукав, чтобы выдвинуть лоток.'}</p>`; })() : ''}
     ${box && windowPlace(o) ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
@@ -3499,7 +3555,7 @@ function renderModel() {
     if (k.startsWith('sleeve.')) {
       if (k === 'sleeve.axis') { const SD = sleeveDims(o); o.sleeve.x = 0; o.sleeve.w = Math.round(Math.min(o.sleeve.w, SD.len)); o.sleeve.slide = 0; }
       ensureFaces(o); rebuildQueue.add(o.id); markFace(o, 'sleeve'); ui.net = ui.editor = true; updateFaceMeta();
-      if (k === 'sleeve.on' || k === 'sleeve.axis') { select(o.id, k === 'sleeve.on' && o.sleeve.on ? 'sleeve' : sel.face); renderModel(); renderFaceTabs(); }
+      if (k === 'sleeve.on' || k === 'sleeve.axis' || k === 'sleeve.handle.on') { select(o.id, k === 'sleeve.on' && o.sleeve.on ? 'sleeve' : sel.face); renderModel(); renderFaceTabs(); }
       return;
     }
     if (k === 'handle.shape') applyHandlePreset(o.handle, o.handle.shape);
@@ -3569,7 +3625,7 @@ function renderModel() {
       for (const [k, v] of [['flapH', p.lid?.flapH], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
       o.lidMat = p.lid?.mat ?? 'board'; o.lidFit = p.lid?.fit ?? 'over'; o.wallT = p.wallT ?? o.thickness;
       o.earsOn = true; o.earFull = true;
-      if (p.sleeve) { o.sleeve = { ...defaultSleeve(o.dims), ...p.sleeve, on: true }; ensureFaces(o); if (p.sleeve.bg) o.faces.sleeve.bg = p.sleeve.bg; }
+      if (p.sleeve) { o.sleeve = { ...defaultSleeve(o.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true }; ensureFaces(o); if (p.sleeve.bg) o.faces.sleeve.bg = p.sleeve.bg; }
       if (o.lidType === 'handle') {
         o.handle = applyHandlePreset({ ...defaultHandle(o.dims), ...(p.handle || {}) }, p.handle?.shape || 'arch');
         o.frontWin = { ...defaultFrontWin(o.dims), ...(p.frontWin || {}) };
@@ -3928,12 +3984,16 @@ function drawEditor() {
     const SD = sleeveDims(o);
     c.save(); c.strokeStyle = 'rgba(230,0,126,.75)'; c.setLineDash([5, 4]); c.lineWidth = 1;
     c.fillStyle = 'rgba(120,110,95,.85)'; c.font = '600 11px Onest, system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
-    SD.stops.slice(0, 4).forEach((s0, i) => {
-      const y = s0 / SD.P * dh;
+    SD.names.forEach((nm, i) => {
+      const y = SD.stops[i] / SD.P * dh, flip = SD.hh ? i === 2 || i >= 5 : i >= 2;
       if (i) { c.beginPath(); c.moveTo(0, y); c.lineTo(dw, y); c.stroke(); }
-      c.fillText(SLEEVE_PANEL[SD.names[i]] + (i > 1 ? ' (вверх ногами)' : ''), 6, y + 5);
+      c.fillText(sleevePanelLabel(SD, nm) + (flip ? ' (вверх ногами)' : ''), 6, y + 5);
     });
-    c.setLineDash([]); c.restore();
+    // the handle's cut: rounded corners and the hand holes
+    const sh = sleeveSheet(SD), kx = dw / SD.bw, ky = dh / SD.P;
+    c.setLineDash([]); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1.2;
+    for (const q of [...(sh.outline ? [sh.outline.filter(([, y]) => y <= SD.P)] : []), ...sh.holes]) { c.beginPath(); q.forEach(([x, y], i) => c[i ? 'lineTo' : 'moveTo'](x * kx, y * ky)); if (q !== sh.outline) c.closePath(); c.stroke(); }
+    c.restore();
   }
   const fw = faceWindow(o, sel.face);
   if (fw) {
