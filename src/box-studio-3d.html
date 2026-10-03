@@ -2039,6 +2039,7 @@ function stickerSize(st) {
 function computeFrames(o, rt) {
   rt.frames = null;
   if (o.type === 'bag') { rt.frames = rt.bagFrames || null; return; }
+  if (o.type === 'dome') { rt.frames = domeFrames(o, rt); return; }
   if (o.type !== 'box') return;
   const saved = o.lid; o.lid = 0; applyLid(o);
   rt.group.updateMatrixWorld(true);
@@ -2055,6 +2056,39 @@ function computeFrames(o, rt) {
   });
   o.lid = saved; applyLid(o);
   rt.frames = frames;
+}
+/* sticker frames of the tray: four sloping walls, the floor and the lid's flat top. A wall's frame is the
+   sheet rectangle (rim width × slant) lying in the wall's plane; the part of it beyond the wall's slanted
+   side edges is cut off by the mitre plane through that corner, so a film turns the corner instead */
+function domeFrames(o, rt) {
+  const G = domeGeom(o), { w, d, wb, db, trayH: H, hd } = G, V = a => new THREE.Vector3(...a), I4 = new THREE.Matrix4(), frames = {};
+  const walls = [['front', 0, 1, w, wb, d / 2, db / 2], ['back', 0, -1, w, wb, d / 2, db / 2], ['right', 1, 0, d, db, w / 2, wb / 2], ['left', -1, 0, d, db, w / 2, wb / 2]];
+  for (const [key, nx, nz, wt, wf, dt, df] of walls) {
+    const tx = nz, tz = -nx, pt = (dist, wid, k, y) => V([nx * dist + tx * wid * k, y, nz * dist + tz * wid * k]);
+    const corners = [pt(df, wf, -.5, 0), pt(df, wf, .5, 0), pt(dt, wt, .5, H), pt(dt, wt, -.5, H)];
+    const bc = corners[0].clone().add(corners[1]).multiplyScalar(.5), sv = corners[2].clone().add(corners[3]).multiplyScalar(.5).sub(bc), h = sv.length();
+    sv.divideScalar(h);
+    const u = V([tx, 0, tz]);
+    frames[key] = { c: bc.clone().addScaledVector(sv, h / 2), u, v: sv, n: new THREE.Vector3().crossVectors(u, sv).normalize(), w: wt, h, parent: rt.group, pinv: I4, corners, clip: [] };
+  }
+  frames.bottom = { c: V([0, 0, 0]), u: V([1, 0, 0]), v: V([0, 0, 1]), n: V([0, -1, 0]), w: wb, h: db, parent: rt.group, pinv: I4,
+    corners: [V([-wb / 2, 0, -db / 2]), V([wb / 2, 0, -db / 2]), V([wb / 2, 0, db / 2]), V([-wb / 2, 0, db / 2])] };
+  const [tw, th] = faceMM(o, 'top');
+  frames.top = { c: V([0, H + hd + .06, 0]), u: V([1, 0, 0]), v: V([0, 0, -1]), n: V([0, 1, 0]), w: tw, h: th, parent: rt.domeLid, pinv: new THREE.Matrix4().makeTranslation(0, -H * S, 0), corners: [] };
+  // mitre planes along the four corner edges
+  const shared = (A, B) => A.corners.filter(p => B.corners.some(q => p.distanceToSquared(q) < 1e-4));
+  for (const a of ['front', 'back', 'right', 'left']) for (const b of ['front', 'back', 'right', 'left']) {
+    const A = frames[a], B = frames[b], e = a !== b ? shared(A, B) : [];
+    if (e.length === 2) { const m = A.n.clone().sub(B.n).normalize(); A.clip.push({ n: m, d: m.dot(e[0]), sign: 1 }); }
+  }
+  return frames;
+}
+/* a sticker folded about the edge two faces share: rotate its centre and axes by the angle between the normals */
+function domeAcross(A, F, cur) {
+  const V = () => new THREE.Vector3(), sh = A.corners.filter(p => F.corners.some(q => p.distanceToSquared(q) < 1e-4));
+  if (sh.length < 2) return null;
+  const q = new THREE.Quaternion().setFromUnitVectors(A.n, F.n), rot = x => x.clone().applyQuaternion(q);
+  return { c: rot(V().subVectors(cur.c, sh[0])).add(sh[0]), su: rot(cur.su), sv: rot(cur.sv) };
 }
 /* where a sticker lands: one affine map (sticker mm → face mm) per surface it reaches, found by
    walking from the anchor face to its neighbours and on (up to four steps). A neighbour can lie
@@ -2103,15 +2137,15 @@ function placementsFor(o, st) {
   const inner = st.face === 'inside' || st.face === 'insideBottom';
   const keys = inner ? [] : [...outerKeys(o), ...SUPPORTS].filter(k => fr[k]);
   const toM = (e, F) => { const d = V().subVectors(e.c, F.c); return [e.su.dot(F.u), -e.su.dot(F.v), -e.sv.dot(F.u), e.sv.dot(F.v), d.dot(F.u) + F.w / 2, F.h / 2 - d.dot(F.v)]; };
-  const start = { key: st.face, c, su, sv, depth: 0, clips: [] };
+  const start = { key: st.face, c, su, sv, depth: 0, clips: [...(A.clip || [])] };
   const seen = new Map([[st.face, start]]), queue = [start];
   while (queue.length) {
     const cur = queue.shift(), Af = fr[cur.key];
     if (cur.depth >= 4) continue;
     for (const k of keys) {
       if (seen.has(k)) continue;
-      const F = fr[k], m = mapAcross(Af, F, cur, tol); if (!m) continue;
-      const ent = { key: k, c: m.c, su: m.su, sv: m.sv, depth: cur.depth + 1, clips: m.clipF ? [m.clipF] : [] };
+      const F = fr[k], m = Af.corners && F.corners ? domeAcross(Af, F, cur) : mapAcross(Af, F, cur, tol); if (!m) continue;
+      const ent = { key: k, c: m.c, su: m.su, sv: m.sv, depth: cur.depth + 1, clips: [...(m.clipF ? [m.clipF] : []), ...(F.clip || [])] };
       const M = toM(ent, F);
       if (M[4] < -R || M[4] > F.w + R || M[5] < -R || M[5] > F.h + R) continue;
       if (m.clipA) cur.clips.push(m.clipA);
