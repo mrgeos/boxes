@@ -1903,8 +1903,10 @@ function buildHandle(o, rt, pivot, T, zc, addG) {
     g.scale(S, S, S);
     return g;
   };
+  // the leaves fold up from the two edges of the bridge and lean in until their tops meet
+  const half = Math.max(.5, bridgeMM(o) / 2), lean = Math.asin(clamp((half - .5) / h, 0, .9));
   for (const [key, sz] of [['handleFront', 1], ['handleBack', -1]]) {
-    const hinge = new THREE.Group(); hinge.position.set(0, T, zc + sz * .5 * S); hinge.rotation.x = up ? 0 : sz * (Math.PI / 2 - .02); pivot.add(hinge);
+    const hinge = new THREE.Group(); hinge.position.set(0, T, zc + sz * half * S); hinge.rotation.x = up ? -sz * lean : sz * (Math.PI / 2 - .02); pivot.add(hinge);
     addG(hinge, geo(false), rt.faces[key].mat, [0, h / 2 * S, 0], [0, sz > 0 ? 0 : Math.PI, 0], { face: key });
     addG(hinge, geo(true), rt.foldMat, [0, h / 2 * S, -sz * .05 * S], [0, sz > 0 ? Math.PI : 0, 0]);   // the unprinted back of the leaf
   }
@@ -3087,7 +3089,7 @@ function renderModel() {
       + rangeField('Ручка: ширина, мм', 'handle.w', 20, 400, 1) + rangeField('Ручка: высота, мм', 'handle.h', 15, 200, 1)
       + rangeField('Перемычка под ручкой, мм (0 — нет)', 'handle.bridge', 0, 120, 1)
       + `<label class="check"><input type="checkbox" data-k="handle.up"> Ручка поднята</label>`
-      + `<p class="hint">Крышка с окном крепится к задней стенке. Передняя стенка открывается: сначала разворачиваются её боковые ушки, затем она откидывается вниз на стол. Ручка — два лепестка на перемычке поперёк окна, у каждого своя грань для печати.</p>` : ''}
+      + `<p class="hint">Крышка с окном крепится к задней стенке. Передняя стенка открывается: сначала разворачиваются её боковые ушки, затем она откидывается вниз на стол. Ручка — два лепестка: они поднимаются от краёв перемычки поперёк окна и сходятся вверху, у каждого своя грань для печати.</p>` : ''}
     ${box && flapLid(o) ? `<label class="check"><input type="checkbox" data-k="earsOn"> ${o.lidType === 'handle' ? 'Боковые ушки передней стенки' : 'Боковые ушки клапана'}</label>` : ''}
     ${box && flapLid(o) && o.earsOn ? `<label class="check"><input type="checkbox" data-k="earFull"> Ушки на всю глубину коробки</label>` : ''}
     ${box && flapLid(o) && o.earsOn && !o.earFull ? rangeField('Длина ушек, мм', 'earLen', 5, 800, 1) : ''}
