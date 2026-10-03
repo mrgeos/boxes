@@ -1518,7 +1518,25 @@ function frontWinMM(o) {
   const [fw, fh] = faceMM(o, 'front'), f = o.frontWin, ww = clamp(f.w, 10, fw - 10), wh = clamp(f.h, 10, fh - 10);
   return { ww, wh, cy: clamp(f.y, wh / 2 + 5, fh - wh / 2 - 5), r: clamp(f.r ?? 0, 0, Math.min(ww, wh) / 2 - .5), fw, fh };
 }
+/* the front window carried over the front edge onto the lid as one opening (handle box): its width, the
+   height of its bottom above the floor, how far it reaches back on the lid (to the bridge, else to the back
+   of the lid window, else its own depth) and the corner radii at its two ends */
+function joinWinMM(o) {
+  const fwn = frontWinMM(o); if (!fwn || !o.frontWin.join) return null;
+  const { d } = o.dims, bw = bridgeMM(o), win = winMM(o);
+  const back = bw > 0 ? d / 2 - bw / 2 : win ? d / 2 - (win.off - win.wd / 2) : clamp(o.frontWin.d ?? 40, 5, d - 10);
+  const zBack = clamp(back, 5, d - 5);
+  return { ww: fwn.ww, yb: fwn.cy - fwn.wh / 2, zBack, r: Math.min(fwn.r, fwn.ww / 2 - .5), rBack: Math.min(win ? win.r : fwn.r, fwn.ww / 2 - .5, zBack - .5) };
+}
+/* rounded rectangle x0…x1 × y0…y1 as points; r0: radius of the two corners at y0, r1 at y1 */
+function rrPoly(x0, y0, x1, y1, r0, r1) {
+  const P = Math.PI, a = (cx, cy, r, s, e) => arcPts(cx, cy, r, s, e, 8).map(([x, y]) => ({ x, y }));
+  const up = y1 > y0, s = up ? 1 : -1;
+  return [...a(x1 - r0, y0 + s * r0, r0, -s * P / 2, 0), ...a(x1 - r1, y1 - s * r1, r1, 0, s * P / 2), ...a(x0 + r1, y1 - s * r1, r1, s * P / 2, s * P), ...a(x0 + r0, y0 + s * r0, r0, s * P, s * P * 1.5)];
+}
 function faceWindow(o, k) {
+  const J = joinWinMM(o);
+  if (J && k === 'front') { const [mw, mh] = faceMM(o, 'front'); return { x: (mw - J.ww) / 2 / mw, y: 0, w: J.ww / mw, h: (mh - J.yb) / mh, rr: [0, 0, 1, 1], r: J.r / mw, rmm: J.r }; }
   if (o.lidType === 'handle' && k === 'front') {
     const fwn = frontWinMM(o); if (!fwn) return null;
     return { x: (fwn.fw - fwn.ww) / 2 / fwn.fw, y: (fwn.fh - fwn.cy - fwn.wh / 2) / fwn.fh, w: fwn.ww / fwn.fw, h: fwn.wh / fwn.fh, rr: [1, 1, 1, 1], r: fwn.r / fwn.fw, rmm: fwn.r };
@@ -1547,6 +1565,14 @@ function faceWindow(o, k) {
     const pts = rrectPts(mw / 2, cy * mh, win.ww, win.wd, win.r);
     fw.polys = splitBand(pts, mh / 2, bw / 2).map(q => q.map(v => ({ x: v.x / mw, y: v.y / mh })));
   }
+  if (J) {
+    // the front part of the lid opening runs out over the front edge into the front window
+    // (top canvas: front at the bottom; the lid's inner side: front at the top)
+    const fy = k === 'top' ? y => y : y => mh - y, x0 = (mw - J.ww) / 2;
+    const front = rrPoly(x0, fy(mh - J.zBack), x0 + J.ww, fy(mh), J.rBack, 0).map(v => ({ x: v.x / mw, y: v.y / mh }));
+    const keep = (fw.polys || []).filter(q => k === 'top' ? q.every(v => v.y < .5) : q.every(v => v.y > .5));
+    Object.assign(fw, { polys: [front, ...keep], joinFront: true });
+  }
   return fw;
 }
 function windowPath(c, fw, X, Y, sx, sy) {
@@ -1563,9 +1589,18 @@ function netWindowPath(c, q, pad, k) {
 /* window cut-outs in dieline mm; pieces that meet across a fold become one opening */
 function netWindows(o, n = netLayout(o)) {
   const win = winMM(o); if (!win && !frontWinMM(o)) return [];
-  const out = [];
+  const out = [], J = joinWinMM(o);
+  if (J) {
+    // one opening over the front edge: from the front wall's window bottom to its end on the lid
+    const pf = n.panels.find(p => p.key === 'front'), pt = n.panels.find(p => p.key === 'top');
+    const sy = (p, fy) => p.y + (p.rot ? 1 - fy : fy) * p.h, ya = sy(pf, (pf.h - J.yb) / pf.h), yb = sy(pt, (pt.h - J.zBack) / pt.h);
+    const x0 = pf.x + (pf.w - J.ww) / 2, [y0, y1, r0, r1] = ya < yb ? [ya, yb, J.r, J.rBack] : [yb, ya, J.rBack, J.r];
+    out.push({ x: x0, y: y0, w: J.ww, h: y1 - y0, rr: [1, 1, 1, 1], polys: [rrPoly(x0, y0, x0 + J.ww, y1, r0, r1)] });
+  }
   for (const p of n.panels) {
-    const fw = faceWindow(o, p.key); if (!fw) continue;
+    if (J && p.key === 'front') continue;
+    let fw = faceWindow(o, p.key); if (!fw) continue;
+    if (J && fw.joinFront) { if (fw.polys.length < 2) continue; fw = { ...fw, polys: fw.polys.slice(1) }; }
     let fx = fw.x, fy = fw.y, rr = fw.rr;
     if (p.rot) { fx = 1 - fw.x - fw.w; fy = 1 - fw.y - fw.h; rr = [rr[2], rr[3], rr[0], rr[1]]; }
     const polys = fw.polys?.map(q => q.map(v => ({ x: p.x + (p.rot ? 1 - v.x : v.x) * p.w, y: p.y + (p.rot ? 1 - v.y : v.y) * p.h })));
@@ -1980,10 +2015,19 @@ function handleBoxSVG(o, n, f, label) {
     for (const t of n.tabs) { const [bx, b0, , b1] = t.base; if (!hor && near(bx, x1)) { fold.set('tab' + bx + b0, [bx, b0, bx, b1]); sub(b0, b1); } }
     for (const [u, v] of parts) cut.push(hor ? [u, y1, v, y1] : [x1, u, x1, v]);
   }
-  let body = cut.map(l => line(l, CUT)).join('') + [...fold.values()].map(l => line(l, FOLD)).join('');
+  const wins = netWindows(o, n), trim = ([x1, y1, x2, y2]) => {
+    const hor = near(y1, y2); let segs = [[hor ? x1 : y1, hor ? x2 : y2]];
+    for (const q of wins) {
+      if (!(hor ? y1 > q.y + .01 && y1 < q.y + q.h - .01 : x1 > q.x + .01 && x1 < q.x + q.w - .01)) continue;
+      const a = hor ? q.x : q.y, b = hor ? q.x + q.w : q.y + q.h;
+      segs = segs.flatMap(([u, v]) => [[u, Math.min(v, a)], [Math.max(u, b), v]].filter(([s0, s1]) => s1 - s0 > .01));
+    }
+    return segs.map(([u, v]) => hor ? [u, y1, v, y1] : [x1, u, x1, v]);
+  };
+  let body = cut.map(l => line(l, CUT)).join('') + [...fold.values()].flatMap(trim).map(l => line(l, FOLD)).join('');
   body += n.tabs.map(t => `<polyline points="${t.pts.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${CUT}/>`).join('');
   body += n.slots.map(l => line(l, CUT)).join('');
-  for (const q of netWindows(o, n)) {
+  for (const q of wins) {
     if (q.polys) { for (const pl of q.polys) body += `<path d="${pl.map((v, i) => `${i ? 'L' : 'M'}${f(v.x)},${f(v.y)}`).join(' ')} Z" fill="none" ${CUT}/>`; continue; }
     body += `<rect x="${f(q.x)}" y="${f(q.y)}" width="${f(q.w)}" height="${f(q.h)}" rx="${f(Math.min(q.radii[0], q.w / 2, q.h / 2))}" fill="none" ${CUT}/>`;
   }
@@ -2000,9 +2044,16 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   rt.hb = { flaps: [], dust: [], tongues: [], tray: null, dir: op.right ? 1 : -1 };
   rt.lidPivot = rt.lidGroup = null;
   // front wall, with its window
-  const fwn = frontWinMM(o), fHole = fwn && rrectPts(0, fwn.cy * S - H / 2, fwn.ww * S, fwn.wh * S, fwn.r * S);
-  addG(g, fHole ? planeGeoHole(W, H, fHole) : new THREE.PlaneGeometry(W, H), F('front'), [0, H / 2, D / 2], [0, 0, 0], { face: 'front' });
-  addG(g, fHole ? planeGeoHole(W - 2 * T, H - 2 * T, fHole.map(v => V2(-v.x, v.y))) : new THREE.PlaneGeometry(W - 2 * T, H - 2 * T), rt.innerMat, [0, H / 2, D / 2 - T], [0, P, 0], { face: 'inside', wall: true });
+  const J = joinWinMM(o), fwn = !J && frontWinMM(o), fHole = fwn && rrectPts(0, fwn.cy * S - H / 2, fwn.ww * S, fwn.wh * S, fwn.r * S);
+  if (J) {
+    // the window runs out of the front wall's top edge (and on over the lid)
+    const jw = J.ww * S / 2, jr = J.r * S, nO = notchPts(W, H, jw, H - J.yb * S, jr, 'top'), nI = notchPts(W - 2 * T, H - 2 * T, jw, H - T - J.yb * S, jr, 'top');
+    addG(g, planeGeo(W, H, nO, 'top'), F('front'), [0, H / 2, D / 2], [0, 0, 0], { face: 'front' });
+    addG(g, planeGeo(W - 2 * T, H - 2 * T, nI, 'top'), rt.innerMat, [0, H / 2, D / 2 - T], [0, P, 0], { face: 'inside', wall: true });
+    addG(g, ribbonGeo(nO.map(p => [p.x, H / 2 + p.y, D / 2]), nO.map(p => [p.x, H / 2 + p.y, D / 2 - T])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+    film(g, nO, [0, H / 2, D / 2 - T / 2], [0, 0, 0]);
+  } else addG(g, fHole ? planeGeoHole(W, H, fHole) : new THREE.PlaneGeometry(W, H), F('front'), [0, H / 2, D / 2], [0, 0, 0], { face: 'front' });
+  if (!J) addG(g, fHole ? planeGeoHole(W - 2 * T, H - 2 * T, fHole.map(v => V2(-v.x, v.y))) : new THREE.PlaneGeometry(W - 2 * T, H - 2 * T), rt.innerMat, [0, H / 2, D / 2 - T], [0, P, 0], { face: 'inside', wall: true });
   if (fHole) {
     const loop = [...fHole, fHole[0]];
     addG(g, ribbonGeo(loop.map(p => [p.x, H / 2 + p.y, D / 2]), loop.map(p => [p.x, H / 2 + p.y, D / 2 - T])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
@@ -2017,15 +2068,34 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   const win = winMM(o);
   let holes = win && [rrectPts(0, -win.off * S, win.ww * S, win.wd * S, win.r * S)];
   if (holes && bridgeMM(o) > 0) holes = splitBand(holes[0], 0, bridgeMM(o) * S / 2).map(q => q.map(v => V2(v.x, v.y)));
+  // a window joined with the front one: its front part becomes a notch in the lid's front edge
+  // (shape y runs to the back; the front edge is at y = -D/2)
+  const jn = J && notchPts(W, D, J.ww * S / 2, J.zBack * S, J.rBack * S, 'bottom');
+  if (J && holes) holes = bridgeMM(o) > 0 ? holes.filter(q => q.every(v => v.y > 0)) : [];
   if (holes && !holes.length) holes = null;
-  addG(lg, holes ? planeGeoHole(W, D, holes) : new THREE.PlaneGeometry(W, D), F('top'), [0, 0, 0], [-P / 2, 0, 0], { face: 'top' });
-  addG(lg, holes ? planeGeoHole(W, D, holes.map(q => q.map(v => V2(v.x, -v.y)))) : new THREE.PlaneGeometry(W, D), F('inside'), [0, -T, 0], [P / 2, 0, 0], { face: 'inside' });
+  const lidGeo = (hl, mirror) => {
+    if (!jn) return hl ? planeGeoHole(W, D, hl) : new THREE.PlaneGeometry(W, D);
+    const notch = mirror ? notchPts(W, D, J.ww * S / 2, J.zBack * S, J.rBack * S, 'top') : jn;
+    const outer = mirror ? [V2(-W / 2, -D / 2), V2(W / 2, -D / 2), V2(W / 2, D / 2), ...notch, V2(-W / 2, D / 2)] : [V2(-W / 2, -D / 2), ...notch, V2(W / 2, -D / 2), V2(W / 2, D / 2), V2(-W / 2, D / 2)];
+    const sh = new THREE.Shape(dedupe(outer)); for (const h of hl || []) sh.holes.push(new THREE.Path(h));
+    const geo = new THREE.ShapeGeometry(sh), pos = geo.attributes.position, uv = geo.attributes.uv;
+    for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / W + .5, pos.getY(i) / D + .5);
+    return geo;
+  };
+  addG(lg, lidGeo(holes, false), F('top'), [0, 0, 0], [-P / 2, 0, 0], { face: 'top' });
+  addG(lg, lidGeo(holes && holes.map(q => q.map(v => V2(v.x, -v.y))), true), F('inside'), [0, -T, 0], [P / 2, 0, 0], { face: 'inside' });
+  if (jn) {
+    addG(lg, ribbonGeo(jn.map(p => [p.x, 0, -p.y]), jn.map(p => [p.x, -T, -p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+    film(lg, jn, [0, -T / 2, 0], [-P / 2, 0, 0]);
+  }
   for (const hole of holes || []) {
     const loop = [...hole, hole[0]];
     addG(lg, ribbonGeo(loop.map(p => [p.x, 0, -p.y]), loop.map(p => [p.x, -T, -p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
     film(lg, hole, [0, -T / 2, 0], [-P / 2, 0, 0]);
   }
-  for (const sz of [-1, 1]) add(lg, W, T, rt.edgeMat, [0, -T / 2, sz * D / 2], [0, sz > 0 ? 0 : P, 0]);
+  add(lg, W, T, rt.edgeMat, [0, -T / 2, -D / 2], [0, P, 0]);
+  if (jn) { const sw = (W - J.ww * S) / 2; for (const sx of [-1, 1]) add(lg, sw, T, rt.edgeMat, [sx * (W - sw) / 2, -T / 2, D / 2], [0, 0, 0]); }
+  else add(lg, W, T, rt.edgeMat, [0, -T / 2, D / 2], [0, 0, 0]);
   if (o.handle?.on) buildHandle(o, rt, lg, 0, 0, addG);
   // the ends
   const half = H / 2, fH = half - .15 * S;
@@ -3276,7 +3346,10 @@ function renderModel() {
       + `<label class="check"><input type="checkbox" data-k="handle.up"> Ручка поднята</label>`
       + `<label class="check"><input type="checkbox" data-k="frontWin.on"> Окно на передней стенке</label>`
       + (o.frontWin?.on ? rangeField('Окно спереди: ширина, мм', 'frontWin.w', 10, 800, 1) + rangeField('Окно спереди: высота, мм', 'frontWin.h', 10, 800, 1)
-        + rangeField('Окно спереди: центр от низа, мм', 'frontWin.y', 5, 800, 1) + rangeField('Окно спереди: радиус, мм', 'frontWin.r', 0, 200, .5) : '')
+        + rangeField('Окно спереди: центр от низа, мм', 'frontWin.y', 5, 800, 1) + rangeField('Окно спереди: радиус, мм', 'frontWin.r', 0, 200, .5)
+        + `<label class="check"><input type="checkbox" data-k="frontWin.join"> Окно спереди переходит на крышку (одно окно через ребро)</label>`
+        + (o.frontWin.join && !bridgeMM(o) && !winMM(o) ? rangeField('Окно спереди: заход на крышку, мм', 'frontWin.d', 5, 800, 1) : '')
+        + (o.frontWin.join ? `<p class="hint">Окно на передней стенке поднимается до ребра и продолжается на крышке ${bridgeMM(o) ? 'до перемычки' : winMM(o) ? 'до заднего края окна в крышке' : 'на заданную глубину'}, ширина — как у окна спереди.</p>` : '') : '')
       + `<p class="hint">Коробка открывается с торца: верхний клапан откидывается вверх, нижний — вниз, они сходятся посередине на замке «язычок в прорезь»; за ними внутренние крылышки от передней и задней стенок. Подложка с тортом выдвигается через открытый торец. Ручка — два лепестка: они поднимаются от краёв перемычки поперёк окна и сходятся вверху.</p>` : ''}
     ${box && o.lidType === 'flap' ? `<label class="check"><input type="checkbox" data-k="earsOn"> Боковые ушки клапана</label>` : ''}
     ${box && o.lidType === 'flap' && o.earsOn ? `<label class="check"><input type="checkbox" data-k="earFull"> Ушки на всю глубину коробки</label>` : ''}
@@ -3318,7 +3391,7 @@ function renderModel() {
     if (k === 'hbSides' || k === 'tray.fin' || k === 'product.cake') { ensureFaces(o); rebuildQueue.add(o.id); ui.net = true; select(o.id, sel.face); renderModel(); updateFaceMeta(); return; }
     if (k.startsWith('handle.') || k.startsWith('frontWin.')) {
       ensureFaces(o); rebuildQueue.add(o.id); ui.net = ui.editor = true; updateFaceMeta();
-      if (['handle.on', 'handle.shape', 'frontWin.on'].includes(k)) { select(o.id, sel.face); renderModel(); }
+      if (['handle.on', 'handle.shape', 'frontWin.on', 'frontWin.join'].includes(k)) { select(o.id, sel.face); renderModel(); }
       return;
     }
     if (k === 'earsOn' || k === 'earFull') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
