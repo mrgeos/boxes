@@ -360,6 +360,7 @@ const ICON = {
   cup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4.5 6.5h15M6 4.5h12l1.5 2-2 14.5h-11L4.5 6.5z"/><path d="M6.6 11h10.8"/></svg>',
   bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 8h12l1 13H5L6 8z"/><path d="M6 8l1.5-4h9L18 8M9 12.5h6"/></svg>',
   dome: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 13.5h18M4.2 13.5 7 20h10l2.8-6.5"/><path d="M6.5 13.5 8.2 6.5a2 2 0 0 1 2-1.5h3.6a2 2 0 0 1 2 1.5l1.7 7"/></svg>',
+  torte: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M2.5 17.5h19M3.5 17.5 5 20h14l1.5-2.5"/><path d="M5.5 17.5V8.5c0-2 1.5-3.5 3.5-3.5h6c2 0 3.5 1.5 3.5 3.5v9"/></svg>',
   rect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>',
   ell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>',
 };
@@ -423,6 +424,14 @@ PRESETS.push(
   { id: 'dome110', label: 'Лоток с крышкой-призмой 110×110×90, крафт', type: 'dome', dims: { w: 110, h: 90, d: 110 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, whiteInside: false, dome: { trayH: 40, botK: .68, flange: 6, top: .5, cr: 10 } },
   { id: 'dome145w', label: 'Лоток с крышкой-призмой 145×145×90, белый', type: 'dome', dims: { w: 145, h: 90, d: 145 }, finish: 'matte', edge: '#ece8e0', thick: .6, board: '#f7f5f0', grain: .1, whiteInside: true, dome: { trayH: 40, botK: .66, flange: 8, top: .66, cr: 12 } },
 );
+PRESETS.push(
+  // cake containers: w = base diameter, h = total height; the lid diameter and the base height are their own settings
+  { id: 'torte207', label: 'Тортница T-207, ⌀237×110', type: 'torte', dims: { w: 237, h: 110, d: 237 }, finish: 'matte', edge: '#ffffff', thick: .3, board: '#ffffff', grain: 0, torte: { lidD: 208, baseH: 18, lidR: 12, color: '#b8893a', fin: 'metal' } },
+  { id: 'torte18', label: 'Тортница T-18, ⌀180×103', type: 'torte', dims: { w: 180, h: 103, d: 180 }, finish: 'matte', edge: '#ffffff', thick: .3, board: '#ffffff', grain: 0, torte: { lidD: 158, baseH: 15, lidR: 10, color: '#b8893a', fin: 'metal' } },
+);
+const TORTE_COLORS = [['#b8893a', 'Золото'], ['#c3c7cc', 'Серебро'], ['#1d1d1f', 'Чёрное'], ['#f4f4f1', 'Белое'], ['#7a1f2b', 'Бордо']];
+const TORTE_FIN = { metal: 'Металлик', gloss: 'Глянцевый цветной ПЭТ', clear: 'Прозрачный ПЭТ' };
+const applyTortePreset = (o, p) => Object.assign(o, { lidD: p.torte.lidD, baseH: p.torte.baseH, lidR: p.torte.lidR, lidDraft: .03, baseColor: p.torte.color, baseFin: p.torte.fin, lid: 0 });
 const BAG_MATS = { clear: 'Прозрачная плёнка', frosty: 'Матовая плёнка (frosty)', tracing: 'Калька', paper: 'Бумага белая', kraft: 'Крафт-бумага' };
 const BAG_TOPS = { flap: 'Клапан с клеевой лентой', fold: 'Завёрнут (отворот)', seal: 'Запаян', open: 'Открыт (горловина)' };
 const ZIG = { h: 3.5, pitch: 7 };   // teeth of a serrated mouth edge, mm
@@ -447,6 +456,7 @@ const LID_WALLS = ['lidFront', 'lidRight', 'lidLeft', 'lidBack'];
 function faceKeys(o) {
   if (o.type === 'tube') return ['wrap', 'top', 'bottom'];
   if (o.type === 'cup') return ['wrap'];
+  if (o.type === 'torte') return ['lidWrap', 'top'];
   if (o.type === 'dome') return ['front', 'right', 'back', 'left', 'top', ...LID_WALLS, 'bottom', 'insideBottom'];
   if (o.type === 'bag') {
     const k = ['front'];
@@ -472,11 +482,11 @@ const wallMM = o => clamp(Math.max(o.wallT ?? o.thickness, o.thickness), o.thick
 const doubleWall = o => o.type === 'box' && wallMM(o) > o.thickness * 1.6 + .2;
 /* a separate lid can be clear PET (cake boxes): its faces carry only print, the rest is plastic */
 const clearLid = o => o.type === 'box' && o.lidType === 'telescope' && o.lidMat === 'clear';
-const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k)));
+const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k))) || o.type === 'torte';
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
 const FACE_LABEL = { extFront: 'Экстендер: перед', extBack: 'Экстендер: зад', fold: 'Внутренний борт', flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
 const BAG_LABEL = { fold: 'Отворот', left: 'Левый фальц', right: 'Правый фальц' };
-const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : (o.type === 'bag' && BAG_LABEL[k]) || FACE_LABEL[k];
+const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : (o.type === 'bag' && BAG_LABEL[k]) || FACE_LABEL[k];
 const BOARD = [['#f4f1e9', 'Белый'], ['#c39460', 'Крафт'], ['#2e3530', 'Графит'], ['#879c79', 'Шалфей'], ['#d28f84', 'Розовый'], ['#8aacca', 'Голубой']];
 const WHITE_INSIDE = '#f8f6ef';
 const SWATCHES = ['#ffffff', '#f3ead6', '#1c1b19', '#20392b', '#0a7aa1', '#b8461b', '#e6007e', '#ffe500'];
@@ -511,6 +521,7 @@ function ensureFaces(o) {
     o.wallT ??= o.thickness;
     o.lidFit ??= 'over';
   }
+  if (o.type === 'torte') { o.lidD ??= Math.round(o.dims.w * .88); o.baseH ??= Math.round(clamp(o.dims.w * .075, 10, 25)); o.lidR ??= Math.round(o.lidD * .06); o.lidDraft ??= .03; o.baseColor ??= TORTE_COLORS[0][0]; o.baseFin ??= 'metal'; }
   if (o.type === 'dome') { o.trayH ??= Math.round(o.dims.h * .45); o.botK ??= .66; o.flangeW ??= 8; o.domeTop ??= .6; o.cornerR ??= 12; }
   if (o.type === 'cup') { o.cupWall ??= 'double'; o.cupLid ??= true; o.lidColor ??= LID_COLORS[0][0]; }
   if (o.type === 'bag') {
@@ -534,6 +545,7 @@ function newObject(presetId = 'mailer') {
     lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2 };
   if (p.bag) applyBagPreset(o, p);
   if (p.dome) applyDomePreset(o, p);
+  if (p.torte) applyTortePreset(o, p);
   ensureFaces(o);
   if (p.board) setBoard(o, p.board);
   return o;
@@ -560,6 +572,10 @@ function faceMM(o, k) {
   const { w, h, d } = o.dims;
   if (o.type === 'tube') return k === 'wrap' ? [Math.PI * w, h] : [w, w];
   if (o.type === 'cup') { const G = cupGeom(o); return [G.Wr, G.Hr]; }
+  if (o.type === 'torte') {
+    const G = torteGeom(o);
+    return k === 'top' ? [2 * G.Rt, 2 * G.Rt] : [Math.PI * (G.Rl + G.Rs), Math.hypot(G.Rl - G.Rs, G.yS - G.y1)];
+  }
   if (o.type === 'dome') {
     const G = domeGeom(o);
     if (k === 'front' || k === 'back') return [w, G.Lf];
@@ -609,6 +625,11 @@ function netLayout(o) {
   }
   if (o.type === 'bag') return bagNet(o);
   if (o.type === 'dome') return domeNet(o);
+  if (o.type === 'torte') {
+    // print areas of the clear lid: the wall unrolled and the round top above it
+    const [C, hw] = faceMM(o, 'lidWrap'), [Dt] = faceMM(o, 'top'), gap = 15, W = Math.max(C, Dt);
+    return { W, H: Dt + gap + hw, panels: [{ key: 'top', x: W / 2 - Dt / 2, y: 0, w: Dt, h: Dt, circle: true }, { key: 'lidWrap', x: (W - C) / 2, y: Dt + gap, w: C, h: hw }] };
+  }
   if (o.type === 'cup') {
     // the side wall is printed flat as a fan (an annular sector), with a glue overlap on the left
     const G = cupGeom(o), F = cupFan(G);
@@ -712,6 +733,131 @@ function domeNet(o) {
     panels.push({ key, x, y, w: pw, h: ph, part: true, poly: [[x, y + ph], [x + pw, y + ph], [x + pw / 2 + e, y], [x + pw / 2 - e, y]] });
   }
   return { W, H: py + rowH, panels, dome: G };
+}
+/* ---------- cake container (тортница) ----------
+   Two thermoformed PET parts: an opaque base (a shallow tray with a channel, a wide flange and a lip) and a
+   clear lid that stands in the channel: a near-cylinder with a slight draft, a rounded shoulder and a flat top.
+   dims.w = base diameter, dims.h = total height; o.lidD = lid diameter at the bottom, o.baseH = height of the base. */
+function torteGeom(o) {
+  const D = o.dims.w, R = D / 2, H = o.dims.h;
+  const hb = clamp(o.baseH ?? D * .07, 8, Math.min(40, H * .45));
+  const Dl = clamp(o.lidD ?? D * .88, D * .5, D - 8), Rl = Dl / 2;
+  const y1 = hb + 5, rs = clamp(o.lidR ?? Rl * .12, 2, Math.min(40, Rl * .5, (H - y1) * .5));
+  const yS = H - rs, Rs = Math.max(rs + 5, Rl - clamp(o.lidDraft ?? .03, 0, .15) * (yS - y1)), Rt = Rs - rs;
+  return { D, R, H, hb, Rl, y1, rs, yS, Rs, Rt, rW: y => Rl + (Rs - Rl) * (y - y1) / (yS - y1) };
+}
+/* outer outline of the closed container, from the base lip up over the lid to the centre of its top */
+function torteEnvelope(G) {
+  const { R, hb, Rl, y1, rs, yS, Rs, Rt, H } = G, key = [];
+  for (const p of [[R, .8], [R, hb - 2.5], [R - .6, hb - .8], [R - 2.5, hb], [Rl + 2.6, hb]]) key.push([...p, 'base']);
+  for (const p of [[Rl + 1.2, hb], [Rl + 1.2, hb + 2.5], [Rl + .2, hb + 4], [Rl, y1], [Rs, yS]]) key.push([...p, 'lid']);
+  for (let i = 1; i <= 12; i++) { const a = i / 12 * Math.PI / 2; key.push([Rt + rs * Math.cos(a), yS + rs * Math.sin(a), 'lid']); }
+  key.push([0, H, 'lid']);
+  // even samples (≤ 1 mm) with the outward normal of their segment in (r, y)
+  const out = [];
+  for (let i = 0; i < key.length - 1; i++) {
+    const [r0, y0, , ] = key[i], [r1, y1_, part] = key[i + 1], n = Math.max(1, Math.ceil(Math.hypot(r1 - r0, y1_ - y0)));
+    const l = Math.hypot(r1 - r0, y1_ - y0) || 1, nr = (y1_ - y0) / l, ny = -(r1 - r0) / l;
+    for (let j = i ? 1 : 0; j <= n; j++) out.push({ r: r0 + (r1 - r0) * j / n, y: y0 + (y1_ - y0) * j / n, part, nr, ny });
+  }
+  return out;
+}
+function torteProfiles(G) {
+  const { R, hb, Rl, y1, rs, yS, Rs, Rt, H } = G, V2 = (x, y) => new THREE.Vector2(x, y);
+  // base: floor with two decorative rings, the channel the lid stands in, flange, lip
+  const base = [V2(0, 3)];
+  for (const rr of [.3, .55]) { const c = (Rl - 6) * rr; base.push(V2(c - 4, 3), V2(c - 2, 4.4), V2(c + 2, 4.4), V2(c + 4, 3)); }
+  base.push(V2(Rl - 5, 3), V2(Rl - 4, hb - 1), V2(Rl - 2.5, hb), V2(Rl - .6, hb - 4.6), V2(Rl + 2.6, hb - 4.6), V2(Rl + 3.4, hb),
+    V2(R - 2.5, hb), V2(R - .6, hb - .8), V2(R, hb - 2.5), V2(R, .8), V2(R - .8, 0));
+  const lid = [V2(Rl + 1.2, hb - 4), V2(Rl + 1.2, hb + 2.5), V2(Rl + .2, hb + 4), V2(Rl, y1), V2(Rs, yS)];
+  for (let i = 1; i <= 12; i++) { const a = i / 12 * Math.PI / 2; lid.push(V2(Rt + rs * Math.cos(a), yS + rs * Math.sin(a))); }
+  lid.push(V2(0, H));
+  return { base, lid };
+}
+function buildTorte(o, rt) {
+  const G = torteGeom(o), g = rt.group, F = k => rt.faces[k].mat, pr = torteProfiles(G);
+  rt.baseMat ??= new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, shadowSide: THREE.DoubleSide });
+  const flip = pts => pts.map(p => new THREE.Vector2(p.x * S, p.y * S));
+  const base = new THREE.Mesh(new THREE.LatheGeometry(flip(pr.base), 144), o.baseFin === 'clear' ? rt.petMat : rt.baseMat);
+  base.castShadow = o.baseFin !== 'clear'; base.receiveShadow = true; base.userData = { objId: o.id, face: null }; g.add(base);
+  const lg = new THREE.Group(); g.add(lg); rt.torteLid = lg;
+  const shell = new THREE.Mesh(new THREE.LatheGeometry(flip(pr.lid), 144), rt.petMat); shell.raycast = () => {}; lg.add(shell);
+  for (const [r, y] of [[G.Rl + 1.2, G.hb + 2.5], [G.Rl, G.y1], [G.Rs, G.yS], [G.Rt, G.H]]) {
+    const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 145 }, (_, i) => { const t = i / 144 * Math.PI * 2; return new THREE.Vector3(r * Math.sin(t) * S, y * S, r * Math.cos(t) * S); })), rt.petEdgeMat);
+    ring.raycast = () => {}; ring.renderOrder = 4; lg.add(ring);
+  }
+  // print on the lid: the wall (u around, seam at the back, as on a cup) and the flat top
+  const nu = 160, nv = 12, P = [], N = [], UV = [], I = [], lift = .06, sl = (G.Rl - G.Rs) / Math.hypot(G.Rl - G.Rs, G.yS - G.y1), cl = Math.sqrt(1 - sl * sl);
+  for (let j = 0; j <= nv; j++) {
+    const v = j / nv, y = G.y1 + (G.yS - G.y1) * v, r = G.rW(y) + lift;
+    for (let i = 0; i <= nu; i++) { const u = i / nu, th = Math.PI + u * Math.PI * 2, sn = Math.sin(th), cs = Math.cos(th); P.push(r * sn * S, y * S, r * cs * S); N.push(cl * sn, sl, cl * cs); UV.push(u, v); }
+  }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1; I.push(a, b, d, a, d, c); }
+  const wg = new THREE.BufferGeometry();
+  wg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); wg.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  wg.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2)); wg.setIndex(I);
+  const wall = new THREE.Mesh(wg, F('lidWrap')); wall.userData = { objId: o.id, face: 'lidWrap' }; wall.renderOrder = 3; lg.add(wall);
+  const tg = new THREE.CircleGeometry(G.Rt * S, 96); tg.rotateX(-Math.PI / 2); tg.translate(0, (G.H + lift) * S, 0);
+  const top = new THREE.Mesh(tg, F('top')); top.userData = { objId: o.id, face: 'top' }; top.renderOrder = 3; lg.add(top);
+}
+/* sticker film on the container. Each column of the sticker follows the section of the solid cut by a plane
+   parallel to the meridian through the sticker's anchor; along it the sticker keeps its length, over the
+   shoulder onto the top, or down over the base flange and lip. On the flat top this is exact, on the wall
+   the horizontal size is wrapped back to arc length. */
+function torteSample(o, rt, st, ew, eh, nx, ny, P, Nn, own, sup, lift) {
+  const G = torteGeom(o), env = torteEnvelope(G), I4 = new THREE.Matrix4(), V = () => new THREE.Vector3();
+  const parts = { lid: { parent: rt.torteLid, pinv: I4, n: null }, base: { parent: rt.group, pinv: I4, n: null } };
+  const r = st.rot * DEG, cs = Math.cos(r), sn = Math.sin(r);
+  let er, ea, rho0, y0, wrap = 0;
+  if (st.face === 'top') {
+    const [tw, th] = faceMM(o, 'top'), x0 = st.x * tw - tw / 2, z0 = st.y * th - th / 2;
+    rho0 = Math.hypot(x0, z0); er = rho0 > 1e-3 ? new THREE.Vector3(x0 / rho0, 0, z0 / rho0) : new THREE.Vector3(0, 0, 1); y0 = G.H;
+  } else {
+    const t = Math.PI + st.x * Math.PI * 2; er = new THREE.Vector3(Math.sin(t), 0, Math.cos(t));
+    y0 = G.y1 + (1 - st.y) * (G.yS - G.y1); rho0 = G.rW(y0); wrap = rho0;
+  }
+  ea = new THREE.Vector3(er.z, 0, -er.x);   // to the right as seen from outside
+  // sticker (sx, sy) → column offset a (tangential) and distance b along the section, b > 0 away from the top
+  const ab = (sx, sy) => {
+    if (st.face === 'top') { const dx = cs * sx - sn * sy, dz = sn * sx + cs * sy; return [dx * ea.x + dz * ea.z, dx * er.x + dz * er.z]; }
+    const a = cs * sx - sn * sy; return [wrap * Math.sin(clamp(a / wrap, -Math.PI / 2, Math.PI / 2)), sn * sx + cs * sy];
+  };
+  const AB = []; let amin = Infinity, amax = -Infinity;
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const q = ab(-ew / 2 + ew * i / (nx - 1), -eh / 2 + eh * j / (ny - 1)); AB.push(q); amin = Math.min(amin, q[0]); amax = Math.max(amax, q[0]); }
+  // one section per bin of a: far half up over the top, then the near half down
+  const nb = clamp(Math.ceil((amax - amin) / 1.5), 2, 96), bins = [];
+  for (let b = 0; b <= nb; b++) {
+    const a = amin + (amax - amin) * b / nb, pts = [];
+    for (let k = 0; k < env.length; k++) if (env[k].r > Math.abs(a)) pts.push({ rho: -Math.sqrt(env[k].r ** 2 - a * a), k });
+    for (let k = env.length - 1; k >= 0; k--) if (env[k].r > Math.abs(a)) pts.push({ rho: Math.sqrt(env[k].r ** 2 - a * a), k });
+    let L = 0, best = Infinity, Lref = 0;
+    pts.forEach((p, i) => {
+      p.y = env[p.k].y;
+      if (i) { const q = pts[i - 1], dl = Math.hypot(p.rho - q.rho, p.y - q.y); L += dl; p.L = L;
+        // where the reference row (through the anchor) crosses this section
+        const t = dl ? clamp(((rho0 - q.rho) * (p.rho - q.rho) + (y0 - q.y) * (p.y - q.y)) / (dl * dl), 0, 1) : 0, d = Math.hypot(q.rho + (p.rho - q.rho) * t - rho0, q.y + (p.y - q.y) * t - y0);
+        if (d < best) { best = d; Lref = q.L + dl * t; }
+      } else p.L = 0;
+    });
+    bins.push({ a, pts, Lref });
+  }
+  const at = (bin, b) => {
+    const { pts } = bin, L = bin.Lref + b; if (pts.length < 2 || L < 0 || L > pts[pts.length - 1].L) return null;
+    let lo = 0, hi = pts.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m].L < L) lo = m; else hi = m; }
+    const p = pts[lo], q = pts[hi], t = (L - p.L) / ((q.L - p.L) || 1), rho = p.rho + (q.rho - p.rho) * t, y = p.y + (q.y - p.y) * t, e = env[Math.max(p.k, q.k)];
+    const pos = V().addScaledVector(er, rho).addScaledVector(ea, bin.a); pos.y = y;
+    const rad = V().set(pos.x, 0, pos.z); if (rad.lengthSq() < 1e-9) rad.copy(er); rad.normalize();
+    return { pos, n: rad.multiplyScalar(e.nr).add(V().set(0, e.ny, 0)).normalize(), part: e.part };
+  };
+  for (let k = 0; k < AB.length; k++) {
+    const [a, b] = AB[k], f = (amax - amin) > 1e-9 ? (a - amin) / (amax - amin) * nb : 0, i0 = Math.min(nb - 1, Math.floor(f)), t = f - i0;
+    const p0 = at(bins[i0], b), p1 = at(bins[Math.min(nb, i0 + 1)], b), h = p0 && p1 ? null : p0 || p1;
+    if (!p0 && !p1) { P[k] = V(); Nn[k] = V().set(0, 1, 0); own[k] = parts.lid; sup[k] = false; continue; }
+    const pos = h ? h.pos : p0.pos.clone().lerp(p1.pos, t), n = h ? h.n : p0.n.clone().lerp(p1.n, t).normalize(), part = parts[(h || (t < .5 ? p0 : p1)).part];
+    P[k] = pos.addScaledVector(n, lift); Nn[k] = n; own[k] = part; sup[k] = true;
+    if (!part.n) part.n = n.clone();
+  }
+  for (const p of Object.values(parts)) p.n ??= new THREE.Vector3(0, 1, 0);
 }
 /* ---------- paper cup ----------
    The printed side wall is a cone. It is designed on a rectangle that maps onto the cone conformally:
@@ -1177,10 +1323,10 @@ function buildObject(o) {
     RT.set(o.id, rt); world.add(rt.group);
   }
   rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null; rt.lidGroup = null; rt.domeLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null;
+  rt.group.clear(); rt.lidPivot = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null;
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
-  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'bag') buildBag(o, rt); else buildTube(o, rt);
+  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'bag') buildBag(o, rt); else buildTube(o, rt);
   applyTransform(o); computeFrames(o, rt); applyLid(o); applyObjMaterials(o); markObj(o);
   rt.stickerMeshes = []; buildStickerFilms(o);
 }
@@ -1191,7 +1337,7 @@ function disposeObject(id) {
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
   for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
   rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); rt.cupLidMat.dispose(); rt.holeMat.dispose();
-  rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); RT.delete(id);
+  rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); rt.baseMat?.dispose(); RT.delete(id);
 }
 /* clear PET: black diffuse, so only reflections remain (stronger at grazing angles). The shader turns
    their brightness into coverage, so plain plastic stays see-through even over the page background
@@ -1810,6 +1956,11 @@ function applyLid(o) {
     rt.cupLid.position.set(0, (o.dims.h + f * (o.dims.h * .12 + 22)) * S, -f * o.dims.w * .55 * S);
     rt.cupLid.rotation.x = -f * .45;
   }
+  if (rt.torteLid) {
+    // the lid lifts out of the channel, slides back a little and tilts
+    const f = clamp(o.lid / 125, 0, 1);
+    rt.torteLid.position.set(0, f * (o.dims.h * .55 + 25) * S, -f * o.dims.w * .22 * S); rt.torteLid.rotation.x = -f * .3;
+  }
   if (rt.domeLid) {
     // the lid lifts off, slides back a little and tilts
     const f = clamp(o.lid / 125, 0, 1), G = domeGeom(o);
@@ -1834,6 +1985,11 @@ function applyObjMaterials(o) {
   if (FINISHES[o.finish]?.kraft) fold.multiply(new THREE.Color(FINISHES[o.finish].kraft));
   rt.foldMat.color.copy(fold);
   rt.cupLidMat.color.set(o.lidColor || LID_COLORS[0][0]);
+  if (rt.baseMat) {
+    const metal = o.baseFin === 'metal';
+    Object.assign(rt.baseMat, { metalness: metal ? .85 : 0, roughness: metal ? .32 : .22, clearcoat: metal ? .3 : .8, clearcoatRoughness: .08 });
+    rt.baseMat.color.set(o.baseColor || TORTE_COLORS[0][0]);
+  }
   rt.cardMat.color.set(o.faces.extFront?.bg || '#ffffff');
   rt.foldMat.bumpMap = o.grain > 0 ? rt.faces.front?.grain ?? null : null; rt.foldMat.bumpScale = o.grain * 1.2; rt.foldMat.needsUpdate = true;
   rt.innerMat.bumpMap = o.grain > 0 ? rt.faces.inside?.grain ?? null : null;
@@ -2065,6 +2221,7 @@ function computeFrames(o, rt) {
   rt.frames = null;
   if (o.type === 'bag') { rt.frames = rt.bagFrames || null; return; }
   if (o.type === 'dome') { rt.frames = domeFrames(o, rt); return; }
+  if (o.type === 'torte') { rt.frames = {}; return; }   // films are laid along sections of the solid (torteSample)
   if (o.type !== 'box') return;
   const saved = o.lid; o.lid = 0; applyLid(o);
   rt.group.updateMatrixWorld(true);
@@ -2345,11 +2502,12 @@ function buildStickerFilms(o) {
   const lift = .1, V = () => new THREE.Vector3();
   for (const st of o.stickers || []) {
     if (!st.visible) continue;
-    const pls = placementsFor(o, st).filter(pl => rt.frames[pl.key]); if (!pls.length) continue;
+    const torte = o.type === 'torte', pls = torte ? [] : placementsFor(o, st).filter(pl => rt.frames[pl.key]); if (!pls.length && !torte) continue;
     const look = stickerLook(rt, st), [ew, eh] = look.ext;
     const step = Math.max(.7, Math.max(ew, eh) / 110) * (dragSt ? 2 : 1), nx = Math.max(2, Math.ceil(ew / step) + 1), ny = Math.max(2, Math.ceil(eh / step) + 1), N = nx * ny;
     const P = new Array(N), Nn = new Array(N), own = new Array(N), sup = new Array(N);
-    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    if (torte) torteSample(o, rt, st, ew, eh, nx, ny, P, Nn, own, sup, lift);
+    else for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
       const sx = -ew / 2 + ew * i / (nx - 1), sy = -eh / 2 + eh * j / (ny - 1);
       let best = null, near = null, nearD = Infinity;
       for (const { key, M, clips } of pls) {
@@ -2718,7 +2876,7 @@ function refreshFields(root, t) { $$('[data-k]', root).forEach(el => { if (el !=
 function renderObjects() {
   $('#objList').innerHTML = state.objects.map(o => `<div class="obj ${o.id === sel.obj ? 'on' : ''}" data-id="${o.id}" tabindex="0" role="button">
     ${ICON[o.type] || ICON.box}<span class="nm">${esc(o.name)}</span>
-    <span class="dm mono">${o.type === 'tube' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'cup' ? `⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)}` : o.type === 'bag' && o.bagStyle !== 'block' ? `${fmt(o.dims.w)}×${fmt(o.dims.h)}` : `${fmt(o.dims.w)}×${fmt(o.dims.d)}×${fmt(o.dims.h)}`}</span></div>`).join('')
+    <span class="dm mono">${o.type === 'torte' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'tube' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'cup' ? `⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)}` : o.type === 'bag' && o.bagStyle !== 'block' ? `${fmt(o.dims.w)}×${fmt(o.dims.h)}` : `${fmt(o.dims.w)}×${fmt(o.dims.d)}×${fmt(o.dims.h)}`}</span></div>`).join('')
     || '<div class="empty">Добавьте коробку, стакан или тубус</div>';
   $$('#objList .obj').forEach(el => {
     const go = () => { select(el.dataset.id, undefined, null); };
@@ -2729,11 +2887,11 @@ function renderObjects() {
 function renderModel() {
   const o = activeObj(), sec = $('#modelSec');
   if (!o) { sec.innerHTML = '<div class="sec-h"><h2>Форма</h2></div><div class="empty">Нет выбранного объекта</div>'; return; }
-  const box = o.type === 'box', cup = o.type === 'cup', bag = o.type === 'bag', dome = o.type === 'dome', film = bagFilm(o);
+  const box = o.type === 'box', cup = o.type === 'cup', bag = o.type === 'bag', dome = o.type === 'dome', torte = o.type === 'torte', film = bagFilm(o);
   sec.innerHTML = `
     <div class="sec-h"><h2>Форма и размеры</h2></div>
     <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="name" aria-label="Название"></div>
-    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="dome">Лоток с прозрачной крышкой-призмой</option><option value="cup">Бумажный стакан</option><option value="bag">Пакет</option><option value="tube">Тубус / банка</option></select></div>
+    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="dome">Лоток с прозрачной крышкой-призмой</option><option value="torte">Тортница (ПЭТ)</option><option value="cup">Бумажный стакан</option><option value="bag">Пакет</option><option value="tube">Тубус / банка</option></select></div>
     <div class="field wide"><span class="fl">Заготовка</span><select id="presetSel"><option value="">— выбрать размер —</option>${PRESETS.filter(p => p.type === o.type).map(p => `<option value="${p.id}">${p.label}</option>`).join('')}</select></div>
     ${box ? rangeField('Ширина, мм', 'dims.w', 20, 800, 1) + rangeField('Глубина, мм', 'dims.d', 20, 800, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)
       : cup ? rangeField('Диаметр верха, мм', 'dims.w', 40, 160, 1) + rangeField('Диаметр дна, мм', 'dims.d', 30, 160, 1) + rangeField('Высота, мм', 'dims.h', 40, 250, 1)
@@ -2748,6 +2906,10 @@ function renderModel() {
           + rangeField('Крышка: плоский верх, % борта', 'domeTop', 20, 92, 1, 100) + rangeField('Крышка: фланец, мм', 'flangeW', 0, 30, .5) + rangeField('Крышка: скругление углов, мм', 'cornerR', 0, 60, .5)
           + rangeField('Поднять крышку', 'lid', 0, 125, 1)
           + `<p class="hint">Стенки лотка расходятся от дна к борту; печать — на четырёх стенках и на дне, внутри — «Дно изнутри». Крышка — прозрачный ПЭТ: на плоский верх можно нанести печать, остальное остаётся прозрачным. Дизайн стенки — прямоугольник по ширине борта, на дне видна его средняя часть, как на штанцформе.</p>`
+      : torte ? rangeField('Диаметр дна, мм', 'dims.w', 80, 450, 1) + rangeField('Диаметр крышки, мм', 'lidD', 40, 440, 1) + rangeField('Высота с крышкой, мм', 'dims.h', 40, 400, 1)
+          + rangeField('Высота дна, мм', 'baseH', 8, 40, .5) + rangeField('Конусность стенки, %', 'lidDraft', 0, 15, .5, 100) + rangeField('Скругление плеча, мм', 'lidR', 2, 40, .5)
+          + rangeField('Поднять крышку', 'lid', 0, 125, 1)
+          + `<p class="hint">Тортница из двух формованных деталей: дно из непрозрачного ПЭТ, крышка из прозрачного стоит в канавке дна. Печать — на стенке и верхе крышки, незапечатанное остаётся прозрачным. Наклейки огибают стенку, переходят через плечо на верх и спускаются на фланец и бортик дна (пломба).</p>`
       : bag ? bagFields(o)
       : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
     ${box ? `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(LID_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : ''}
@@ -2766,7 +2928,10 @@ function renderModel() {
     ${box && windowPlace(o) ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
     ${box && o.window.on && windowPlace(o) ? windowFields(o) : ''}
     <div class="sec-h" style="margin-top:4px"><h2>Материал</h2></div>
-    ${film ? `<p class="hint">Плёнка: всё, что не закрыто печатью, остаётся ${o.bagMat === 'clear' ? 'прозрачным' : 'полупрозрачным'}. Материал меняется в настройках пакета выше.</p>` : `
+    ${torte ? `<div class="field wide"><span class="fl">Дно</span><div class="row">
+      <div class="swatches" id="torteSw">${TORTE_COLORS.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.baseColor === c}"></button>`).join('')}</div>
+      <input type="color" data-k="baseColor" aria-label="Свой цвет дна"></div></div>
+    <div class="field wide"><span class="fl">Материал дна</span><select data-k="baseFin">${Object.entries(TORTE_FIN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : film ? `<p class="hint">Плёнка: всё, что не закрыто печатью, остаётся ${o.bagMat === 'clear' ? 'прозрачным' : 'полупрозрачным'}. Материал меняется в настройках пакета выше.</p>` : `
     <div class="field wide"><span class="fl">${bag ? 'Цвет бумаги' : 'Цвет картона'}</span><div class="row">
       <div class="swatches" id="boardSw">${BOARD.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.board === c}"></button>`).join('')}</div>
       <input type="color" id="boardColor" value="${o.board || '#ffffff'}" aria-label="Свой цвет картона"></div></div>
@@ -2802,6 +2967,8 @@ function renderModel() {
       if (k === 'rollTurns' || k === 'bagWin.on' || k === 'bagWin.corners') renderModel();
       return;
     }
+    if (k === 'baseColor') { applyObjMaterials(o); $$('#torteSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.baseColor)); return; }
+    if (['lidD', 'baseH', 'lidDraft', 'lidR', 'baseFin'].includes(k)) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (['trayH', 'botK', 'domeTop', 'flangeW', 'cornerR'].includes(k)) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k === 'cupWall' || k === 'cupLid') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'cupLid') renderModel(); return; }
     if (k === 'lidColor') { applyObjMaterials(o); $$('#lidSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.lidColor)); return; }
@@ -2825,6 +2992,7 @@ function renderModel() {
   const board = c => { setBoard(o, c); applyObjMaterials(o); markObj(o); renderFacePanel(); $$('#boardSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === c)); $('#boardColor').value = c; };
   $$('#boardSw .sw').forEach(b => b.onclick = () => { board(b.dataset.c); commit(); });
   $$('#lidSw .sw').forEach(b => b.onclick = () => { o.lidColor = b.dataset.c; applyObjMaterials(o); renderModel(); commit(); });
+  $$('#torteSw .sw').forEach(b => b.onclick = () => { o.baseColor = b.dataset.c; applyObjMaterials(o); renderModel(); commit(); });
   $('#boardColor')?.addEventListener('input', e => board(e.target.value));
   $('#boardColor')?.addEventListener('change', () => commit());
   if ($('#prodBtn')) $('#prodBtn').onclick = () => pickImage(async file => {
@@ -2846,6 +3014,7 @@ function renderModel() {
       applyObjMaterials(o); select(o.id, sel.face);
     }
     if (o.type === 'cup' && p.board) { setBoard(o, p.board); applyObjMaterials(o); }
+    if (o.type === 'torte') { applyTortePreset(o, p); ensureFaces(o); applyObjMaterials(o); select(o.id, sel.face); }
     if (o.type === 'dome') {
       applyDomePreset(o, p); if (p.whiteInside != null) o.whiteInside = p.whiteInside;
       ensureFaces(o); if (p.board) setBoard(o, p.board); applyObjMaterials(o); select(o.id, sel.face);
@@ -3038,6 +3207,7 @@ function sealSpot(o) {
   const lt = o.lidType || 'flat';
   if (o.type === 'bag') return o.bagTop === 'open' ? { face: 'front', x: .5, y: .15 } : o.ext?.on ? { face: 'extFront', x: .5, y: 1 } : o.bagTop === 'seal' ? { face: 'front', x: .5, y: .03 } : { face: o.bagTop, x: .5, y: 1 };
   if (o.type === 'dome') return { face: 'lidFront', x: .5, y: .97 };
+  if (o.type === 'torte') return { face: 'lidWrap', x: .5, y: .97 };
   if (o.type !== 'box') return { face: faceKeys(o)[0], x: .5, y: .5 };
   if (lt === 'flap') return { face: 'flap', x: .5, y: 1 };
   if (lt === 'telescope') return clearLid(o) && o.lidFit === 'inside' ? { face: 'top', x: .5, y: .5 } : { face: 'lidFront', x: .5, y: 1 };
@@ -3102,7 +3272,7 @@ function renderStickers() {
   sec.innerHTML = html;
   $('#stCircle').onclick = () => addSticker(newSticker('circle', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]));
   $('#stRect').onclick = () => addSticker(newSticker('rect', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]));
-  $('#stSeal').onclick = () => addSticker(newSticker('rect', 'front', { ...sealSpot(o), w: 22, h: o.type === 'dome' ? 80 : 50, radius: 2, text: '', fill: '#f3ead6', stroke: '#b8461b', strokeW: .8, finish: 'gloss' }));
+  $('#stSeal').onclick = () => addSticker(newSticker('rect', 'front', { ...sealSpot(o), w: 22, h: o.type === 'dome' || o.type === 'torte' ? 80 : 50, radius: 2, text: '', fill: '#f3ead6', stroke: '#b8461b', strokeW: .8, finish: 'gloss' }));
   $('#stCustom').onclick = () => pickImage(async file => {
     const r = await importImageFile(file);
     addSticker(newSticker('custom', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0], { src: r.id, aspect: r.aspect, w: 50, outline: 1.5 }));
@@ -3613,7 +3783,7 @@ function templateSVG(o) {
     body += `<text x="${f(cx)}" y="${f(cy)}" font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">СТЕНКА СТАКАНА · ⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)} мм${G.dbl ? ' · ВНЕШНИЙ СЛОЙ' : ''}</text>`;
     body += `<text x="${f(gx)}" y="${f(gy)}" transform="rotate(${f(ga - 90)} ${f(gx)} ${f(gy)})" font-family="Arial, sans-serif" font-size="${f(Math.min(fs, CUP_GLUE * .45))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">НАХЛЁСТ ${CUP_GLUE} мм</text>`;
     if (F.cone) body += `<text x="${f(cx)}" y="${f(cy + fs * 1.6)}" font-family="Arial, sans-serif" font-size="${f(fs * .7)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">R ${fmt(G.s1, 1)} / ${fmt(G.s0, 1)} мм · угол ${fmt(G.Phi / DEG, 2)}° + нахлёст · высота по образующей ${fmt(G.L, 1)} мм</text>`;
-  } else if (o.type === 'tube') {
+  } else if (o.type === 'tube' || o.type === 'torte') {
     for (const p of n.panels) {
       body += p.circle ? `<circle cx="${f(p.x + p.w / 2)}" cy="${f(p.y + p.h / 2)}" r="${f(p.w / 2)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`
         : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
@@ -3663,7 +3833,7 @@ function templateSVG(o) {
   }
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${f(n.W)}mm" height="${f(n.H)}mm" viewBox="0 0 ${f(n.W)} ${f(n.H)}">
-<!-- Box Studio 3D — ${esc(o.name)}. ${o.type === 'bag' ? 'Голубой: рез, пурпурный пунктир: сгиб, зелёный пунктир: запайка (шов), оранжевый: клеевая лента клапана. Клапан, отворот и задняя половина экстендера лежат на развёртке вверх ногами — подписи повёрнуты так же.' + (o.bagStyle === 'block' ? ' Дно показано упрощённо, одной панелью: схему складывания дна сверьте с типографией.' : ' Пакет сложен по дну: перед повёрнут на 180°.') + ' Вылеты добавьте в типографском макете.' : o.type === 'dome' ? 'Голубой: линия реза, пурпурный пунктир: биговка (дно / стенка). Дно в центре, стенки отогнуты от его краёв; стенки расходятся к борту, поэтому углы остаются открытыми — складки и клапаны в углах решаются конструкцией штанцформы. Пунктир голубого: зона печати на прозрачной крышке (ПЭТ, не вырубается). Вылеты 3 мм добавьте в типографском макете.' : o.type === 'cup' ? 'Голубой: линия реза стенки стакана (веер), пурпурный пунктир: край нахлёста на шве. Верхняя дуга — край у бортика, нижняя — у дна. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете.' : 'Голубой: линия реза, пурпурный пунктир: биговка. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете. Крышка с клапаном и ушками крепится к задней стенке и лежит на развёртке вверх ногами — подписи повёрнуты так же.'} -->
+<!-- Box Studio 3D — ${esc(o.name)}. ${o.type === 'bag' ? 'Голубой: рез, пурпурный пунктир: сгиб, зелёный пунктир: запайка (шов), оранжевый: клеевая лента клапана. Клапан, отворот и задняя половина экстендера лежат на развёртке вверх ногами — подписи повёрнуты так же.' + (o.bagStyle === 'block' ? ' Дно показано упрощённо, одной панелью: схему складывания дна сверьте с типографией.' : ' Пакет сложен по дну: перед повёрнут на 180°.') + ' Вылеты добавьте в типографском макете.' : o.type === 'torte' ? 'Зоны печати на прозрачной крышке тортницы (ПЭТ, формованная деталь, не вырубается): стенка в развёртке по средней окружности и круглый верх. Крышка почти цилиндрическая (небольшой конус), поэтому развёртка стенки — прямоугольник. Сверьте с технологом формовки.' : o.type === 'dome' ? 'Голубой: линия реза, пурпурный пунктир: биговка (дно / стенка). Дно в центре, стенки отогнуты от его краёв; стенки расходятся к борту, поэтому углы остаются открытыми — складки и клапаны в углах решаются конструкцией штанцформы. Пунктир голубого: зона печати на прозрачной крышке (ПЭТ, не вырубается). Вылеты 3 мм добавьте в типографском макете.' : o.type === 'cup' ? 'Голубой: линия реза стенки стакана (веер), пурпурный пунктир: край нахлёста на шве. Верхняя дуга — край у бортика, нижняя — у дна. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете.' : 'Голубой: линия реза, пурпурный пунктир: биговка. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете. Крышка с клапаном и ушками крепится к задней стенке и лежит на развёртке вверх ногами — подписи повёрнуты так же.'} -->
 <g id="dieline">${body}</g>
 </svg>`;
 }
