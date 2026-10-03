@@ -403,6 +403,9 @@ const PRESETS = [
   { id: 'cakeHandle', label: 'Коробка для торта с ручкой 216×216×146', type: 'box', dims: { w: 216, h: 146, d: 216 }, finish: 'matte', edge: '#ece8e0', thick: .8, board: '#f7f5f0', lid: { type: 'handle' }, window: { on: true, place: 'lid', w: 130, d: 130, h: 20, r: 65, off: 0, corners: 'round' }, handle: { shape: 'arch', w: 120, h: 62 } },
   { id: 'cakeHandleKraft', label: 'Коробка для торта с ручкой 300×300×190, крафт', type: 'box', dims: { w: 300, h: 190, d: 300 }, finish: 'matte', edge: '#b88d5c', thick: 1.2, board: '#c39460', grain: .45, whiteInside: true, lid: { type: 'handle' }, window: { on: true, place: 'lid', w: 200, d: 170, h: 20, r: 10, off: 0, corners: 'round' }, handle: { shape: 'rect', w: 120, h: 60 } },
   { id: 'cakeHandleFront', label: 'Коробка для торта с ручкой и окном спереди 200×200×190', type: 'box', dims: { w: 200, h: 190, d: 200 }, finish: 'matte', edge: '#ece8e0', thick: .8, board: '#f7f5f0', lid: { type: 'handle' }, window: { on: true, place: 'lid', w: 150, d: 150, h: 20, r: 6, off: 0, corners: 'round' }, handle: { shape: 'photo', w: 130, h: 75, bridge: 26 }, frontWin: { on: true, w: 140, h: 110, y: 100, r: 3 } },
+  { id: 'mailerSleeve', label: 'Мейлер крафт с рукавом', type: 'box', dims: { w: 260, h: 90, d: 190 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'tuck', flapH: 45 }, sleeve: { axis: 'x', w: 170, bg: '#d32f2f', fin: 'matte' } },
+  { id: 'boxBand', label: 'Коробка крафт с узкой бандеролью', type: 'box', dims: { w: 260, h: 110, d: 200 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'telescope', lidH: 50 }, sleeve: { axis: 'z', w: 55, x: 30, bg: '#2a2a2a', fin: 'soft' } },
+  { id: 'matchbox', label: 'Коробка-пенал: лоток в рукаве', type: 'box', dims: { w: 180, h: 50, d: 120 }, finish: 'matte', edge: '#e2ddd4', thick: 1, board: '#f4f1e9', lid: { type: 'none' }, sleeve: { axis: 'x', w: 182, bg: '#1f3b57', fin: 'soft' } },
   { id: 'tray', label: 'Лоток без крышки', type: 'box', dims: { w: 240, h: 60, d: 160 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'none' } },
   { id: 'flat', label: 'Плоская (пицца, одежда)', type: 'box', dims: { w: 330, h: 45, d: 330 }, finish: 'kraft', edge: '#a87f50', thick: 3 },
   { id: 'tube', label: 'Тубус', type: 'tube', dims: { w: 80, h: 200, d: 80 }, finish: 'matte', edge: '#cdb08a' },
@@ -515,6 +518,7 @@ function faceKeys(o) {
   if (lt === 'flap' && o.earsOn) k.push('earLeft', 'earRight');
   if (lt === 'telescope') k.push(...LID_WALLS);
   k.push('right', 'left', 'back', 'bottom');
+  if (sleeveOn(o)) k.push('sleeve');
   if (lt !== 'none' && !(lt === 'telescope' && o.lidMat === 'clear')) k.push('inside');
   k.push('insideBottom');
   return k;
@@ -526,7 +530,7 @@ const doubleWall = o => o.type === 'box' && wallMM(o) > o.thickness * 1.6 + .2;
 const clearLid = o => o.type === 'box' && o.lidType === 'telescope' && o.lidMat === 'clear';
 const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k))) || o.type === 'torte';
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
-const FACE_LABEL = { handleFront: 'Ручка: перед', handleBack: 'Ручка: зад', rightTop: 'Правый торец: верх', rightBottom: 'Правый торец: низ', leftTop: 'Левый торец: верх', leftBottom: 'Левый торец: низ', tray: 'Подложка', extFront: 'Экстендер: перед', extBack: 'Экстендер: зад', fold: 'Внутренний борт', flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
+const FACE_LABEL = { sleeve: 'Рукав', handleFront: 'Ручка: перед', handleBack: 'Ручка: зад', rightTop: 'Правый торец: верх', rightBottom: 'Правый торец: низ', leftTop: 'Левый торец: верх', leftBottom: 'Левый торец: низ', tray: 'Подложка', extFront: 'Экстендер: перед', extBack: 'Экстендер: зад', fold: 'Внутренний борт', flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
 const BAG_LABEL = { fold: 'Отворот', left: 'Левый фальц', right: 'Правый фальц' };
 const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : (o.type === 'bag' && BAG_LABEL[k]) || FACE_LABEL[k];
 const BOARD = [['#f4f1e9', 'Белый'], ['#c39460', 'Крафт'], ['#2e3530', 'Графит'], ['#879c79', 'Шалфей'], ['#d28f84', 'Розовый'], ['#8aacca', 'Голубой']];
@@ -563,6 +567,7 @@ function ensureFaces(o) {
     o.wallT ??= o.thickness;
     o.lidFit ??= 'over';
     o.handle ??= defaultHandle(o.dims);
+    o.sleeve ??= defaultSleeve(o.dims);
     if (o.handle.rTop == null) applyHandlePreset(o.handle, o.handle.shape || 'arch');   // projects from before adjustable handles
     o.frontWin ??= defaultFrontWin(o.dims);
     if (o.lidType === 'handle') { o.hbSides ??= 'right'; o.tray ??= { out: 0, fin: 'board' }; o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 0, cake: true }; }
@@ -581,7 +586,7 @@ function ensureFaces(o) {
   o.window.place ??= 'edge'; o.window.off ??= 0; o.window.corners ??= 'round';
   if (o.whiteInside === undefined) o.whiteInside = true;
   for (const st of o.stickers) if (!faceKeys(o).includes(st.face)) st.face = faceKeys(o)[0];
-  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) ? '#ffffff' : k.startsWith('inside') ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
+  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) || k === 'sleeve' ? '#ffffff' : k.startsWith('inside') ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
   if (!o.board) o.board = (o.faces.front || o.faces.wrap).bg;
 }
 function newObject(presetId = 'mailer') {
@@ -589,6 +594,7 @@ function newObject(presetId = 'mailer') {
   const o = { id: uid(), name: p.label, type: p.type, dims: { ...p.dims }, lid: 0, thickness: p.thick ?? 2, finish: p.finish, edge: p.edge,
     grain: p.grain ?? (p.finish === 'kraft' ? .55 : .12), dieline: null, pos: { x: 0, z: 0 }, rotY: 0, faces: {},
     board: '#ffffff', whiteInside: p.whiteInside ?? true, window: p.window ? { ...p.window } : null,
+    sleeve: p.sleeve ? { ...defaultSleeve(p.dims), ...p.sleeve, on: true } : undefined,
     handle: p.handle ? applyHandlePreset({ ...defaultHandle(p.dims), ...p.handle }, p.handle.shape || 'arch') : undefined,
     frontWin: p.frontWin ? { ...defaultFrontWin(p.dims), ...p.frontWin } : undefined,
     lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2 };
@@ -597,6 +603,7 @@ function newObject(presetId = 'mailer') {
   if (p.torte) applyTortePreset(o, p);
   ensureFaces(o);
   if (p.board) setBoard(o, p.board);
+  if (p.sleeve?.bg) o.faces.sleeve.bg = p.sleeve.bg;
   return o;
 }
 const applyDomePreset = (o, p) => Object.assign(o, { trayH: p.dome.trayH, botK: p.dome.botK, flangeW: p.dome.flange, domeTop: p.dome.top, cornerR: p.dome.cr, lid: 0 });
@@ -609,7 +616,7 @@ function applyBagPreset(o, p) {
 /* unprinted board colour: outer faces take it, the inside stays white unless switched off */
 function setBoard(o, c) {
   o.board = c;
-  for (const k of outerKeys(o)) if (!(o.type === 'bag' && EXT_KEYS.includes(k))) o.faces[k].bg = c;
+  for (const k of outerKeys(o)) if (!(o.type === 'bag' && EXT_KEYS.includes(k)) && k !== 'sleeve') o.faces[k].bg = c;
   for (const k of ['inside', 'insideBottom']) if (o.faces[k]) o.faces[k].bg = o.whiteInside ? WHITE_INSIDE : c;
 }
 const newText = (text = 'Текст') => ({ id: uid(), type: 'text', text, font: 'Montserrat', weight: 700, italic: false, size: .14, color: '#1c1b19', align: 'center', ls: 0, lh: 1.1, x: .5, y: .5, rot: 0, opacity: 1, blend: 'source-over', effect: 'none', visible: true });
@@ -642,6 +649,7 @@ function faceMM(o, k) {
     if (k === 'bottom') return [w, B.D];
     return [w, B.Hv];
   }
+  if (k === 'sleeve') { const SD = sleeveDims(o); return [SD.bw, SD.P]; }
   if (k === 'front' || k === 'back') return [w, h];
   if (k === 'left' || k === 'right') return [d, h];
   const tele = o.lidType === 'telescope', inLid = tele && o.lidMat === 'clear' && o.lidFit === 'inside';
@@ -725,6 +733,12 @@ function netLayout(o) {
     const gap = 15, y = H + gap; let x = 0, rowH = 0;
     for (const k of extra) { const [pw, ph] = faceMM(o, k); panels.push({ key: k, x, y, w: pw, h: ph, part: true }); x += pw + gap; rowH = Math.max(rowH, ph); }
     W = Math.max(W, x - gap); H = y + rowH;
+  }
+  if (sleeveOn(o)) {
+    const SD = sleeveDims(o), y = H + 15;
+    panels.push({ key: 'sleeve', x: 0, y, w: SD.bw, h: SD.P, part: true, creases: SD.stops.slice(1, 4).map(s => [0, y + s, SD.bw, y + s]) },
+      { key: 'glue', blank: 'клеевой клапан', x: 0, y: y + SD.P, w: SD.bw, h: SLEEVE_GLUE, part: true, crease: true });
+    W = Math.max(W, SD.bw); H = y + SD.P + SLEEVE_GLUE;
   }
   return { W, H, panels, oy, hinged, backLid, tx, tw, lid, folds };
 }
@@ -1412,11 +1426,11 @@ function buildObject(o) {
     RT.set(o.id, rt); world.add(rt.group);
   }
   rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null;
+  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null;
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'bag') buildBag(o, rt); else buildTube(o, rt);
-  applyTransform(o); computeFrames(o, rt); applyLid(o); applyObjMaterials(o); markObj(o);
+  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); applyLid(o); applyObjMaterials(o); markObj(o);
   rt.stickerMeshes = []; buildStickerFilms(o);
 }
 function disposeObject(id) {
@@ -1426,7 +1440,7 @@ function disposeObject(id) {
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
   for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
   rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); rt.cupLidMat.dispose(); rt.holeMat.dispose();
-  rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); rt.baseMat?.dispose(); rt.trayMat?.dispose(); rt.cakeMats?.forEach(m => m.dispose()); RT.delete(id);
+  rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); rt.baseMat?.dispose(); rt.trayMat?.dispose(); rt.cakeMats?.forEach(m => m.dispose()); rt.sleeveIn?.dispose(); rt.sleeveEdge?.dispose(); RT.delete(id);
 }
 /* clear PET: black diffuse, so only reflections remain (stronger at grazing angles). The shader turns
    their brightness into coverage, so plain plastic stays see-through even over the page background
@@ -2151,6 +2165,94 @@ function buildHandleBox(o, rt, { addG, add, film }) {
     }
   }
 }
+/* ---------- sleeve ----------
+   A paper band glued into a tube around a closed box (or round an open tray: a matchbox-style box).
+   It goes round the box across its width (top, front, bottom, back; axis x) or across its depth (top,
+   right, bottom, left; axis z). Its design is one strip: across the band = canvas x, along the band = canvas
+   y, starting at the top, so the panels read top, front/right, bottom, back/left. */
+const SLEEVE_AXES = { x: 'Поперёк ширины: верх, перед, дно, зад', z: 'Поперёк глубины: верх, бока, дно' };
+const SLEEVE_FIN = { matte: 'Матовая бумага', gloss: 'Глянцевая ламинация', soft: 'Soft-touch', kraft: 'Крафт' };
+const SLEEVE_GLUE = 15;   // mm of glue flap on the die
+const sleeveOn = o => o.type === 'box' && o.lidType !== 'handle' && !!o.sleeve?.on;
+const defaultSleeve = dims => ({ on: false, axis: 'x', w: Math.round(dims.w * .5), x: 0, slide: 0, fin: 'matte' });
+/* the closed box's outline the sleeve wraps (mm): x half width, z front/back, y top */
+function boxEnvelope(o) {
+  const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4), lt = o.lidType || 'flat';
+  let hx = w / 2, zf = d / 2, zb = -d / 2, top = h;
+  if (lt === 'flat' || lt === 'tuck') top = h + t;
+  if (lt === 'flap') { hx = w / 2 + t + .3; zf = d / 2 + t + .3; top = h + t; }
+  if (lt === 'telescope') {
+    if (o.lidMat === 'clear') {
+      const LH = clamp(o.lidH, 3, 1000);
+      if (o.lidFit === 'inside') top = Math.max(h, t + LH); else { hx = w / 2 + .9; zf = d / 2 + .9; zb = -zf; top = Math.max(h + .3, LH); }
+    } else { hx = w / 2 + t + .5; zf = d / 2 + t + .5; zb = -zf; top = h + t; }
+  }
+  return { hx, zf, zb, top };
+}
+function sleeveDims(o) {
+  const E = boxEnvelope(o), S0 = o.sleeve || {}, g = .45, st = .3, ax = S0.axis === 'z' ? 'z' : 'x';
+  // the cross-section the band goes round, and the length of the box along the band's axis
+  const y0 = -g, y1 = E.top + g, a0 = ax === 'x' ? E.zb - g : -E.hx - g, a1 = ax === 'x' ? E.zf + g : E.hx + g;
+  const len = ax === 'x' ? 2 * E.hx : E.zf - E.zb, mid = ax === 'x' ? 0 : (E.zf + E.zb) / 2;
+  const bw = clamp(S0.w ?? len * .5, 10, len + 2 * g), c = mid + clamp(S0.x || 0, -(len - bw) / 2 - g, (len - bw) / 2 + g);
+  const A = a1 - a0, Hh = y1 - y0;
+  // panels in path order, each with its length; the path starts at the top's back (x) / left (z) edge
+  const names = ax === 'x' ? ['top', 'front', 'bottom', 'back'] : ['top', 'right', 'bottom', 'left'];
+  const lens = [A, Hh, A, Hh], P = 2 * (A + Hh), stops = [0];
+  for (const l of lens) stops.push(stops[stops.length - 1] + l);
+  return { ax, y0, y1, a0, a1, A, Hh, P, bw, c, len, names, lens, stops, st, E };
+}
+const SLEEVE_PANEL = { top: 'верх', front: 'перед', bottom: 'дно', back: 'зад', right: 'правый бок', left: 'левый бок' };
+function buildSleeve(o, rt) {
+  rt.sleeve = null;
+  if (!sleeveOn(o)) return;
+  const D = sleeveDims(o), g = new THREE.Group(), st = D.st, P = Math.PI;
+  sleeveColors(o, rt);
+  // a point of the path at distance s (mm), with the outward normal; b runs across the band (canvas x)
+  const corners = [[D.a0, D.y1], [D.a1, D.y1], [D.a1, D.y0], [D.a0, D.y0]];   // (a, y): top-back, top-front, bottom-front, bottom-back
+  const at = (i, out) => { const [a, y] = corners[i % 4], na = a > (D.a0 + D.a1) / 2 ? 1 : -1, ny = y > 0 ? 1 : -1; return [a + na * out, y + ny * out]; };
+  // map (along-axis b, section a, y) to box space; across the band runs to the right as seen from the front (x) / right (z)
+  const X = (b, a, y) => D.ax === 'x' ? [b, y, a] : [a, y, b];
+  const b0 = D.c - D.bw / 2, b1 = D.c + D.bw / 2, mat = rt.faces.sleeve.mat;
+  const quad = (pts, uvs, m, face, outward) => {
+    let geo = quadGeo(pts, uvs);
+    const n = new THREE.Vector3().fromBufferAttribute(geo.attributes.normal, 0);
+    if (n.dot(outward) < 0) { geo.dispose(); geo = quadGeo([pts[0], pts[3], pts[2], pts[1]], uvs && [uvs[0], uvs[3], uvs[2], uvs[1]]); }
+    const mesh = new THREE.Mesh(geo, m); mesh.castShadow = mesh.receiveShadow = true; mesh.userData = { objId: o.id, face }; g.add(mesh); return mesh;
+  };
+  for (let i = 0; i < 4; i++) {
+    const [pa, py] = at(i, st), [qa, qy] = at(i + 1, st), [ia, iy] = at(i, 0), [ja, jy] = at(i + 1, 0);
+    const v0 = 1 - D.stops[i] / D.P, v1 = 1 - D.stops[i + 1] / D.P;
+    const mid = [(pa + qa) / 2, (py + qy) / 2], cen = [(D.a0 + D.a1) / 2, (D.y0 + D.y1) / 2];
+    const out = new THREE.Vector3(...X(0, mid[0] - cen[0], mid[1] - cen[1])).sub(new THREE.Vector3(...X(0, 0, 0)));
+    if (D.ax === 'x') out.x = 0; else out.z = 0;
+    out.normalize();
+    // across the band: canvas x = 0 is the left edge seen from outside; on the far half of the loop that flips
+    const [L, R] = D.ax === 'x' ? [b0, b1] : [b1, b0];
+    quad([X(L, pa, py), X(R, pa, py), X(R, qa, qy), X(L, qa, qy)], [[0, v0], [1, v0], [1, v1], [0, v1]], mat, 'sleeve', out);
+    quad([X(L, ia, iy), X(R, ia, iy), X(R, ja, jy), X(L, ja, jy)], null, rt.sleeveIn, null, out.clone().negate());
+    for (const [b, sg] of [[b0, -1], [b1, 1]]) {
+      const e = new THREE.Vector3(...(D.ax === 'x' ? [sg, 0, 0] : [0, 0, sg]));
+      quad([X(b, ia, iy), X(b, pa, py), X(b, qa, qy), X(b, ja, jy)], null, rt.sleeveEdge, null, e);
+    }
+  }
+  rt.sleeve = g; rt.group.add(g);
+  applySleeve(o);
+}
+function applySleeve(o) {
+  const rt = RT.get(o.id); if (!rt?.sleeve) return;
+  const D = sleeveDims(o), s = clamp(o.sleeve.slide || 0, 0, D.len + D.bw) * S;
+  rt.sleeve.position.set(D.ax === 'x' ? s : 0, 0, D.ax === 'z' ? s : 0);
+}
+function sleeveColors(o, rt) {
+  rt.sleeveIn ??= new THREE.MeshStandardMaterial({ roughness: .9, side: THREE.FrontSide });
+  rt.sleeveEdge ??= new THREE.MeshStandardMaterial({ roughness: .9, side: THREE.DoubleSide });
+  const paper = new THREE.Color(o.faces.sleeve?.bg || '#ffffff');
+  if (o.sleeve?.fin === 'kraft') paper.multiply(new THREE.Color(FINISHES.kraft.kraft));
+  // the inside of the band is unprinted paper; the cut edges show the paper's colour
+  rt.sleeveIn.color.copy(o.sleeve?.fin === 'kraft' ? paper : new THREE.Color('#f6f3ec')); rt.sleeveEdge.color.copy(paper).multiplyScalar(.92);
+}
+const faceGrain = (o, k) => k === 'sleeve' ? (o.sleeve?.fin === 'kraft' ? .45 : .06) : o.grain;
 function buildTube(o, rt) {
   const R = o.dims.w / 2 * S, H = o.dims.h * S;
   const geo = new THREE.CylinderGeometry(R, R, H, 144, 1, false, Math.PI, Math.PI * 2);
@@ -2395,6 +2497,7 @@ function applyObjMaterials(o) {
   if (FINISHES[o.finish]?.kraft) fold.multiply(new THREE.Color(FINISHES[o.finish].kraft));
   rt.foldMat.color.copy(fold);
   rt.cupLidMat.color.set(o.lidColor || LID_COLORS[0][0]);
+  if (rt.sleeve) sleeveColors(o, rt);
   if (rt.trayMat) { const gold = o.tray?.fin === 'gold'; rt.trayMat.color.set(gold ? '#d6b25e' : '#c9cdd3'); rt.trayMat.metalness = .9; rt.trayMat.roughness = .3; }
   if (rt.baseMat) {
     const metal = o.baseFin === 'metal';
@@ -2493,7 +2596,7 @@ function renderFace(o, k) {
   // print on a clear PET lid: no board colour, paper grain or kraft, only the layers
   const clear = f.clear = isClearFace(o, k);
   const bf = clear && o.type === 'bag' ? BAG_FILM[o.bagMat] : null;
-  const fin = clear ? bf?.fin || PET_PRINT : FINISHES[o.finish] || FINISHES.matte;
+  const fin = clear ? bf?.fin || PET_PRINT : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = faceGrain(o, k);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   if (clear) { ctx.clearRect(0, 0, W, H); if (bf?.ground) { ctx.fillStyle = bf.ground; ctx.fillRect(0, 0, W, H); } }
   else { ctx.fillStyle = face.bg; ctx.fillRect(0, 0, W, H); }
@@ -2510,10 +2613,10 @@ function renderFace(o, k) {
     else { drawLayer(ctx, L, W, H); if (L.effect !== 'none') fxl.push(L); }
   }
   if (fin.kraft && !clear) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = fin.kraft; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
-  if (o.grain > 0 && !clear) {
+  if (grain > 0 && !clear) {
     const grainPat = f.pat || (f.pat = ctx.createPattern(grainCanvas, 'repeat'));
     grainPat.setTransform(new DOMMatrix().scale(f.ppm * 45 / 256));
-    ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = Math.min(1, o.grain * (fin.kraft ? .9 : .45));
+    ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = Math.min(1, grain * (fin.kraft ? .9 : .45));
     ctx.fillStyle = grainPat; ctx.fillRect(0, 0, W, H);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
@@ -2581,9 +2684,9 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
     const c = aux(f, 'bump'), x = f.bumpCtx, W = c.width, H = c.height;
     x.filter = 'none'; x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
     x.fillStyle = '#808080'; x.fillRect(0, 0, W, H);
-    if (o.grain > 0 && !f.clear) {
+    if (faceGrain(o, k) > 0 && !f.clear) {
       const p = x.createPattern(grainCanvas, 'repeat'); p.setTransform(new DOMMatrix().scale(f.ppm / 2 * 45 / 256));
-      x.globalCompositeOperation = 'overlay'; x.globalAlpha = o.grain * .6; x.fillStyle = p; x.fillRect(0, 0, W, H);
+      x.globalCompositeOperation = 'overlay'; x.globalAlpha = faceGrain(o, k) * .6; x.fillStyle = p; x.fillRect(0, 0, W, H);
       x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1;
     }
     x.filter = `blur(${Math.max(.6, f.ppm / 2 * .35)}px)`;
@@ -2596,7 +2699,7 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
     x.filter = 'none';
     f.bumpTex.needsUpdate = true;
     m.bumpMap = f.bumpTex; m.bumpScale = 4;
-  } else if (o.grain > 0 && !f.clear) { m.bumpMap = f.grain; m.bumpScale = o.grain * 1.2; }
+  } else if (faceGrain(o, k) > 0 && !f.clear) { m.bumpMap = f.grain; m.bumpScale = faceGrain(o, k) * 1.2; }
   else m.bumpMap = null;
   m.clearcoat = fin.cc; m.clearcoatRoughness = fin.ccr;
   m.sheen = fin.sheen || 0; m.sheenRoughness = .8; m.sheenColor.set(0xffffff);
@@ -3361,6 +3464,12 @@ function renderModel() {
     ${box || dome ? rangeField('Толщина, мм', 'thickness', .3, 6, .1) : ''}
     ${box ? rangeField('Стенки дна, мм', 'wallT', .3, 30, .1) : ''}
     ${box ? `<p class="hint">Стенки толще картона — двойной борт: стенка загибается внутрь, сверху виден сгиб.</p>` : ''}
+    ${box && o.lidType !== 'handle' ? `<label class="check"><input type="checkbox" data-k="sleeve.on"> Рукав (бумажная бандероль вокруг коробки)</label>` : ''}
+    ${box && sleeveOn(o) ? (() => { const SD = sleeveDims(o); return `<div class="field wide"><span class="fl">Рукав опоясывает</span><select data-k="sleeve.axis">${Object.entries(SLEEVE_AXES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+      + rangeField('Рукав: ширина ленты, мм', 'sleeve.w', 10, Math.ceil(SD.len + 1), 1) + rangeField('Рукав: смещение от центра, мм', 'sleeve.x', -Math.ceil(SD.len / 2), Math.ceil(SD.len / 2), 1)
+      + rangeField('Сдвинуть рукав, мм', 'sleeve.slide', 0, Math.ceil(SD.len + SD.bw), 1)
+      + `<div class="field wide"><span class="fl">Бумага рукава</span><select data-k="sleeve.fin">${Object.entries(SLEEVE_FIN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+      + `<p class="hint">Дизайн рукава — грань «Рукав»: одна лента, на ней отмечены сгибы (${SD.names.map(k => SLEEVE_PANEL[k]).join(', ')}). Цвет бумаги — фон этой грани. На развёртке рукав — отдельная деталь с биговками и клеевым клапаном.${o.lidType !== 'none' ? ' Перед открытием крышки сдвиньте рукав.' : ' Лоток в рукаве — коробка-пенал: сдвиньте рукав, чтобы выдвинуть лоток.'}</p>`; })() : ''}
     ${box && windowPlace(o) ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
     ${box && o.window.on && windowPlace(o) ? windowFields(o) : ''}
     <div class="sec-h" style="margin-top:4px"><h2>Материал</h2></div>
@@ -3386,6 +3495,13 @@ function renderModel() {
     if (k === 'lidType') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'wallT' || k === 'lidFit') { rebuildQueue.add(o.id); applyObjMaterials(o); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lidMat') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'sleeve.slide') { applySleeve(o); return; }
+    if (k.startsWith('sleeve.')) {
+      if (k === 'sleeve.axis') { const SD = sleeveDims(o); o.sleeve.x = 0; o.sleeve.w = Math.round(Math.min(o.sleeve.w, SD.len)); o.sleeve.slide = 0; }
+      ensureFaces(o); rebuildQueue.add(o.id); markFace(o, 'sleeve'); ui.net = ui.editor = true; updateFaceMeta();
+      if (k === 'sleeve.on' || k === 'sleeve.axis') { select(o.id, k === 'sleeve.on' && o.sleeve.on ? 'sleeve' : sel.face); renderModel(); renderFaceTabs(); }
+      return;
+    }
     if (k === 'handle.shape') applyHandlePreset(o.handle, o.handle.shape);
     if (k === 'tray.out') { applyLid(o); return; }
     if (k === 'hbSides' || k === 'tray.fin' || k === 'product.cake') { ensureFaces(o); rebuildQueue.add(o.id); ui.net = true; select(o.id, sel.face); renderModel(); updateFaceMeta(); return; }
@@ -3396,7 +3512,7 @@ function renderModel() {
     }
     if (k === 'earsOn' || k === 'earFull') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
-    if (k.startsWith('dims') || k === 'thickness') { rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
+    if (k.startsWith('dims') || k === 'thickness') { if (sleeveOn(o)) markFace(o, 'sleeve'); rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lid') { applyLid(o); return; }
     if (k === 'bagStyle') { o.dims.d = o.bagStyle === 'block' ? Math.round(o.dims.w * .65) : 12; o.lid = 0; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'bagTop' || k === 'ext.on') { o.lid = 0; if (k === 'bagTop' && o.bagTop === 'fold' && o.bagStyle === 'block' && o.rollTurns < 2) { o.rollTurns = 2; o.flapH = 16; } ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
@@ -3453,6 +3569,7 @@ function renderModel() {
       for (const [k, v] of [['flapH', p.lid?.flapH], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
       o.lidMat = p.lid?.mat ?? 'board'; o.lidFit = p.lid?.fit ?? 'over'; o.wallT = p.wallT ?? o.thickness;
       o.earsOn = true; o.earFull = true;
+      if (p.sleeve) { o.sleeve = { ...defaultSleeve(o.dims), ...p.sleeve, on: true }; ensureFaces(o); if (p.sleeve.bg) o.faces.sleeve.bg = p.sleeve.bg; }
       if (o.lidType === 'handle') {
         o.handle = applyHandlePreset({ ...defaultHandle(o.dims), ...(p.handle || {}) }, p.handle?.shape || 'arch');
         o.frontWin = { ...defaultFrontWin(o.dims), ...(p.frontWin || {}) };
@@ -3545,7 +3662,7 @@ function renderFacePanel() {
 function setFaceBg(c, doCommit) {
   const o = activeObj(), f = activeFaceData(); if (!f) return;
   f.bg = c; $('#faceBg').value = c; markFace(o, sel.face);
-  if (sel.face === 'inside' || sel.face === 'flap') applyObjMaterials(o);
+  if (sel.face === 'inside' || sel.face === 'flap' || sel.face === 'sleeve') applyObjMaterials(o);
   if (doCommit) commit();
 }
 function layerName(L) {
@@ -3806,6 +3923,18 @@ function drawEditor() {
   c.restore();
   const accentCss = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
   if (circle) { c.strokeStyle = 'rgba(0,0,0,.25)'; c.setLineDash([4, 4]); c.beginPath(); c.arc(dw / 2, dh / 2, dw / 2 - .5, 0, Math.PI * 2); c.stroke(); c.setLineDash([]); }
+  if (sel.face === 'sleeve' && sleeveOn(o)) {
+    // where the band folds round the box, and which side each part ends up on
+    const SD = sleeveDims(o);
+    c.save(); c.strokeStyle = 'rgba(230,0,126,.75)'; c.setLineDash([5, 4]); c.lineWidth = 1;
+    c.fillStyle = 'rgba(120,110,95,.85)'; c.font = '600 11px Onest, system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
+    SD.stops.slice(0, 4).forEach((s0, i) => {
+      const y = s0 / SD.P * dh;
+      if (i) { c.beginPath(); c.moveTo(0, y); c.lineTo(dw, y); c.stroke(); }
+      c.fillText(SLEEVE_PANEL[SD.names[i]] + (i > 1 ? ' (вверх ногами)' : ''), 6, y + 5);
+    });
+    c.setLineDash([]); c.restore();
+  }
   const fw = faceWindow(o, sel.face);
   if (fw) {
     c.save(); windowPath(c, fw, 0, 0, dw, dh); c.globalCompositeOperation = 'destination-out'; c.fill(); c.restore();
@@ -3964,6 +4093,7 @@ function drawNet() {
     c.setLineDash(p.key === sel.face ? [] : [3, 3]); c.lineWidth = p.key === sel.face ? 2.5 : 1; c.strokeStyle = p.key === sel.face ? accentCss : 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]);
   }
   cutNetWindow(c, o, pad, k);
+  for (const p of n.panels) for (const l of p.creases || []) { c.beginPath(); c.moveTo(pad + l[0] * k, pad + l[1] * k); c.lineTo(pad + l[2] * k, pad + l[3] * k); c.setLineDash([4, 3]); c.strokeStyle = 'rgba(230,0,126,.7)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]); }
   for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.fillStyle = o.board || '#ffffff'; c.fill(); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke(); }
   for (const l of n.slots || []) { c.beginPath(); c.moveTo(pad + l[0] * k, pad + l[1] * k); c.lineTo(pad + l[2] * k, pad + l[3] * k); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1.2; c.stroke(); }
   for (const p of n.panels) for (const hl of p.holes || []) {
@@ -4286,9 +4416,11 @@ function templateSVG(o) {
       return segs.map(([u, v]) => hor ? [u, y1, v, y1] : [x1, u, x1, v]);
     });
     const poly = q => `<polygon points="${q.map(v => v.map(f).join(',')).join(' ')}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
-    for (const p of n.panels) if (p.part) body += p.poly ? poly(p.poly) + (p.holes || []).map(poly).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+    // a sleeve and its glue flap are cut as one outline (the flap's edge is a crease)
+    for (const p of n.panels) if (p.part && !p.crease) body += p.poly ? poly(p.poly) + (p.holes || []).map(poly).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h + (p.key === 'sleeve' ? SLEEVE_GLUE : 0))}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+    for (const p of n.panels) { folds.push(...(p.creases || [])); if (p.crease) folds.push([p.x, p.y, p.x + p.w, p.y]); }
     body += folds.map(l => `<line x1="${f(l[0])}" y1="${f(l[1])}" x2="${f(l[2])}" y2="${f(l[3])}" stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"/>`).join('');
-    for (const p of n.panels) body += label(p);
+    for (const p of n.panels) body += p.blank ? `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.max(2.5, Math.min(p.w, p.h) * .3))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(p.blank.toUpperCase())}</text>` : label(p);
   }
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${f(n.W)}mm" height="${f(n.H)}mm" viewBox="0 0 ${f(n.W)} ${f(n.H)}">
