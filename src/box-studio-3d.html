@@ -534,6 +534,7 @@ function ensureFaces(o) {
   if (!o.window) o.window = { on: false, w: Math.round(o.dims.w * .68), d: Math.round(o.dims.d * .85), h: Math.round(o.dims.h * .46), r: 6 };
   o.window.place ??= 'edge'; o.window.off ??= 0; o.window.corners ??= 'round';
   if (o.whiteInside === undefined) o.whiteInside = true;
+  for (const st of o.stickers) if (!faceKeys(o).includes(st.face)) st.face = faceKeys(o)[0];
   for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) ? '#ffffff' : k.startsWith('inside') ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
   if (!o.board) o.board = (o.faces.front || o.faces.wrap).bg;
 }
@@ -824,15 +825,18 @@ function torteSample(o, rt, st, ew, eh, nx, ny, P, Nn, own, sup, lift) {
   };
   const AB = []; let amin = Infinity, amax = -Infinity;
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const q = ab(-ew / 2 + ew * i / (nx - 1), -eh / 2 + eh * j / (ny - 1)); AB.push(q); amin = Math.min(amin, q[0]); amax = Math.max(amax, q[0]); }
-  // one section per bin of a: far half up over the top, then the near half down
+  // one section per bin of a: far half up over the top, then the near half down. The film is laid along the
+  // section after it is pulled taut (radius rb), so it keeps its length where it bridges an inner corner
+  const tn = clamp(st.tension ?? .5, 0, 1), rb = .3 + 15 * tn * tn;
   const nb = clamp(Math.ceil((amax - amin) / 1.5), 2, 96), bins = [];
   for (let b = 0; b <= nb; b++) {
     const a = amin + (amax - amin) * b / nb, pts = [];
     for (let k = 0; k < env.length; k++) if (env[k].r > Math.abs(a)) pts.push({ rho: -Math.sqrt(env[k].r ** 2 - a * a), k });
     for (let k = env.length - 1; k >= 0; k--) if (env[k].r > Math.abs(a)) pts.push({ rho: Math.sqrt(env[k].r ** 2 - a * a), k });
+    for (const p of pts) p.y = env[p.k].y;
+    tautSection(pts, rb);
     let L = 0, best = Infinity, Lref = 0;
     pts.forEach((p, i) => {
-      p.y = env[p.k].y;
       if (i) { const q = pts[i - 1], dl = Math.hypot(p.rho - q.rho, p.y - q.y); L += dl; p.L = L;
         // where the reference row (through the anchor) crosses this section
         const t = dl ? clamp(((rho0 - q.rho) * (p.rho - q.rho) + (y0 - q.y) * (p.y - q.y)) / (dl * dl), 0, 1) : 0, d = Math.hypot(q.rho + (p.rho - q.rho) * t - rho0, q.y + (p.y - q.y) * t - y0);
@@ -846,8 +850,9 @@ function torteSample(o, rt, st, ew, eh, nx, ny, P, Nn, own, sup, lift) {
     let lo = 0, hi = pts.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m].L < L) lo = m; else hi = m; }
     const p = pts[lo], q = pts[hi], t = (L - p.L) / ((q.L - p.L) || 1), rho = p.rho + (q.rho - p.rho) * t, y = p.y + (q.y - p.y) * t, e = env[Math.max(p.k, q.k)];
     const pos = V().addScaledVector(er, rho).addScaledVector(ea, bin.a); pos.y = y;
-    const rad = V().set(pos.x, 0, pos.z); if (rad.lengthSq() < 1e-9) rad.copy(er); rad.normalize();
-    return { pos, n: rad.multiplyScalar(e.nr).add(V().set(0, e.ny, 0)).normalize(), part: e.part };
+    // outward normal of the (taut) section: the tangent turned a quarter
+    const tr = q.rho - p.rho, ty = q.y - p.y, tl = Math.hypot(tr, ty) || 1;
+    return { pos, n: V().addScaledVector(er, -ty / tl).add(V().set(0, tr / tl, 0)).normalize(), part: e.part };
   };
   for (let k = 0; k < AB.length; k++) {
     const [a, b] = AB[k], f = (amax - amin) > 1e-9 ? (a - amin) / (amax - amin) * nb : 0, i0 = Math.min(nb - 1, Math.floor(f)), t = f - i0;
@@ -858,6 +863,38 @@ function torteSample(o, rt, st, ew, eh, nx, ny, P, Nn, own, sup, lift) {
     if (!part.n) part.n = n.clone();
   }
   for (const p of Object.values(parts)) p.n ??= new THREE.Vector3(0, 1, 0);
+}
+/* a section (ρ, y points in order, solid on the inner side) pulled taut like a film with tension: a ball of
+   radius r rolled along the outside; points it cannot reach (inner corners) move onto the ball's arc */
+function tautSection(pts, r) {
+  const n = pts.length; if (r < .35 || n < 3) return;
+  const cx = new Float64Array(n), cy = new Float64Array(n), ok = new Uint8Array(n), s = new Float64Array(n);
+  for (let i = 1; i < n; i++) s[i] = s[i - 1] + Math.hypot(pts[i].rho - pts[i - 1].rho, pts[i].y - pts[i - 1].y);
+  for (let i = 0; i < n; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)], tr = b.rho - a.rho, ty = b.y - a.y, l = Math.hypot(tr, ty) || 1;
+    cx[i] = pts[i].rho - ty / l * r; cy[i] = pts[i].y + tr / l * r;
+  }
+  // only points close along the section can be close in space here (a concave corner spans about 2r)
+  const span = 3 * r + 2, r2 = (r - .02) ** 2;
+  let j0 = 0;
+  for (let i = 0; i < n; i++) {
+    while (s[i] - s[j0] > span) j0++;
+    let free = 1;
+    for (let j = j0; j < n && s[j] - s[i] <= span; j++) { const dx = pts[j].rho - cx[i], dy = pts[j].y - cy[i]; if (dx * dx + dy * dy < r2) { free = 0; break; } }
+    ok[i] = free;
+  }
+  const moved = [];
+  j0 = 0;
+  for (let i = 0; i < n; i++) {
+    while (s[i] - s[j0] > span) j0++;
+    if (ok[i]) continue;
+    let best = Infinity, bq = -1;
+    for (let q = j0; q < n && s[q] - s[i] <= span; q++) { if (!ok[q]) continue; const d = (pts[i].rho - cx[q]) ** 2 + (pts[i].y - cy[q]) ** 2; if (d < best) { best = d; bq = q; } }
+    if (bq < 0) continue;
+    const d = Math.sqrt(best); if (d < 1e-9 || d - r >= r) continue;
+    moved.push([i, cx[bq] + (pts[i].rho - cx[bq]) * r / d, cy[bq] + (pts[i].y - cy[bq]) * r / d]);
+  }
+  for (const [i, rho, y] of moved) { pts[i].rho = rho; pts[i].y = y; }
 }
 /* ---------- paper cup ----------
    The printed side wall is a cone. It is designed on a rectangle that maps onto the cone conformally:
@@ -2525,6 +2562,7 @@ function buildStickerFilms(o) {
     // from outside can reach, so it fillets inner corners and ramps over steps, while flat areas and
     // outer edges keep full contact. For each point: rest balls on nearby surface samples, keep the
     // ones that don't dig into any other sample, and lift the point onto the nearest such ball.
+    if (!torte) {
     const t = clamp(st.tension ?? .5, 0, 1), r = .3 + 15 * t * t;
     const cell = Math.max(r, step * 1.5), X = new Float64Array(N * 3), CC = new Float64Array(N * 3);
     for (let k = 0; k < N; k++) { X[k * 3] = P[k].x; X[k * 3 + 1] = P[k].y; X[k * 3 + 2] = P[k].z; }
@@ -2569,6 +2607,7 @@ function buildStickerFilms(o) {
       const f = r / d; moved[k] = new THREE.Vector3(CC[bq * 3] + (px - CC[bq * 3]) * f, CC[bq * 3 + 1] + (py - CC[bq * 3 + 1]) * f, CC[bq * 3 + 2] + (pz - CC[bq * 3 + 2]) * f);
     }
     for (let k = 0; k < N; k++) if (moved[k]) P[k].copy(moved[k]);
+    }
     // one geometry per rigid part; a cell rides with the part under its first corner
     const byPart = new Map();
     for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
