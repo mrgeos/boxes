@@ -497,7 +497,7 @@ function ensureFaces(o) {
   }
   if (o.type === 'cup') { o.cupWall ??= 'double'; o.cupLid ??= true; o.lidColor ??= LID_COLORS[0][0]; }
   if (o.type === 'bag') {
-    o.bagStyle ??= 'flat'; o.bagTop ??= 'flap'; o.bagZig ??= true; o.bagMat ??= 'frosty'; o.flapH ??= 35; o.rollTurns ??= 1; o.shoulder ??= 0;
+    o.bagStyle ??= 'flat'; o.bagTop ??= 'flap'; o.bagZig ??= true; o.bagOpen ??= .65; o.bagMat ??= 'frosty'; o.flapH ??= 35; o.rollTurns ??= 1; o.shoulder ??= 0;
     o.bagWin ??= defaultBagWin(o.dims);
     o.bagWin.cy ??= (o.bagWin.y ?? Math.round(o.dims.h * .2)) + (o.bagWin.h ?? 0) / 2; o.bagWin.corners ??= 'square'; o.bagWin.r ??= 6;
     o.ext ??= { on: false, h: 40, ov: 18, w: o.dims.w, staples: 2 };
@@ -741,12 +741,13 @@ function bagDims(o) {
   const ov = clamp(o.ext?.ov ?? Math.round(eh * .45), Math.min(8, eh), eh);
   const tk = turns > 1 ? .3 + turns * (film ? .5 : 1.1) : .18;
   const B = { W, H, D, t, block, top, turns, fh, roll, Hv, tk, film, seam: block ? 0 : 6, sealTop: top === 'seal' ? 10 : 0, ext, ew: W, eh, ov, open: top === 'open', zig: top === 'open' && o.bagZig !== false };
+  B.openT = clamp(o.bagOpen ?? .65, 0, 1);
   if (block) {
     // gable top: from the shoulder the front and back slope in to meet at the crest; above the crest
     // a flat neck holds the extender (or the seal)
     // an open mouth only leans in a little, softly, with the gussets tucked
     B.dmin = 1.2; B.neck = ext ? ov + 3 : top === 'seal' ? 12 : 0;
-    const run = B.run = B.open ? D * .16 : (D - B.dmin) / 2, maxL = Math.max(1, Hv - B.neck - 15);
+    const run = B.run = B.open ? (D - B.dmin) / 2 * (1 - B.openT) : (D - B.dmin) / 2, maxL = Math.max(1, Hv - B.neck - 15);
     let hp = o.shoulder > 0 ? clamp(o.shoulder, 3, 400) : B.open ? Math.min(D * 1.2, Hv * .3) : D * .85, L = Math.hypot(hp, run);
     if (L > maxL) { hp = Math.sqrt(Math.max(1, maxL * maxL - run * run)); L = Math.hypot(hp, run); }
     B.hp = hp; B.L = L; B.s0 = Hv - B.neck - L;
@@ -819,7 +820,7 @@ function bagShape(o) {
     const sx = x => smooth(0, mx, W / 2 - B.seam - Math.abs(x));
     const puff = (x, y) => sx(x) * smooth(0, my, y) * (B.open ? 1 : smooth(0, my * .8, top - y));
     // an open mouth parts into a soft lens between the side seams
-    const mo = Math.max(4, W * .07), mouth = (x, y) => B.open ? mo * sx(x) * smooth(Hv - Math.min(60, Hv * .3), Hv, y) : 0;
+    const mo = W * .11 * B.openT, mouth = (x, y) => B.open ? mo * sx(x) * smooth(Hv - Math.min(60, Hv * .3), Hv, y) : 0;   // lens opening of a flat bag
     const rip = (x, y) => .3 * Math.sin(x * .13 + y * .07) * Math.sin(y * .11 - x * .05);
     const e = B.film ? .06 : .25;   // half the gap where front and back meet (paper is thicker; keeps them apart in depth)
     const zFront = (x, y) => { const f = puff(x, y); return f * (B.t / 2 + rip(x, y)) + mouth(x, y) + e; };
@@ -2554,7 +2555,7 @@ function renderModel() {
       rebuildQueue.add(o.id); applyObjMaterials(o); markObj(o); renderModel(); renderFacePanel(); return;
     }
     if (k.startsWith('product') || k.startsWith('ext.')) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
-    if (k === 'rollTurns' || k === 'shoulder' || k === 'bagZig' || k.startsWith('bagWin')) {
+    if (k === 'rollTurns' || k === 'shoulder' || k === 'bagZig' || k === 'bagOpen' || k.startsWith('bagWin')) {
       if (k === 'rollTurns') o.lid = 0;
       rebuildQueue.add(o.id); markObj(o); ui.net = true; updateFaceMeta();
       if (k === 'rollTurns' || k === 'bagWin.on' || k === 'bagWin.corners') renderModel();
@@ -2614,7 +2615,7 @@ function bagFields(o) {
     + (block ? rangeField('Глубина дна (фальц), мм', 'dims.d', 10, 300, 1) : rangeField('Толщина содержимого, мм', 'dims.d', 0, 80, 1))
     + `<div class="field wide"><span class="fl">Верх</span><select data-k="bagTop">${Object.entries(BAG_TOPS).map(([k, v]) => `<option value="${k}">${k === 'fold' && block ? 'Завёрнут (скрутка)' : v}</option>`).join('')}</select></div>`
     + (top === 'fold' ? rangeField('Обороты (1 — простой отворот)', 'rollTurns', 1, 3, 1) : '')
-    + (top === 'open' ? `<label class="check"><input type="checkbox" data-k="bagZig"> Зубчатый край горловины</label>` : '')
+    + (top === 'open' ? rangeField('Раскрытие горловины, %', 'bagOpen', 0, 100, 1, 100) + `<label class="check"><input type="checkbox" data-k="bagZig"> Зубчатый край горловины</label>` : '')
     + (top === 'flap' || top === 'fold' ? rangeField(top === 'flap' ? 'Клапан, мм' : (o.rollTurns > 1 ? 'Скрутка: ширина валика, мм' : 'Отворот, мм'), 'flapH', 8, 200, 1) : '')
     + (top === 'flap' || (top === 'fold' && !(o.rollTurns > 1)) ? rangeField(top === 'flap' ? 'Открыть клапан, °' : 'Развернуть отворот, °', 'lid', 0, 180, 1) : '')
     + (block ? rangeField('Скат верха, мм (0 — авто)', 'shoulder', 0, 300, 1) : '')
