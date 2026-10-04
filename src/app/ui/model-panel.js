@@ -1,10 +1,10 @@
 // Левая панель: объекты, форма и размеры, материал, сцена
-import { $, $$, esc, fmt } from '../core/util.js';
-import { BOARD, FINISHES, ICON, LID_COLORS, LID_TYPES, LIGHTS, PRESETS } from '../core/constants.js';
+import { $, $$, esc } from '../core/util.js';
+import { BOARD, FINISHES, LID_COLORS, LID_TYPES, LIGHTS, PRESETS } from '../core/constants.js';
 import { activeObj, sel, state } from '../core/state.js';
 import { clearLid, ensureFaces, faceKeys, faceMM, setBoard } from '../core/model.js';
 import { importImageFile } from '../core/assets.js';
-import { applyLid, applyObjMaterials, applyTransform, markFace, markObj, rebuildQueue, ui } from '../scene/renderer.js';
+import { applyLid, applyObjMaterials, markFace, markObj, rebuildQueue, ui } from '../scene/renderer.js';
 import { BAG_MATS, BAG_TOPS, applyBagPreset, bagFilm } from '../carriers/bag.js';
 import { applyDomePreset } from '../carriers/dome.js';
 import { TORTE_COLORS, TORTE_FIN, applyTortePreset } from '../carriers/torte.js';
@@ -13,23 +13,17 @@ import { HANDLE_SHAPES, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, default
 import { SLEEVE_AXES, SLEEVE_FIN, SLEEVE_PANEL, applySleeve, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn } from '../carriers/sleeve.js';
 import { applyScene, lastView, setView, updateShadowCam } from '../scene/camera.js';
 import { select } from '../core/selection.js';
+import { groupById, layoutAll, parentOf } from '../core/groups.js';
+import { renderObjects } from './object-list.js';
+import { renderGroupPanel } from './group-panel.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField, refreshFields } from './fields.js';
 import { pickImage, renderFacePanel, renderFaceTabs, updateFaceMeta } from './face-panel.js';
 
-function renderObjects() {
-  $('#objList').innerHTML = state.objects.map(o => `<div class="obj ${o.id === sel.obj ? 'on' : ''}" data-id="${o.id}" tabindex="0" role="button">
-    ${ICON[o.type] || ICON.box}<span class="nm">${esc(o.name)}</span>
-    <span class="dm mono">${o.type === 'torte' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'tube' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'cup' ? `⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)}` : o.type === 'bag' && o.bagStyle !== 'block' ? `${fmt(o.dims.w)}×${fmt(o.dims.h)}` : `${fmt(o.dims.w)}×${fmt(o.dims.d)}×${fmt(o.dims.h)}`}</span></div>`).join('')
-    || '<div class="empty">Добавьте коробку, стакан или тубус</div>';
-  $$('#objList .obj').forEach(el => {
-    const go = () => { select(el.dataset.id, undefined, null); };
-    el.onclick = go; el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
-  });
-  $('#dupObjBtn').disabled = $('#delObjBtn').disabled = !activeObj();
-}
 function renderModel() {
   const o = activeObj(), sec = $('#modelSec');
+  if (sel.group && groupById(sel.group)) return renderGroupPanel(sec);
+  const group = o && parentOf(o.id);
   if (!o) { sec.innerHTML = '<div class="sec-h"><h2>Форма</h2></div><div class="empty">Нет выбранного объекта</div>'; return; }
   const box = o.type === 'box', cup = o.type === 'cup', bag = o.type === 'bag', dome = o.type === 'dome', torte = o.type === 'torte', film = bagFilm(o);
   sec.innerHTML = `
@@ -116,9 +110,9 @@ function renderModel() {
     ${rangeField('Фактура бумаги', 'grain', 0, 100, 1, 100)}`}
     ${box || dome ? `<div class="field wide"><span class="fl">Цвет торца</span><div class="row"><input type="color" data-k="edge" aria-label="Цвет торца"><span class="hint">виден на срезе картона</span></div></div>` : ''}
     <div class="sec-h" style="margin-top:4px"><h2>Положение в сцене</h2></div>
-    ${rangeField('Смещение X, мм', 'pos.x', -1000, 1000, 1)}
-    ${rangeField('Смещение Z, мм', 'pos.z', -1000, 1000, 1)}
-    ${rangeField('Поворот, °', 'rotY', -180, 180, 1)}`;
+    ${group ? `<p class="hint">Место в ряду задаёт группа «${esc(group.name)}»: порядок — как в списке, отступ и выравнивание — в настройках группы. Поворот — внутри группы.</p>`
+      : rangeField('Смещение X, мм', 'pos.x', -1000, 1000, 1) + rangeField('Смещение Z, мм', 'pos.z', -1000, 1000, 1)}
+    ${rangeField(group ? 'Поворот в группе, °' : 'Поворот, °', 'rotY', -180, 180, 1)}`;
   bindFields(sec, activeObj, (k) => {
     const o = activeObj();
     if (k === 'name') { renderObjects(); $('#objBadge').textContent = o.name; return; }
@@ -163,7 +157,7 @@ function renderModel() {
     if (['trayH', 'botK', 'domeTop', 'flangeW', 'cornerR'].includes(k)) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k === 'cupWall' || k === 'cupLid') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'cupLid') renderModel(); return; }
     if (k === 'lidColor') { applyObjMaterials(o); $$('#lidSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.lidColor)); return; }
-    if (k.startsWith('pos') || k === 'rotY') { applyTransform(o); return; }
+    if (k.startsWith('pos') || k === 'rotY') { layoutAll(); return; }
     if (k === 'finish' || k === 'grain') { applyObjMaterials(o); markObj(o); return; }
     if (k === 'edge') applyObjMaterials(o);
     if (k.startsWith('window')) {
@@ -265,4 +259,4 @@ function bindScene() {
   $('#lightPreset').onchange = e => { Object.assign(state.scene, LIGHTS[e.target.value], { preset: e.target.value }); refreshFields(sec, state.scene); applyScene(); commit(); };
 }
 
-export { bindScene, renderModel, renderObjects };
+export { bindScene, renderModel };

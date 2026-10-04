@@ -11,6 +11,8 @@ import { renderStickers } from '../ui/stickers-panel.js';
 import { renderLibrary } from '../ui/library-panel.js';
 import { drawEditor } from '../ui/face-editor.js';
 import { drawNet } from '../net/net-view.js';
+import { syncRings } from './move.js';
+import { layoutPending } from '../core/groups.js';
 
 function sceneBounds(onlyActive = false) {
   const b = new THREE.Box3();
@@ -125,6 +127,7 @@ function initCamera() {
     let changed = rebuildQueue.size || dirtyFaces.size || stickerDirty.size || camTween || recording || now < drawUntil;
     for (const id of rebuildQueue) { const o = state.objects.find(x => x.id === id); if (o) buildObject(o); }
     if (rebuildQueue.size) { rebuildQueue.clear(); updateShadowCam(); }
+    if (layoutPending()) changed = true;
     for (const key of dirtyFaces) {
       const [id, k] = key.split('|'); const o = state.objects.find(x => x.id === id); if (o) renderFace(o, k);
     }
@@ -138,6 +141,7 @@ function initCamera() {
       if (t >= 1) camTween = null;
     }
     controls.enablePan = !lockActive();
+    if (syncRings()) changed = true;
     if (recording) recording.step(now);
     else if (controls.update()) changed = true;
     for (const rt of RT.values()) for (const k in rt.faces) {
