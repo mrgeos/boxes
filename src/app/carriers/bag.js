@@ -1,14 +1,10 @@
 // Пакеты: плоский и с дном, верх, окно, экстендер, содержимое
+import * as THREE from 'three';
+import { S, clamp, esc, smooth } from '../core/util.js';
+import { faceMM } from '../core/model.js';
+import { getImg } from '../core/assets.js';
+import { gridGeo, surfFrame } from '../scene/geometry.js';
 
-PRESETS.push(
-  // bags: w = width, h = height, d = gusset depth (flat-bottom bag) or content thickness (flat bag)
-  { id: 'bagFlat', label: 'Пакет плоский 140×140 с клапаном', type: 'bag', dims: { w: 140, h: 140, d: 12 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'flat', top: 'flap', mat: 'frosty', flapH: 35 } },
-  { id: 'bagFlatClear', label: 'Пакет плоский прозрачный 100×150', type: 'bag', dims: { w: 100, h: 150, d: 10 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'flat', top: 'flap', mat: 'clear', flapH: 30 } },
-  { id: 'bagBlock', label: 'Пакет с плоским дном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'block', top: 'fold', turns: 2, mat: 'frosty', flapH: 16 } },
-  { id: 'bagKraft', label: 'Крафт-пакет с дном и экстендером', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#c39460', grain: .45, bag: { style: 'block', top: 'fold', turns: 2, mat: 'kraft', flapH: 16, ext: true } },
-  { id: 'bagBaguette', label: 'Пакет для багета 100×450, открытый', type: 'bag', dims: { w: 100, h: 450, d: 34 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#c39460', grain: .45, bag: { style: 'flat', top: 'open', mat: 'kraft', flapH: 20, prodW: .62, prodY: 110 } },
-  { id: 'bagWindow', label: 'Крафт-пакет с окном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#e8d3b4', grain: .35, bag: { style: 'block', top: 'fold', turns: 2, mat: 'kraft', flapH: 16, win: { on: true, w: 46, h: 80, cy: 75, corners: 'round', r: 6 } } },
-);
 const BAG_MATS = { clear: 'Прозрачная плёнка', frosty: 'Матовая плёнка (frosty)', tracing: 'Калька', paper: 'Бумага белая', kraft: 'Крафт-бумага' };
 const BAG_TOPS = { flap: 'Клапан с клеевой лентой', fold: 'Завёрнут (отворот)', seal: 'Запаян', open: 'Открыт (горловина)' };
 const ZIG = { h: 3.5, pitch: 7 };
@@ -329,3 +325,5 @@ function bagSVG(o, n, f, label) {
   }
   return body;
 }
+
+export { BAG_FILM, BAG_LABEL, BAG_MATS, BAG_TOPS, EXT_KEYS, applyBagPreset, bagDims, bagFilm, bagNet, bagSVG, bagSeals, bagWindows, buildBag, defaultBagWin };

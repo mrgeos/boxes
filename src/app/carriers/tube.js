@@ -1,4 +1,6 @@
 // Тубус / банка
+import * as THREE from 'three';
+import { S } from '../core/util.js';
 
 function buildTube(o, rt) {
   const R = o.dims.w / 2 * S, H = o.dims.h * S;
@@ -15,3 +17,5 @@ function buildTube(o, rt) {
   m.userData = { objId: o.id, faces: ['wrap', 'top', 'bottom'] };
   rt.group.add(m);
 }
+
+export { buildTube };

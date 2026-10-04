@@ -1,4 +1,21 @@
 // Three.js: рендерер, сцена, свет, пол, фактура бумаги; объекты сцены и их материалы
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { $, DEG, S, clamp } from '../core/util.js';
+import { FINISHES, LID_COLORS, WHITE_INSIDE } from '../core/constants.js';
+import { sel } from '../core/state.js';
+import { clearLid, ensureFaces, faceKeys, faceMM, facePx } from '../core/model.js';
+import { buildCup } from '../carriers/cup.js';
+import { buildBag } from '../carriers/bag.js';
+import { buildTube } from '../carriers/tube.js';
+import { buildDome, domeGeom } from '../carriers/dome.js';
+import { TORTE_COLORS, buildTorte } from '../carriers/torte.js';
+import { buildBox } from '../carriers/box.js';
+import { buildSleeve, sleeveColors } from '../carriers/sleeve.js';
+import { computeFrames } from '../stickers/placement.js';
+import { buildStickerFilms } from '../stickers/film.js';
+import { camTween, orbitLock, updateShadowCam } from './camera.js';
 
 const viewport = $('#viewport');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -9,6 +26,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.setClearColor(0x000000, 0);
 viewport.appendChild(renderer.domElement);
+const cvs = renderer.domElement;
 const maxAniso = renderer.capabilities.getMaxAnisotropy();
 const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -220,3 +238,5 @@ function applyObjMaterials(o) {
   rt.innerMat.bumpMap = o.grain > 0 ? rt.faces.inside?.grain ?? null : null;
   rt.innerMat.bumpScale = o.grain * 1.2; rt.innerMat.needsUpdate = true;
 }
+
+export { RT, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, rebuildQueue, renderer, scene, ui, viewport, world };

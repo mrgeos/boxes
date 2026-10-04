@@ -1,4 +1,9 @@
 // Шрифты
+import { toast } from './util.js';
+import { FONTS } from './constants.js';
+import { assets, state } from './state.js';
+import { RT, markFace, ui } from '../scene/renderer.js';
+import { stickerDirty } from '../stickers/placement.js';
 
 const loadedFonts = new Set();
 function fontStr(L, px) { return `${L.italic ? 'italic ' : ''}${L.weight} ${px}px "${L.font}", "Onest", sans-serif`; }
@@ -23,3 +28,5 @@ async function registerFont(f) {
   } catch (e) { toast(`Не удалось подключить шрифт «${f.name}»`); }
 }
 const allFonts = () => [...FONTS, ...state.fonts.map(f => f.name)];
+
+export { allFonts, ensureFont, fontStr, markAllText, registerFont };

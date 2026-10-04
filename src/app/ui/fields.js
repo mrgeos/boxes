@@ -1,4 +1,6 @@
 // Поля настроек: ползунки, привязка к данным
+import { $$, esc, getPath, setPath } from '../core/util.js';
+import { commit } from '../core/project.js';
 
 function rangeField(label, k, min, max, step, mul = 1) {
   return `<div class="field"><span class="fl" title="${esc(label)}">${label}</span><input type="range" min="${min}" max="${max}" step="${step}" data-k="${k}" data-mul="${mul}" aria-label="${esc(label)}"><input class="num" type="number" min="${min}" max="${max}" step="${step}" data-k="${k}" data-mul="${mul}" aria-label="${esc(label)}"></div>`;
@@ -27,3 +29,5 @@ function bindFields(root, getT, onInput, onCommit = commit) {
   });
 }
 function refreshFields(root, t) { $$('[data-k]', root).forEach(el => { if (el !== document.activeElement) showVal(el, getPath(t, el.dataset.k)); }); }
+
+export { bindFields, rangeField, refreshFields };

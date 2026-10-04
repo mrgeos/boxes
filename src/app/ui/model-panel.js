@@ -1,4 +1,21 @@
 // Левая панель: объекты, форма и размеры, материал, сцена
+import { $, $$, esc, fmt } from '../core/util.js';
+import { BOARD, FINISHES, ICON, LID_COLORS, LID_TYPES, LIGHTS, PRESETS } from '../core/constants.js';
+import { activeObj, sel, state } from '../core/state.js';
+import { clearLid, ensureFaces, faceKeys, faceMM, setBoard } from '../core/model.js';
+import { importImageFile } from '../core/assets.js';
+import { applyLid, applyObjMaterials, applyTransform, markFace, markObj, rebuildQueue, ui } from '../scene/renderer.js';
+import { BAG_MATS, BAG_TOPS, applyBagPreset, bagFilm } from '../carriers/bag.js';
+import { applyDomePreset } from '../carriers/dome.js';
+import { TORTE_COLORS, TORTE_FIN, applyTortePreset } from '../carriers/torte.js';
+import { winMM, windowPlace } from '../carriers/box.js';
+import { HANDLE_SHAPES, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, defaultFrontWin, defaultHandle } from '../carriers/handle-box.js';
+import { SLEEVE_AXES, SLEEVE_FIN, SLEEVE_PANEL, applySleeve, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn } from '../carriers/sleeve.js';
+import { applyScene, lastView, setView, updateShadowCam } from '../scene/camera.js';
+import { select } from '../core/selection.js';
+import { commit } from '../core/project.js';
+import { bindFields, rangeField, refreshFields } from './fields.js';
+import { pickImage, renderFacePanel, renderFaceTabs, updateFaceMeta } from './face-panel.js';
 
 function renderObjects() {
   $('#objList').innerHTML = state.objects.map(o => `<div class="obj ${o.id === sel.obj ? 'on' : ''}" data-id="${o.id}" tabindex="0" role="button">
@@ -247,3 +264,5 @@ function bindScene() {
   $('#lightPreset').value = state.scene.preset;
   $('#lightPreset').onchange = e => { Object.assign(state.scene, LIGHTS[e.target.value], { preset: e.target.value }); refreshFields(sec, state.scene); applyScene(); commit(); };
 }
+
+export { bindScene, renderModel, renderObjects };

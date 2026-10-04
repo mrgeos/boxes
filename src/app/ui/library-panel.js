@@ -1,4 +1,16 @@
 // Правая панель: библиотека ассетов
+import { $, $$, esc, toast } from '../core/util.js';
+import { activeLayer, activeObj, assets, sel } from '../core/state.js';
+import { faceKeys, facePx, newImage } from '../core/model.js';
+import { getImg, importImageFile } from '../core/assets.js';
+import { libRemove, library } from '../core/library.js';
+import { vecOf } from '../core/vector.js';
+import { markFace, rebuildQueue } from '../scene/renderer.js';
+import { activeSticker, newSticker, touchSticker } from '../stickers/placement.js';
+import { commit, scheduleSave, usedAssets } from '../core/project.js';
+import { renderModel } from './model-panel.js';
+import { addLayer, pickImage, renderLayerProps, renderLayers } from './face-panel.js';
+import { addSticker, renderStickers } from './stickers-panel.js';
 
 /* ---------- library panel ---------- */
 function renderLibrary() {
@@ -40,3 +52,5 @@ function placeLibImage(it, obj = activeObj(), face = sel.face, at = null) {
   if (at) { L.x = at[0]; L.y = at[1]; }
   addLayer(L, face, obj);
 }
+
+export { placeLibImage, renderLibrary };

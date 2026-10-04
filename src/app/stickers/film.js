@@ -1,4 +1,15 @@
 // Наклейки: рисунок, тень и плёнка в 3D
+import * as THREE from 'three';
+import { S, clamp } from '../core/util.js';
+import { FOILS } from '../core/constants.js';
+import { getImg } from '../core/assets.js';
+import { artImg } from '../core/vector.js';
+import { ensureFont, fontStr } from '../core/fonts.js';
+import { RT, maxAniso } from '../scene/renderer.js';
+import { torteSample } from '../carriers/torte.js';
+import { tmp } from '../faces/render.js';
+import { STICKER_FX, placementsFor, stickerSize } from './placement.js';
+import { dragSt } from '../scene/interaction.js';
 
 const tintCache = new Map();
 function tinted(src, color) {
@@ -213,3 +224,5 @@ function buildStickerFilms(o) {
     }
   }
 }
+
+export { buildStickerFilms, drawSticker, stickerMargin, stickerMask, stickerShadow, tintCache };

@@ -1,4 +1,16 @@
 // Шаблон развёртки (SVG) и развёртка с дизайном (PNG)
+import { DEG, esc, fmt, slug, toast } from '../core/util.js';
+import { activeObj } from '../core/state.js';
+import { faceKeys, faceLabel, faceMM, isClearFace, netLayout } from '../core/model.js';
+import { RT, markObj } from '../scene/renderer.js';
+import { CUP_GLUE, fanOutline, fanXY } from '../carriers/cup.js';
+import { BAG_MATS, bagFilm, bagSVG } from '../carriers/bag.js';
+import { cutNetWindow, netWindows } from '../carriers/box.js';
+import { handleBoxSVG } from '../carriers/handle-box.js';
+import { SLEEVE_GLUE } from '../carriers/sleeve.js';
+import { drawNetPanel, renderFace, setSkipStickers } from '../faces/render.js';
+import { saveFile } from '../core/project.js';
+import { panelPath } from './net-view.js';
 
 function templateSVG(o) {
   const n = netLayout(o), f = v => +v.toFixed(2);
@@ -97,7 +109,7 @@ function exportFlat() {
   const out = document.createElement('canvas'); out.width = Math.round(n.W * k); out.height = Math.round(n.H * k);
   const c = out.getContext('2d'), rt = RT.get(o.id);
   // stickers are applied after printing, so the print sheet leaves them out
-  skipStickers = true; for (const key of faceKeys(o)) renderFace(o, key); skipStickers = false;
+  setSkipStickers(true); for (const key of faceKeys(o)) renderFace(o, key); setSkipStickers(false);
   for (const p of n.panels) {
     const fc = rt.faces[p.key]?.canvas, x = p.x * k, y = p.y * k, w = p.w * k, h = p.h * k;
     c.save(); c.beginPath(); panelPath(c, p, 0, 0, k); c.clip();
@@ -109,3 +121,5 @@ function exportFlat() {
   markObj(o);
   out.toBlob(b => saveFile(`${slug(o.name)}-razvertka-dizain.png`, b), 'image/png');
 }
+
+export { exportFlat, exportTemplate };

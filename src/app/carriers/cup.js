@@ -1,4 +1,6 @@
 // Бумажный стакан: конус, развёртка веером
+import * as THREE from 'three';
+import { S, clamp, pixelsOf, r1, sampleInto } from '../core/util.js';
 
 /* ---------- paper cup ----------
    The printed side wall is a cone. It is designed on a rectangle that maps onto the cone conformally:
@@ -149,3 +151,5 @@ function buildCupLid(o, rt, G) {
   vent.rotation.x = -Math.PI / 2; const rv = .755 * R; vent.position.set(0, yAt(rv) * S, -rv * S); vent.userData = { objId: o.id, face: null }; g.add(vent);
   rt.cupLid = g; rt.group.add(g);
 }
+
+export { CUP_GLUE, buildCup, cupFan, cupGeom, fanImage, fanOutline, fanToRect, fanXY };

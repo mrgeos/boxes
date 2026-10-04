@@ -1,4 +1,16 @@
 // Правая панель: наклейки
+import { $, $$, esc, fmt, uid } from '../core/util.js';
+import { ICON } from '../core/constants.js';
+import { activeObj, sel } from '../core/state.js';
+import { clearLid, faceKeys, faceLabel } from '../core/model.js';
+import { importImageFile } from '../core/assets.js';
+import { allFonts } from '../core/fonts.js';
+import { RT, markFace, ui } from '../scene/renderer.js';
+import { hbOpen } from '../carriers/handle-box.js';
+import { STICKER_FINISH, STICKER_KIND, activeSticker, newSticker, stickerKeys, stickerSize, touchSticker } from '../stickers/placement.js';
+import { commit } from '../core/project.js';
+import { bindFields, rangeField } from './fields.js';
+import { bindVecColors, pickImage, renderLayerProps, renderLayers, vecColorsHTML } from './face-panel.js';
 
 /* ---------- stickers panel ---------- */
 /* a seal goes across the line where the box opens */
@@ -100,3 +112,5 @@ function renderStickers() {
   $('#stImgOff') && ($('#stImgOff').onclick = () => { st.src = null; touchSticker(o, st); renderStickers(); commit(); });
   bindVecColors(sec, activeSticker, t => { const look = RT.get(o.id)?.stickerLook?.get(t.id); if (look) look.key = ''; touchSticker(o, t); });
 }
+
+export { addSticker, deleteSticker, renderStickers };

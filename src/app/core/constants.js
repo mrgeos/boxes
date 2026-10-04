@@ -63,6 +63,20 @@ const PRESETS = [
   { id: 'cup250', label: 'Бумажный стакан 250 мл', type: 'cup', dims: { w: 80, h: 92, d: 54 }, finish: 'matte', edge: '#ece8e0', thick: .4, board: '#f7f5f0', grain: .1 },
   { id: 'cup350', label: 'Бумажный стакан 350 мл', type: 'cup', dims: { w: 90, h: 110, d: 60 }, finish: 'matte', edge: '#ece8e0', thick: .4, board: '#f7f5f0', grain: .1 },
   { id: 'cup450', label: 'Бумажный стакан 450 мл', type: 'cup', dims: { w: 90, h: 130, d: 60 }, finish: 'matte', edge: '#ece8e0', thick: .4, board: '#f7f5f0', grain: .1 },
+  // bags: w = width, h = height, d = gusset depth (flat-bottom bag) or content thickness (flat bag)
+  { id: 'bagFlat', label: 'Пакет плоский 140×140 с клапаном', type: 'bag', dims: { w: 140, h: 140, d: 12 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'flat', top: 'flap', mat: 'frosty', flapH: 35 } },
+  { id: 'bagFlatClear', label: 'Пакет плоский прозрачный 100×150', type: 'bag', dims: { w: 100, h: 150, d: 10 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'flat', top: 'flap', mat: 'clear', flapH: 30 } },
+  { id: 'bagBlock', label: 'Пакет с плоским дном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'block', top: 'fold', turns: 2, mat: 'frosty', flapH: 16 } },
+  { id: 'bagKraft', label: 'Крафт-пакет с дном и экстендером', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#c39460', grain: .45, bag: { style: 'block', top: 'fold', turns: 2, mat: 'kraft', flapH: 16, ext: true } },
+  { id: 'bagBaguette', label: 'Пакет для багета 100×450, открытый', type: 'bag', dims: { w: 100, h: 450, d: 34 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#c39460', grain: .45, bag: { style: 'flat', top: 'open', mat: 'kraft', flapH: 20, prodW: .62, prodY: 110 } },
+  { id: 'bagWindow', label: 'Крафт-пакет с окном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#e8d3b4', grain: .35, bag: { style: 'block', top: 'fold', turns: 2, mat: 'kraft', flapH: 16, win: { on: true, w: 46, h: 80, cy: 75, corners: 'round', r: 6 } } },
+  // tray with a clear domed lid: w × d = tray size at the rim, h = total height with the lid
+  { id: 'dome145', label: 'Лоток с крышкой-призмой 145×145×90, крафт', type: 'dome', dims: { w: 145, h: 90, d: 145 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, whiteInside: false, dome: { trayH: 40, botK: .66, flange: 8, top: .66, cr: 12 } },
+  { id: 'dome110', label: 'Лоток с крышкой-призмой 110×110×90, крафт', type: 'dome', dims: { w: 110, h: 90, d: 110 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, whiteInside: false, dome: { trayH: 40, botK: .68, flange: 6, top: .5, cr: 10 } },
+  { id: 'dome145w', label: 'Лоток с крышкой-призмой 145×145×90, белый', type: 'dome', dims: { w: 145, h: 90, d: 145 }, finish: 'matte', edge: '#ece8e0', thick: .6, board: '#f7f5f0', grain: .1, whiteInside: true, dome: { trayH: 40, botK: .66, flange: 8, top: .66, cr: 12 } },
+  // cake containers: w = base diameter, h = total height; the lid diameter and the base height are their own settings
+  { id: 'torte207', label: 'Тортница T-207, ⌀237×110', type: 'torte', dims: { w: 237, h: 110, d: 237 }, finish: 'matte', edge: '#ffffff', thick: .3, board: '#ffffff', grain: 0, torte: { lidD: 208, baseH: 18, lidR: 12, color: '#b8893a', fin: 'metal' } },
+  { id: 'torte18', label: 'Тортница T-18, ⌀180×103', type: 'torte', dims: { w: 180, h: 103, d: 180 }, finish: 'matte', edge: '#ffffff', thick: .3, board: '#ffffff', grain: 0, torte: { lidD: 158, baseH: 15, lidR: 10, color: '#b8893a', fin: 'metal' } },
 ];
 const LID_COLORS = [['#1d1d1f', 'Чёрная'], ['#f4f4f1', 'Белая']];
 const LID_TYPES = {
@@ -84,3 +98,5 @@ const LIGHTS = {
   drama:  { light: 3.0, az: 70, el: 24, env: .14, shadow: .62, exposure: .85 },
   flat:   { light: .7, az: 20, el: 70, env: .95, shadow: .18, exposure: .9 },
 };
+
+export { BLENDS, BOARD, EFFECTS, EFFECT_SHORT, FACE_LABEL, FINISHES, FOILS, FONTS, ICON, LID_COLORS, LID_TYPES, LID_WALLS, LIGHTS, PET_PRINT, PRESETS, SWATCHES, WHITE_INSIDE, isFoil };

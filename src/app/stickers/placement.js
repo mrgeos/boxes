@@ -1,4 +1,12 @@
 // Наклейки: где они ложатся, переход через рёбра
+import * as THREE from 'three';
+import { DEG, S, uid } from '../core/util.js';
+import { activeObj, sel } from '../core/state.js';
+import { faceMM, outerKeys } from '../core/model.js';
+import { getImg } from '../core/assets.js';
+import { RT, applyLid, markFace } from '../scene/renderer.js';
+import { domeAcross, domeFrames } from '../carriers/dome.js';
+import { stickerMargin } from './film.js';
 
 const STICKER_FINISH = { gloss: 'Глянцевая', matte: 'Матовая', 'foil-gold': 'Фольга — золото', 'foil-silver': 'Фольга — серебро', 'foil-holo': 'Голография', clear: 'Прозрачная плёнка' };
 const STICKER_FX = { gloss: [.1, 0], matte: [.78, 0], 'foil-gold': [.22, 1], 'foil-silver': [.2, 1], 'foil-holo': [.14, 1], clear: [.06, 0] };
@@ -130,3 +138,5 @@ function stickerAt(o, key, px, py) {
   }
   return null;
 }
+
+export { STICKER_FINISH, STICKER_FX, STICKER_KIND, activeSticker, computeFrames, newSticker, placementsFor, stickerAt, stickerDirty, stickerKeys, stickerSize, touchSticker };
