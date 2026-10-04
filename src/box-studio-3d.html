@@ -1,3 +1,5 @@
+<!doctype html>
+<meta charset="utf-8">
 <title>Box Studio 3D</title>
 <meta name="description" content="Редактор 3D-мокапов упаковки: размещение дизайнов на коробках и тубусах.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -128,6 +130,20 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .layer .ln{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px}
 .layer .th{width:24px;height:24px;border-radius:4px;flex:none;background:var(--checker-b) center/contain no-repeat;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;font-weight:700;overflow:hidden}
 .layer .th svg{width:14px;height:14px}
+/* asset library */
+.lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.lib .it{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:6px;background:var(--checker-b) center/contain no-repeat;background-origin:content-box;padding:4px;cursor:pointer}
+.lib .it:hover,.lib .it:focus-visible{border-color:var(--accent);outline:none}
+.lib .it.used::after{content:'';position:absolute;left:4px;bottom:4px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.lib .acts{position:absolute;inset:auto 2px 2px auto;display:none;gap:2px}
+.lib .it:hover .acts,.lib .it:focus-within .acts{display:flex}
+.lib .acts button{width:20px;height:20px;border:1px solid var(--line-2);border-radius:4px;background:var(--panel);color:var(--fg);font-size:11px;line-height:1;cursor:pointer;padding:0}
+.lib .acts button:hover{border-color:var(--accent);color:var(--accent)}
+.lib .acts button:disabled{opacity:.35;cursor:default}
+.lib .vbadge{position:absolute;left:3px;top:3px;font:600 9px/1 var(--mono);padding:2px 3px;border-radius:3px;background:var(--panel);color:var(--muted);border:1px solid var(--line)}
+.vcols{display:flex;flex-wrap:wrap;gap:6px}
+.vc{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--muted)}
+.vc input[type=color]{width:26px;height:22px;padding:0}
 .layer .acts{display:flex;gap:0}
 .layer .acts button{width:24px;height:24px;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;padding:0}
 .layer .acts button:hover{background:var(--panel);color:var(--fg)}
@@ -290,6 +306,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
         <button class="btn sm" id="copyFaceBtn">Копировать</button>
       </div>
     </section>
+    <section class="sec" id="libSec"></section>
     <section class="sec" id="layerSec"></section>
     <section class="sec" id="stickerSec"></section>
     <section class="sec">
@@ -359,6 +376,8 @@ const ICON = {
   tube: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="7" ry="2.5"/><path d="M5 5v14c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5"/></svg>',
   cup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4.5 6.5h15M6 4.5h12l1.5 2-2 14.5h-11L4.5 6.5z"/><path d="M6.6 11h10.8"/></svg>',
   bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 8h12l1 13H5L6 8z"/><path d="M6 8l1.5-4h9L18 8M9 12.5h6"/></svg>',
+  dome: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 13.5h18M4.2 13.5 7 20h10l2.8-6.5"/><path d="M6.5 13.5 8.2 6.5a2 2 0 0 1 2-1.5h3.6a2 2 0 0 1 2 1.5l1.7 7"/></svg>',
+  torte: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M2.5 17.5h19M3.5 17.5 5 20h14l1.5-2.5"/><path d="M5.5 17.5V8.5c0-2 1.5-3.5 3.5-3.5h6c2 0 3.5 1.5 3.5 3.5v9"/></svg>',
   rect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>',
   ell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>',
 };
@@ -398,6 +417,13 @@ const PRESETS = [
   { id: 'cake', label: 'Коробка для торта, белая', type: 'box', dims: { w: 220, h: 45, d: 220 }, finish: 'matte', edge: '#ece8e0', thick: .8, wallT: 6, board: '#f7f5f0', lid: { type: 'telescope', lidH: 120, mat: 'clear', fit: 'inside' } },
   { id: 'cakeKraft', label: 'Коробка для торта, крафт', type: 'box', dims: { w: 220, h: 45, d: 220 }, finish: 'matte', edge: '#b88d5c', thick: .8, wallT: 6, board: '#c39460', grain: .45, whiteInside: false, lid: { type: 'telescope', lidH: 120, mat: 'clear', fit: 'inside' } },
   { id: 'gift', label: 'Подарочная коробка', type: 'box', dims: { w: 200, h: 120, d: 200 }, finish: 'soft', edge: '#e2ddd4', thick: 1.5, lid: { type: 'telescope', lidH: 40 } },
+  { id: 'cakeHandle', label: 'Коробка для торта с ручкой 216×216×146', type: 'box', dims: { w: 216, h: 146, d: 216 }, finish: 'matte', edge: '#ece8e0', thick: .8, board: '#f7f5f0', lid: { type: 'handle' }, window: { on: true, place: 'lid', w: 130, d: 130, h: 20, r: 65, off: 0, corners: 'round' }, handle: { shape: 'arch', w: 120, h: 62 } },
+  { id: 'cakeHandleKraft', label: 'Коробка для торта с ручкой 300×300×190, крафт', type: 'box', dims: { w: 300, h: 190, d: 300 }, finish: 'matte', edge: '#b88d5c', thick: 1.2, board: '#c39460', grain: .45, whiteInside: true, lid: { type: 'handle' }, window: { on: true, place: 'lid', w: 200, d: 170, h: 20, r: 10, off: 0, corners: 'round' }, handle: { shape: 'rect', w: 120, h: 60 } },
+  { id: 'cakeHandleFront', label: 'Коробка для торта с ручкой и окном спереди 200×200×190', type: 'box', dims: { w: 200, h: 190, d: 200 }, finish: 'matte', edge: '#ece8e0', thick: .8, board: '#f7f5f0', lid: { type: 'handle' }, window: { on: true, place: 'lid', w: 150, d: 150, h: 20, r: 6, off: 0, corners: 'round' }, handle: { shape: 'photo', w: 130, h: 75, bridge: 26 }, frontWin: { on: true, w: 140, h: 110, y: 100, r: 3 } },
+  { id: 'mailerSleeve', label: 'Мейлер крафт с рукавом', type: 'box', dims: { w: 260, h: 90, d: 190 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'tuck', flapH: 45 }, sleeve: { axis: 'x', w: 170, bg: '#d32f2f', fin: 'matte' } },
+  { id: 'boxBand', label: 'Коробка крафт с узкой бандеролью', type: 'box', dims: { w: 260, h: 110, d: 200 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'telescope', lidH: 50 }, sleeve: { axis: 'z', w: 55, x: 30, bg: '#2a2a2a', fin: 'soft' } },
+  { id: 'cakeSleeveHandle', label: 'Коробка для торта крафт с рукавом-ручкой', type: 'box', dims: { w: 260, h: 140, d: 260 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'telescope', lidH: 70 }, sleeve: { axis: 'x', w: 120, bg: '#f2a9b4', fin: 'matte', handle: { on: true, h: 80, r: 22, rf: 14, hole: { w: 70, h: 22, y: 44, r: 11 } } } },
+  { id: 'matchbox', label: 'Коробка-пенал: лоток в рукаве', type: 'box', dims: { w: 180, h: 50, d: 120 }, finish: 'matte', edge: '#e2ddd4', thick: 1, board: '#f4f1e9', lid: { type: 'none' }, sleeve: { axis: 'x', w: 182, bg: '#1f3b57', fin: 'soft' } },
   { id: 'tray', label: 'Лоток без крышки', type: 'box', dims: { w: 240, h: 60, d: 160 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'none' } },
   { id: 'flat', label: 'Плоская (пицца, одежда)', type: 'box', dims: { w: 330, h: 45, d: 330 }, finish: 'kraft', edge: '#a87f50', thick: 3 },
   { id: 'tube', label: 'Тубус', type: 'tube', dims: { w: 80, h: 200, d: 80 }, finish: 'matte', edge: '#cdb08a' },
@@ -416,6 +442,20 @@ PRESETS.push(
   { id: 'bagBaguette', label: 'Пакет для багета 100×450, открытый', type: 'bag', dims: { w: 100, h: 450, d: 34 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#c39460', grain: .45, bag: { style: 'flat', top: 'open', mat: 'kraft', flapH: 20, prodW: .62, prodY: 110 } },
   { id: 'bagWindow', label: 'Крафт-пакет с окном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#c39460', thick: .1, board: '#e8d3b4', grain: .35, bag: { style: 'block', top: 'fold', turns: 2, mat: 'kraft', flapH: 16, win: { on: true, w: 46, h: 80, cy: 75, corners: 'round', r: 6 } } },
 );
+PRESETS.push(
+  // tray with a clear domed lid: w × d = tray size at the rim, h = total height with the lid
+  { id: 'dome145', label: 'Лоток с крышкой-призмой 145×145×90, крафт', type: 'dome', dims: { w: 145, h: 90, d: 145 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, whiteInside: false, dome: { trayH: 40, botK: .66, flange: 8, top: .66, cr: 12 } },
+  { id: 'dome110', label: 'Лоток с крышкой-призмой 110×110×90, крафт', type: 'dome', dims: { w: 110, h: 90, d: 110 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, whiteInside: false, dome: { trayH: 40, botK: .68, flange: 6, top: .5, cr: 10 } },
+  { id: 'dome145w', label: 'Лоток с крышкой-призмой 145×145×90, белый', type: 'dome', dims: { w: 145, h: 90, d: 145 }, finish: 'matte', edge: '#ece8e0', thick: .6, board: '#f7f5f0', grain: .1, whiteInside: true, dome: { trayH: 40, botK: .66, flange: 8, top: .66, cr: 12 } },
+);
+PRESETS.push(
+  // cake containers: w = base diameter, h = total height; the lid diameter and the base height are their own settings
+  { id: 'torte207', label: 'Тортница T-207, ⌀237×110', type: 'torte', dims: { w: 237, h: 110, d: 237 }, finish: 'matte', edge: '#ffffff', thick: .3, board: '#ffffff', grain: 0, torte: { lidD: 208, baseH: 18, lidR: 12, color: '#b8893a', fin: 'metal' } },
+  { id: 'torte18', label: 'Тортница T-18, ⌀180×103', type: 'torte', dims: { w: 180, h: 103, d: 180 }, finish: 'matte', edge: '#ffffff', thick: .3, board: '#ffffff', grain: 0, torte: { lidD: 158, baseH: 15, lidR: 10, color: '#b8893a', fin: 'metal' } },
+);
+const TORTE_COLORS = [['#b8893a', 'Золото'], ['#c3c7cc', 'Серебро'], ['#1d1d1f', 'Чёрное'], ['#f4f4f1', 'Белое'], ['#7a1f2b', 'Бордо']];
+const TORTE_FIN = { metal: 'Металлик', gloss: 'Глянцевый цветной ПЭТ', clear: 'Прозрачный ПЭТ' };
+const applyTortePreset = (o, p) => Object.assign(o, { lidD: p.torte.lidD, baseH: p.torte.baseH, lidR: p.torte.lidR, lidDraft: .03, baseColor: p.torte.color, baseFin: p.torte.fin, lid: 0 });
 const BAG_MATS = { clear: 'Прозрачная плёнка', frosty: 'Матовая плёнка (frosty)', tracing: 'Калька', paper: 'Бумага белая', kraft: 'Крафт-бумага' };
 const BAG_TOPS = { flap: 'Клапан с клеевой лентой', fold: 'Завёрнут (отворот)', seal: 'Запаян', open: 'Открыт (горловина)' };
 const ZIG = { h: 3.5, pitch: 7 };   // teeth of a serrated mouth edge, mm
@@ -433,13 +473,47 @@ const LID_TYPES = {
   flap: 'Откидная с клапаном снаружи',
   tuck: 'Откидная с клапаном внутрь (мейлер)',
   telescope: 'Отдельная крышка (крышка-дно)',
+  handle: 'С ручкой: крышка с передней стенкой (торт)',
   none: 'Без крышки (лоток)',
 };
 const LID_WALLS = ['lidFront', 'lidRight', 'lidLeft', 'lidBack'];
+const HANDLE_KEYS = ['handleFront', 'handleBack'];
+const HANDLE_SHAPES = { arch: 'Арка', rect: 'Прямоугольная с прорезью', photo: 'Рамка с широкой проймой' };
+const r1 = v => Math.round(v * 10) / 10;
+/* a handle leaf: outline w × h with top and bottom corner radii; a hand hole w × h, its bottom y above the
+   bridge (0 = open at the bottom: the leaf stands on two legs) and its own corner radii */
+const HANDLE_PRESETS = {
+  arch: (w, h) => { const b = clamp(Math.min(w, h) * .2, 5, 25); return { rTop: Math.min(w / 2, h), rBot: 0, hole: { w: w - 2 * b, h: h - b, y: 0, rTop: Math.min(w / 2 - b, h - b), rBot: 0 } }; },
+  rect: (w, h) => { const hh = clamp(h * .3, 6, 30); return { rTop: Math.min(w, h) * .18, rBot: 0, hole: { w: w * .56, h: hh, y: h * .62 - hh / 2, rTop: hh / 2, rBot: hh / 2 } }; },
+  photo: (w, h) => ({ rTop: Math.min(w, h) * .3, rBot: 0, hole: { w: w * .72, h: h * .5, y: h * .2, rTop: Math.min(w, h) * .16, rBot: Math.min(w, h) * .08 } }),
+};
+function applyHandlePreset(H, shape) {
+  const p = HANDLE_PRESETS[shape] ? HANDLE_PRESETS[shape](H.w, H.h) : HANDLE_PRESETS.arch(H.w, H.h);
+  Object.assign(H, { shape, rTop: r1(p.rTop), rBot: r1(p.rBot), hole: Object.fromEntries(Object.entries(p.hole).map(([k, v]) => [k, r1(v)])) });
+  return H;
+}
+const defaultHandle = dims => { const w = Math.round(clamp(dims.w * .45, 50, 140)); return applyHandlePreset({ on: true, w, h: Math.round(w * .52), up: true, bridge: 30 }, 'arch'); };
+const defaultFrontWin = (dims) => ({ on: false, w: Math.round(dims.w * .62), h: Math.round(dims.h * .5), y: Math.round(dims.h * .52), r: 4 });
+/* width (mm) of the strip across the lid window that carries the handle, 0 = none */
+const bridgeMM = o => o.type === 'box' && o.lidType === 'handle' && o.handle?.on ? clamp(o.handle.bridge ?? 30, 0, 200) : 0;
+/* a polygon (points with x, y) clipped to the half-plane y <= c (keep = -1) or y >= c (keep = 1) */
+function clipY(pts, c, keep) {
+  const out = [], inside = q => keep < 0 ? q.y <= c : q.y >= c;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length], ia = inside(a), ib = inside(b);
+    if (ia) out.push({ x: a.x, y: a.y });
+    if (ia !== ib) { const t = (c - a.y) / (b.y - a.y); out.push({ x: a.x + (b.x - a.x) * t, y: c }); }
+  }
+  return out.length > 2 ? out : null;
+}
+/* a window outline split by a band |y - yc| < half into two openings */
+const splitBand = (pts, yc, half) => [clipY(pts, yc - half, -1), clipY(pts, yc + half, 1)].filter(Boolean);
 /* printed faces of an object, in tab order; depends on the lid construction */
 function faceKeys(o) {
   if (o.type === 'tube') return ['wrap', 'top', 'bottom'];
   if (o.type === 'cup') return ['wrap'];
+  if (o.type === 'torte') return ['lidWrap', 'top'];
+  if (o.type === 'dome') return ['front', 'right', 'back', 'left', 'top', ...LID_WALLS, 'bottom', 'insideBottom'];
   if (o.type === 'bag') {
     const k = ['front'];
     if (o.bagTop === 'flap') k.push('flap'); else if (o.bagTop === 'fold') k.push('fold');
@@ -449,12 +523,20 @@ function faceKeys(o) {
     return k;
   }
   const lt = o.lidType || 'flat';
+  if (lt === 'handle') {
+    // handle box: a sleeve; an end that opens has an upper and a lower flap instead of a wall, and the tray inside
+    const op = hbOpen(o), k = ['front', 'top'];
+    if (o.handle?.on) k.push(...HANDLE_KEYS);
+    k.push(...(op.right ? ['rightTop', 'rightBottom'] : ['right']), 'back', ...(op.left ? ['leftTop', 'leftBottom'] : ['left']), 'bottom', 'tray', 'inside', 'insideBottom');
+    return k;
+  }
   const k = ['front'];
   if (lt !== 'none') k.push('top');
   if (lt === 'flap' || lt === 'tuck') k.push('flap');
   if (lt === 'flap' && o.earsOn) k.push('earLeft', 'earRight');
   if (lt === 'telescope') k.push(...LID_WALLS);
   k.push('right', 'left', 'back', 'bottom');
+  if (sleeveOn(o)) k.push('sleeve');
   if (lt !== 'none' && !(lt === 'telescope' && o.lidMat === 'clear')) k.push('inside');
   k.push('insideBottom');
   return k;
@@ -464,11 +546,11 @@ const wallMM = o => clamp(Math.max(o.wallT ?? o.thickness, o.thickness), o.thick
 const doubleWall = o => o.type === 'box' && wallMM(o) > o.thickness * 1.6 + .2;
 /* a separate lid can be clear PET (cake boxes): its faces carry only print, the rest is plastic */
 const clearLid = o => o.type === 'box' && o.lidType === 'telescope' && o.lidMat === 'clear';
-const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k));
+const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k))) || o.type === 'torte';
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
-const FACE_LABEL = { extFront: 'Экстендер: перед', extBack: 'Экстендер: зад', fold: 'Внутренний борт', flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
+const FACE_LABEL = { sleeve: 'Рукав', handleFront: 'Ручка: перед', handleBack: 'Ручка: зад', rightTop: 'Правый торец: верх', rightBottom: 'Правый торец: низ', leftTop: 'Левый торец: верх', leftBottom: 'Левый торец: низ', tray: 'Подложка', extFront: 'Экстендер: перед', extBack: 'Экстендер: зад', fold: 'Внутренний борт', flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
 const BAG_LABEL = { fold: 'Отворот', left: 'Левый фальц', right: 'Правый фальц' };
-const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : (o.type === 'bag' && BAG_LABEL[k]) || FACE_LABEL[k];
+const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : (o.type === 'bag' && BAG_LABEL[k]) || FACE_LABEL[k];
 const BOARD = [['#f4f1e9', 'Белый'], ['#c39460', 'Крафт'], ['#2e3530', 'Графит'], ['#879c79', 'Шалфей'], ['#d28f84', 'Розовый'], ['#8aacca', 'Голубой']];
 const WHITE_INSIDE = '#f8f6ef';
 const SWATCHES = ['#ffffff', '#f3ead6', '#1c1b19', '#20392b', '#0a7aa1', '#b8461b', '#e6007e', '#ffe500'];
@@ -502,7 +584,15 @@ function ensureFaces(o) {
     o.lidMat ??= 'board';
     o.wallT ??= o.thickness;
     o.lidFit ??= 'over';
+    o.handle ??= defaultHandle(o.dims);
+    o.sleeve ??= defaultSleeve(o.dims);
+    o.sleeve.handle ??= defaultSleeveHandle(); o.sleeve.handle.rf ??= 10;
+    if (o.handle.rTop == null) applyHandlePreset(o.handle, o.handle.shape || 'arch');   // projects from before adjustable handles
+    o.frontWin ??= defaultFrontWin(o.dims);
+    if (o.lidType === 'handle') { o.hbSides ??= 'right'; o.tray ??= { out: 0, fin: 'board' }; o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 0, cake: true }; }
   }
+  if (o.type === 'torte') { o.lidD ??= Math.round(o.dims.w * .88); o.baseH ??= Math.round(clamp(o.dims.w * .075, 10, 25)); o.lidR ??= Math.round(o.lidD * .06); o.lidDraft ??= .03; o.baseColor ??= TORTE_COLORS[0][0]; o.baseFin ??= 'metal'; }
+  if (o.type === 'dome') { o.trayH ??= Math.round(o.dims.h * .45); o.botK ??= .66; o.flangeW ??= 8; o.domeTop ??= .6; o.cornerR ??= 12; }
   if (o.type === 'cup') { o.cupWall ??= 'double'; o.cupLid ??= true; o.lidColor ??= LID_COLORS[0][0]; }
   if (o.type === 'bag') {
     o.bagStyle ??= 'flat'; o.bagTop ??= 'flap'; o.bagZig ??= true; o.bagOpen ??= .65; o.bagMat ??= 'frosty'; o.flapH ??= 35; o.rollTurns ??= 1; o.shoulder ??= 0;
@@ -514,7 +604,8 @@ function ensureFaces(o) {
   if (!o.window) o.window = { on: false, w: Math.round(o.dims.w * .68), d: Math.round(o.dims.d * .85), h: Math.round(o.dims.h * .46), r: 6 };
   o.window.place ??= 'edge'; o.window.off ??= 0; o.window.corners ??= 'round';
   if (o.whiteInside === undefined) o.whiteInside = true;
-  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) ? '#ffffff' : k.startsWith('inside') ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
+  for (const st of o.stickers) if (!faceKeys(o).includes(st.face)) st.face = faceKeys(o)[0];
+  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) || k === 'sleeve' ? '#ffffff' : k.startsWith('inside') ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
   if (!o.board) o.board = (o.faces.front || o.faces.wrap).bg;
 }
 function newObject(presetId = 'mailer') {
@@ -522,12 +613,19 @@ function newObject(presetId = 'mailer') {
   const o = { id: uid(), name: p.label, type: p.type, dims: { ...p.dims }, lid: 0, thickness: p.thick ?? 2, finish: p.finish, edge: p.edge,
     grain: p.grain ?? (p.finish === 'kraft' ? .55 : .12), dieline: null, pos: { x: 0, z: 0 }, rotY: 0, faces: {},
     board: '#ffffff', whiteInside: p.whiteInside ?? true, window: p.window ? { ...p.window } : null,
+    sleeve: p.sleeve ? { ...defaultSleeve(p.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true } : undefined,
+    handle: p.handle ? applyHandlePreset({ ...defaultHandle(p.dims), ...p.handle }, p.handle.shape || 'arch') : undefined,
+    frontWin: p.frontWin ? { ...defaultFrontWin(p.dims), ...p.frontWin } : undefined,
     lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2 };
   if (p.bag) applyBagPreset(o, p);
+  if (p.dome) applyDomePreset(o, p);
+  if (p.torte) applyTortePreset(o, p);
   ensureFaces(o);
   if (p.board) setBoard(o, p.board);
+  if (p.sleeve?.bg) o.faces.sleeve.bg = p.sleeve.bg;
   return o;
 }
+const applyDomePreset = (o, p) => Object.assign(o, { trayH: p.dome.trayH, botK: p.dome.botK, flangeW: p.dome.flange, domeTop: p.dome.top, cornerR: p.dome.cr, lid: 0 });
 const defaultBagWin = d => ({ on: false, w: Math.round(d.w * .5), h: Math.round(d.h * .35), cy: Math.round(d.h * .37), x: 0, corners: 'round', r: 6 });
 function applyBagPreset(o, p) {
   Object.assign(o, { bagStyle: p.bag.style, bagTop: p.bag.top, bagMat: p.bag.mat, flapH: p.bag.flapH, lid: 0, rollTurns: p.bag.turns ?? 1, shoulder: 0,
@@ -537,7 +635,7 @@ function applyBagPreset(o, p) {
 /* unprinted board colour: outer faces take it, the inside stays white unless switched off */
 function setBoard(o, c) {
   o.board = c;
-  for (const k of outerKeys(o)) if (!(o.type === 'bag' && EXT_KEYS.includes(k))) o.faces[k].bg = c;
+  for (const k of outerKeys(o)) if (!(o.type === 'bag' && EXT_KEYS.includes(k)) && k !== 'sleeve') o.faces[k].bg = c;
   for (const k of ['inside', 'insideBottom']) if (o.faces[k]) o.faces[k].bg = o.whiteInside ? WHITE_INSIDE : c;
 }
 const newText = (text = 'Текст') => ({ id: uid(), type: 'text', text, font: 'Montserrat', weight: 700, italic: false, size: .14, color: '#1c1b19', align: 'center', ls: 0, lh: 1.1, x: .5, y: .5, rot: 0, opacity: 1, blend: 'source-over', effect: 'none', visible: true });
@@ -549,6 +647,19 @@ function faceMM(o, k) {
   const { w, h, d } = o.dims;
   if (o.type === 'tube') return k === 'wrap' ? [Math.PI * w, h] : [w, w];
   if (o.type === 'cup') { const G = cupGeom(o); return [G.Wr, G.Hr]; }
+  if (o.type === 'torte') {
+    const G = torteGeom(o);
+    return k === 'top' ? [2 * G.Rt, 2 * G.Rt] : [Math.PI * (G.Rl + G.Rs), Math.hypot(G.Rl - G.Rs, G.yS - G.y1)];
+  }
+  if (o.type === 'dome') {
+    const G = domeGeom(o);
+    if (k === 'front' || k === 'back') return [w, G.Lf];
+    if (k === 'left' || k === 'right') return [d, G.Ls];
+    if (k === 'top') return [2 * G.Af, 2 * G.Bf];
+    if (LID_WALLS.includes(k)) { const sd = domeSide(o, k), b = sd.base, lo = sd.pts[b], hi = sd.pts[b + 1]; return [2 * lo.ext, Math.hypot(lo.pos - hi.pos, hi.y - lo.y)]; }
+    if (k === 'insideBottom') return [G.wb - 2 * G.T, G.db - 2 * G.T];
+    return [G.wb, G.db];
+  }
   if (o.type === 'bag') {
     const B = bagDims(o);
     if (k === 'flap' || k === 'fold') return [w, B.fh];
@@ -557,10 +668,14 @@ function faceMM(o, k) {
     if (k === 'bottom') return [w, B.D];
     return [w, B.Hv];
   }
+  if (k === 'sleeve') { const SD = sleeveDims(o); return [SD.bw, SD.P]; }
   if (k === 'front' || k === 'back') return [w, h];
   if (k === 'left' || k === 'right') return [d, h];
   const tele = o.lidType === 'telescope', inLid = tele && o.lidMat === 'clear' && o.lidFit === 'inside';
   const lw = inLid ? w - 2 * (wallMM(o) + .6) : w + 2 * o.thickness + 1, ld = inLid ? d - 2 * (wallMM(o) + .6) : d + 2 * o.thickness + 1;
+  if (HANDLE_KEYS.includes(k)) return [clamp(o.handle?.w ?? 100, 20, w), clamp(o.handle?.h ?? 50, 15, 300)];
+  if (o.lidType === 'handle' && HB_END_KEYS.includes(k)) return [d, h / 2];
+  if (k === 'tray') { const B = hbDims(o); return [B.trW, B.trD]; }
   if (o.lidType === 'flap' && ['flap', 'earLeft', 'earRight', 'top', 'inside'].includes(k)) {
     const ld = lidDimsMM(o);
     return k === 'flap' ? [ld.wl, ld.fh] : k.startsWith('ear') ? [ld.el, ld.fh] : [ld.wl, ld.dl];
@@ -588,6 +703,12 @@ function netLayout(o) {
       { key: 'bottom', x: C / 2 - D / 2, y: D + h, w: D, h: D, circle: true }] };
   }
   if (o.type === 'bag') return bagNet(o);
+  if (o.type === 'dome') return domeNet(o);
+  if (o.type === 'torte') {
+    // print areas of the clear lid: the wall unrolled and the round top above it
+    const [C, hw] = faceMM(o, 'lidWrap'), [Dt] = faceMM(o, 'top'), gap = 15, W = Math.max(C, Dt);
+    return { W, H: Dt + gap + hw, panels: [{ key: 'top', x: W / 2 - Dt / 2, y: 0, w: Dt, h: Dt, circle: true }, { key: 'lidWrap', x: (W - C) / 2, y: Dt + gap, w: C, h: hw }] };
+  }
   if (o.type === 'cup') {
     // the side wall is printed flat as a fan (an annular sector), with a glue overlap on the left
     const G = cupGeom(o), F = cupFan(G);
@@ -598,6 +719,7 @@ function netLayout(o) {
   // that piece is drawn turned 180° (rot), as it lies on the real die.
   const keys = faceKeys(o), lt = o.lidType || 'flat';
   // a window across the hinge needs the lid attached to the back panel too, so the cut is one opening
+  if (lt === 'handle') return hbNet(o);
   const backLid = lt === 'flap' || lt === 'tuck' || (lt === 'flat' && !!winMM(o) && windowPlace(o) === 'back');
   const hinged = keys.includes('top') && !backLid && lt !== 'telescope';
   const panels = [];
@@ -631,7 +753,233 @@ function netLayout(o) {
     for (const k of extra) { const [pw, ph] = faceMM(o, k); panels.push({ key: k, x, y, w: pw, h: ph, part: true }); x += pw + gap; rowH = Math.max(rowH, ph); }
     W = Math.max(W, x - gap); H = y + rowH;
   }
+  if (sleeveOn(o)) {
+    const SD = sleeveDims(o), y = H + 15, sh = sleeveSheet(SD), m = q => q.map(([a, b]) => [a, y + b]);
+    panels.push({ key: 'sleeve', x: 0, y, w: SD.bw, h: SD.P, part: true, creases: sh.creases.map(([a, b, c, d]) => [a, y + b, c, y + d]), ...(sh.outline ? { poly: m(sh.outline), holes: sh.holes.map(m) } : {}) },
+      { key: 'glue', blank: 'клеевой клапан', x: 0, y: y + SD.P, w: SD.bw, h: SLEEVE_GLUE, part: true, crease: true });
+    W = Math.max(W, SD.bw); H = y + SD.P + SLEEVE_GLUE;
+  }
   return { W, H, panels, oy, hinged, backLid, tx, tw, lid, folds };
+}
+/* ---------- tray with a clear domed lid ----------
+   A pressed board tray whose walls flare outward from a smaller floor, closed by a thermoformed PET lid:
+   a flat flange that sits on the tray rim and a truncated pyramid with rounded corners and shoulders.
+   dims: w × d = outer size of the tray at the rim, h = total height with the lid. */
+function domeGeom(o) {
+  const { w, d, h } = o.dims;
+  const trayH = clamp(o.trayH ?? h * .45, 10, Math.max(10, h - 15)), bk = clamp(o.botK ?? .66, .3, 1);
+  const wb = w * bk, db = d * bk, T = clamp(o.thickness, .3, Math.min(w, d, trayH) / 4);
+  const hd = Math.max(8, h - trayH), fl = clamp(o.flangeW ?? 8, 0, 30);
+  const Aw = w / 2, Bd = d / 2, kt = clamp(o.domeTop ?? .6, .2, .92), At = Aw * kt, Bt = Bd * kt;
+  const rsA = clamp(Math.min(At, Bt) * .35, 3, hd * .5), cr = clamp(o.cornerR ?? 12, 0, Math.min(Aw, Bd) * .8);
+  const Af = Math.max(4, At - rsA), Bf = Math.max(4, Bd * Af / Aw);   // flat top: where the print goes
+  return { w, d, h, trayH, wb, db, T, hd, fl, Aw, Bd, At, Bt, rsA, cr, Af, Bf,
+    Lf: Math.hypot(trayH, (d - db) / 2), Ls: Math.hypot(trayH, (w - wb) / 2) };   // slant of the front/back and of the side walls
+}
+/* lid outline as a stack of rounded rectangles, from the flange tip up over the shoulder to the flat top */
+function domeProfile(G) {
+  const { Aw, Bd, At, Bt, hd, fl, rsA, cr } = G, P = [];
+  const add = (A, B, y) => P.push({ A, B, y, r: clamp(cr * A / Aw, 1.5, Math.min(A, B) - .3) });
+  add(Aw + fl, Bd + fl, -1.4); add(Aw + fl, Bd + fl, .4); add(Aw + .5, Bd + .5, 1); P.base = P.length;
+  const b = [Aw - 1.2, Bd - 1.2, 1.4], c = [At, Bt, hd], len = Math.hypot(b[0] - c[0], b[2] - c[2]), sg = clamp(rsA / len, .08, .5);
+  const s0 = c.map((v, i) => v + (b[i] - v) * sg), s1 = [Math.max(3, At - rsA), Math.max(3, Bt - rsA * Bd / Aw), hd];
+  add(...b);
+  for (let i = 0; i <= 7; i++) { const t = i / 7, a = (1 - t) * (1 - t), m = 2 * (1 - t) * t, e = t * t; add(a * s0[0] + m * c[0] + e * s1[0], a * s0[1] + m * c[1] + e * s1[1], a * s0[2] + m * c[2] + e * s1[2]); }
+  return P;
+}
+/* one side of the lid (front, right, back, left): for every profile ring its distance along the side's
+   normal, the half length of its straight part (between the rounded corners) and its height */
+const DOME_SIDES = { front: ['lidFront', 0, 1], right: ['lidRight', 1, 0], back: ['lidBack', 0, -1], left: ['lidLeft', -1, 0] };
+function domeSide(o, lidKey, G = domeGeom(o), prof = domeProfile(G)) {
+  const [wall, [, nx, nz]] = Object.entries(DOME_SIDES).find(([, v]) => v[0] === lidKey);
+  const pts = prof.map(q => ({ pos: nx ? q.A : q.B, ext: Math.max(.5, (nx ? q.B : q.A) - q.r), y: q.y }));
+  // a point of the side in lid space: s runs along the side, to the right as seen from outside
+  const at = (i, sg) => { const q = pts[i]; return [nx * q.pos + nz * q.ext * sg, q.y, nz * q.pos - nx * q.ext * sg]; };
+  return { wall, nx, nz, pts, at, base: prof.base, n: prof.length };
+}
+function domeNet(o) {
+  // star layout: the floor in the middle, a wall folded up from each of its edges, wide (rim) edge outermost
+  const G = domeGeom(o), { w, d, wb, db, Lf, Ls } = G;
+  const W0 = Math.max(w, wb + 2 * Ls), H0 = Math.max(d, db + 2 * Lf), x0 = (W0 - wb) / 2, y0 = (H0 - db) / 2, cx = W0 / 2, cy = H0 / 2;
+  const panels = [
+    { key: 'front', x: cx - w / 2, y: y0 - Lf, w, h: Lf, poly: [[cx - wb / 2, y0], [cx + wb / 2, y0], [cx + w / 2, y0 - Lf], [cx - w / 2, y0 - Lf]] },
+    { key: 'back', x: cx - w / 2, y: y0 + db, w, h: Lf, q: 2, poly: [[cx - wb / 2, y0 + db], [cx + wb / 2, y0 + db], [cx + w / 2, y0 + db + Lf], [cx - w / 2, y0 + db + Lf]] },
+    { key: 'right', x: x0 + wb, y: cy - d / 2, w: Ls, h: d, q: 1, poly: [[x0 + wb, cy - db / 2], [x0 + wb, cy + db / 2], [x0 + wb + Ls, cy + d / 2], [x0 + wb + Ls, cy - d / 2]] },
+    { key: 'left', x: x0 - Ls, y: cy - d / 2, w: Ls, h: d, q: 3, poly: [[x0, cy - db / 2], [x0, cy + db / 2], [x0 - Ls, cy + d / 2], [x0 - Ls, cy - d / 2]] },
+    { key: 'bottom', x: x0, y: y0, w: wb, h: db }];
+  // the clear lid is thermoformed, not die-cut: its print area sits apart as a separate part
+  const gap = 15, [tw, th] = faceMM(o, 'top');
+  let px = 0, py = H0 + gap, rowH = 0, W = W0;
+  const place = (pw, ph) => { if (px > 0 && px + pw > Math.max(W0, tw)) { px = 0; py += rowH + gap; rowH = 0; } const r = [px, py]; px += pw + gap; rowH = Math.max(rowH, ph); W = Math.max(W, px - gap); return r; };
+  const [x1, y1] = place(tw, th);
+  panels.push({ key: 'top', x: x1, y: y1, w: tw, h: th, part: true, r: Math.min(G.cr * G.Af / G.Aw, tw / 2, th / 2) });
+  for (const key of LID_WALLS) {
+    // a slope of the lid: wide at the flange, narrower at the shoulder
+    const [pw, ph] = faceMM(o, key), sd = domeSide(o, key, G), e = sd.pts[sd.base + 1].ext, [x, y] = place(pw, ph);
+    panels.push({ key, x, y, w: pw, h: ph, part: true, poly: [[x, y + ph], [x + pw, y + ph], [x + pw / 2 + e, y], [x + pw / 2 - e, y]] });
+  }
+  return { W, H: py + rowH, panels, dome: G };
+}
+/* ---------- cake container (тортница) ----------
+   Two thermoformed PET parts: an opaque base (a shallow tray with a channel, a wide flange and a lip) and a
+   clear lid that stands in the channel: a near-cylinder with a slight draft, a rounded shoulder and a flat top.
+   dims.w = base diameter, dims.h = total height; o.lidD = lid diameter at the bottom, o.baseH = height of the base. */
+function torteGeom(o) {
+  const D = o.dims.w, R = D / 2, H = o.dims.h;
+  const hb = clamp(o.baseH ?? D * .07, 8, Math.min(40, H * .45));
+  const Dl = clamp(o.lidD ?? D * .88, D * .5, D - 8), Rl = Dl / 2;
+  const y1 = hb + 5, rs = clamp(o.lidR ?? Rl * .12, 2, Math.min(40, Rl * .5, (H - y1) * .5));
+  const yS = H - rs, Rs = Math.max(rs + 5, Rl - clamp(o.lidDraft ?? .03, 0, .15) * (yS - y1)), Rt = Rs - rs;
+  return { D, R, H, hb, Rl, y1, rs, yS, Rs, Rt, rW: y => Rl + (Rs - Rl) * (y - y1) / (yS - y1) };
+}
+/* outer outline of the closed container, from the base lip up over the lid to the centre of its top */
+function torteEnvelope(G) {
+  const { R, hb, Rl, y1, rs, yS, Rs, Rt, H } = G, key = [];
+  for (const p of [[R, .8], [R, hb - 2.5], [R - .6, hb - .8], [R - 2.5, hb], [Rl + 2.6, hb]]) key.push([...p, 'base']);
+  for (const p of [[Rl + 1.2, hb], [Rl + 1.2, hb + 2.5], [Rl + .2, hb + 4], [Rl, y1], [Rs, yS]]) key.push([...p, 'lid']);
+  for (let i = 1; i <= 12; i++) { const a = i / 12 * Math.PI / 2; key.push([Rt + rs * Math.cos(a), yS + rs * Math.sin(a), 'lid']); }
+  key.push([0, H, 'lid']);
+  // even samples (≤ 1 mm) with the outward normal of their segment in (r, y)
+  const out = [];
+  for (let i = 0; i < key.length - 1; i++) {
+    const [r0, y0, , ] = key[i], [r1, y1_, part] = key[i + 1], n = Math.max(1, Math.ceil(Math.hypot(r1 - r0, y1_ - y0)));
+    const l = Math.hypot(r1 - r0, y1_ - y0) || 1, nr = (y1_ - y0) / l, ny = -(r1 - r0) / l;
+    for (let j = i ? 1 : 0; j <= n; j++) out.push({ r: r0 + (r1 - r0) * j / n, y: y0 + (y1_ - y0) * j / n, part, nr, ny });
+  }
+  return out;
+}
+function torteProfiles(G) {
+  const { R, hb, Rl, y1, rs, yS, Rs, Rt, H } = G, V2 = (x, y) => new THREE.Vector2(x, y);
+  // base: floor with two decorative rings, the channel the lid stands in, flange, lip
+  const base = [V2(0, 3)];
+  for (const rr of [.3, .55]) { const c = (Rl - 6) * rr; base.push(V2(c - 4, 3), V2(c - 2, 4.4), V2(c + 2, 4.4), V2(c + 4, 3)); }
+  base.push(V2(Rl - 5, 3), V2(Rl - 4, hb - 1), V2(Rl - 2.5, hb), V2(Rl - .6, hb - 4.6), V2(Rl + 2.6, hb - 4.6), V2(Rl + 3.4, hb),
+    V2(R - 2.5, hb), V2(R - .6, hb - .8), V2(R, hb - 2.5), V2(R, .8), V2(R - .8, 0));
+  const lid = [V2(Rl + 1.2, hb - 4), V2(Rl + 1.2, hb + 2.5), V2(Rl + .2, hb + 4), V2(Rl, y1), V2(Rs, yS)];
+  for (let i = 1; i <= 12; i++) { const a = i / 12 * Math.PI / 2; lid.push(V2(Rt + rs * Math.cos(a), yS + rs * Math.sin(a))); }
+  lid.push(V2(0, H));
+  return { base, lid };
+}
+function buildTorte(o, rt) {
+  const G = torteGeom(o), g = rt.group, F = k => rt.faces[k].mat, pr = torteProfiles(G);
+  rt.baseMat ??= new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, shadowSide: THREE.DoubleSide });
+  const flip = pts => pts.map(p => new THREE.Vector2(p.x * S, p.y * S));
+  const base = new THREE.Mesh(new THREE.LatheGeometry(flip(pr.base), 144), o.baseFin === 'clear' ? rt.petMat : rt.baseMat);
+  base.castShadow = o.baseFin !== 'clear'; base.receiveShadow = true; base.userData = { objId: o.id, face: null }; g.add(base);
+  const lg = new THREE.Group(); g.add(lg); rt.torteLid = lg;
+  const shell = new THREE.Mesh(new THREE.LatheGeometry(flip(pr.lid), 144), rt.petMat); shell.raycast = () => {}; lg.add(shell);
+  for (const [r, y] of [[G.Rl + 1.2, G.hb + 2.5], [G.Rl, G.y1], [G.Rs, G.yS], [G.Rt, G.H]]) {
+    const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 145 }, (_, i) => { const t = i / 144 * Math.PI * 2; return new THREE.Vector3(r * Math.sin(t) * S, y * S, r * Math.cos(t) * S); })), rt.petEdgeMat);
+    ring.raycast = () => {}; ring.renderOrder = 4; lg.add(ring);
+  }
+  // print on the lid: the wall (u around, seam at the back, as on a cup) and the flat top
+  const nu = 160, nv = 12, P = [], N = [], UV = [], I = [], lift = .06, sl = (G.Rl - G.Rs) / Math.hypot(G.Rl - G.Rs, G.yS - G.y1), cl = Math.sqrt(1 - sl * sl);
+  for (let j = 0; j <= nv; j++) {
+    const v = j / nv, y = G.y1 + (G.yS - G.y1) * v, r = G.rW(y) + lift;
+    for (let i = 0; i <= nu; i++) { const u = i / nu, th = Math.PI + u * Math.PI * 2, sn = Math.sin(th), cs = Math.cos(th); P.push(r * sn * S, y * S, r * cs * S); N.push(cl * sn, sl, cl * cs); UV.push(u, v); }
+  }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1; I.push(a, b, d, a, d, c); }
+  const wg = new THREE.BufferGeometry();
+  wg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); wg.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  wg.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2)); wg.setIndex(I);
+  const wall = new THREE.Mesh(wg, F('lidWrap')); wall.userData = { objId: o.id, face: 'lidWrap' }; wall.renderOrder = 3; lg.add(wall);
+  const tg = new THREE.CircleGeometry(G.Rt * S, 96); tg.rotateX(-Math.PI / 2); tg.translate(0, (G.H + lift) * S, 0);
+  const top = new THREE.Mesh(tg, F('top')); top.userData = { objId: o.id, face: 'top' }; top.renderOrder = 3; lg.add(top);
+}
+/* sticker film on the container. Each column of the sticker follows the section of the solid cut by a plane
+   parallel to the meridian through the sticker's anchor; along it the sticker keeps its length, over the
+   shoulder onto the top, or down over the base flange and lip. On the flat top this is exact, on the wall
+   the horizontal size is wrapped back to arc length. */
+function torteSample(o, rt, st, ew, eh, nx, ny, P, Nn, own, sup, lift) {
+  const G = torteGeom(o), env = torteEnvelope(G), I4 = new THREE.Matrix4(), V = () => new THREE.Vector3();
+  const parts = { lid: { parent: rt.torteLid, pinv: I4, n: null }, base: { parent: rt.group, pinv: I4, n: null } };
+  const r = st.rot * DEG, cs = Math.cos(r), sn = Math.sin(r);
+  let er, ea, rho0, y0, wrap = 0;
+  if (st.face === 'top') {
+    const [tw, th] = faceMM(o, 'top'), x0 = st.x * tw - tw / 2, z0 = st.y * th - th / 2;
+    rho0 = Math.hypot(x0, z0); er = rho0 > 1e-3 ? new THREE.Vector3(x0 / rho0, 0, z0 / rho0) : new THREE.Vector3(0, 0, 1); y0 = G.H;
+  } else {
+    const t = Math.PI + st.x * Math.PI * 2; er = new THREE.Vector3(Math.sin(t), 0, Math.cos(t));
+    y0 = G.y1 + (1 - st.y) * (G.yS - G.y1); rho0 = G.rW(y0); wrap = rho0;
+  }
+  ea = new THREE.Vector3(er.z, 0, -er.x);   // to the right as seen from outside
+  // sticker (sx, sy) → column offset a (tangential) and distance b along the section, b > 0 away from the top
+  const ab = (sx, sy) => {
+    if (st.face === 'top') { const dx = cs * sx - sn * sy, dz = sn * sx + cs * sy; return [dx * ea.x + dz * ea.z, dx * er.x + dz * er.z]; }
+    const a = cs * sx - sn * sy; return [wrap * Math.sin(clamp(a / wrap, -Math.PI / 2, Math.PI / 2)), sn * sx + cs * sy];
+  };
+  const AB = []; let amin = Infinity, amax = -Infinity;
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const q = ab(-ew / 2 + ew * i / (nx - 1), -eh / 2 + eh * j / (ny - 1)); AB.push(q); amin = Math.min(amin, q[0]); amax = Math.max(amax, q[0]); }
+  // one section per bin of a: far half up over the top, then the near half down. The film is laid along the
+  // section after it is pulled taut (radius rb), so it keeps its length where it bridges an inner corner
+  const tn = clamp(st.tension ?? .5, 0, 1), rb = .3 + 15 * tn * tn;
+  const nb = clamp(Math.ceil((amax - amin) / 1.5), 2, 96), bins = [];
+  for (let b = 0; b <= nb; b++) {
+    const a = amin + (amax - amin) * b / nb, pts = [];
+    for (let k = 0; k < env.length; k++) if (env[k].r > Math.abs(a)) pts.push({ rho: -Math.sqrt(env[k].r ** 2 - a * a), k });
+    for (let k = env.length - 1; k >= 0; k--) if (env[k].r > Math.abs(a)) pts.push({ rho: Math.sqrt(env[k].r ** 2 - a * a), k });
+    for (const p of pts) p.y = env[p.k].y;
+    tautSection(pts, rb);
+    let L = 0, best = Infinity, Lref = 0;
+    pts.forEach((p, i) => {
+      if (i) { const q = pts[i - 1], dl = Math.hypot(p.rho - q.rho, p.y - q.y); L += dl; p.L = L;
+        // where the reference row (through the anchor) crosses this section
+        const t = dl ? clamp(((rho0 - q.rho) * (p.rho - q.rho) + (y0 - q.y) * (p.y - q.y)) / (dl * dl), 0, 1) : 0, d = Math.hypot(q.rho + (p.rho - q.rho) * t - rho0, q.y + (p.y - q.y) * t - y0);
+        if (d < best) { best = d; Lref = q.L + dl * t; }
+      } else p.L = 0;
+    });
+    bins.push({ a, pts, Lref });
+  }
+  const at = (bin, b) => {
+    const { pts } = bin, L = bin.Lref + b; if (pts.length < 2 || L < 0 || L > pts[pts.length - 1].L) return null;
+    let lo = 0, hi = pts.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m].L < L) lo = m; else hi = m; }
+    const p = pts[lo], q = pts[hi], t = (L - p.L) / ((q.L - p.L) || 1), rho = p.rho + (q.rho - p.rho) * t, y = p.y + (q.y - p.y) * t, e = env[Math.max(p.k, q.k)];
+    const pos = V().addScaledVector(er, rho).addScaledVector(ea, bin.a); pos.y = y;
+    // outward normal of the (taut) section: the tangent turned a quarter
+    const tr = q.rho - p.rho, ty = q.y - p.y, tl = Math.hypot(tr, ty) || 1;
+    return { pos, n: V().addScaledVector(er, -ty / tl).add(V().set(0, tr / tl, 0)).normalize(), part: e.part };
+  };
+  for (let k = 0; k < AB.length; k++) {
+    const [a, b] = AB[k], f = (amax - amin) > 1e-9 ? (a - amin) / (amax - amin) * nb : 0, i0 = Math.min(nb - 1, Math.floor(f)), t = f - i0;
+    const p0 = at(bins[i0], b), p1 = at(bins[Math.min(nb, i0 + 1)], b), h = p0 && p1 ? null : p0 || p1;
+    if (!p0 && !p1) { P[k] = V(); Nn[k] = V().set(0, 1, 0); own[k] = parts.lid; sup[k] = false; continue; }
+    const pos = h ? h.pos : p0.pos.clone().lerp(p1.pos, t), n = h ? h.n : p0.n.clone().lerp(p1.n, t).normalize(), part = parts[(h || (t < .5 ? p0 : p1)).part];
+    P[k] = pos.addScaledVector(n, lift); Nn[k] = n; own[k] = part; sup[k] = true;
+    if (!part.n) part.n = n.clone();
+  }
+  for (const p of Object.values(parts)) p.n ??= new THREE.Vector3(0, 1, 0);
+}
+/* a section (ρ, y points in order, solid on the inner side) pulled taut like a film with tension: a ball of
+   radius r rolled along the outside; points it cannot reach (inner corners) move onto the ball's arc */
+function tautSection(pts, r) {
+  const n = pts.length; if (r < .35 || n < 3) return;
+  const cx = new Float64Array(n), cy = new Float64Array(n), ok = new Uint8Array(n), s = new Float64Array(n);
+  for (let i = 1; i < n; i++) s[i] = s[i - 1] + Math.hypot(pts[i].rho - pts[i - 1].rho, pts[i].y - pts[i - 1].y);
+  for (let i = 0; i < n; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)], tr = b.rho - a.rho, ty = b.y - a.y, l = Math.hypot(tr, ty) || 1;
+    cx[i] = pts[i].rho - ty / l * r; cy[i] = pts[i].y + tr / l * r;
+  }
+  // only points close along the section can be close in space here (a concave corner spans about 2r)
+  const span = 3 * r + 2, r2 = (r - .02) ** 2;
+  let j0 = 0;
+  for (let i = 0; i < n; i++) {
+    while (s[i] - s[j0] > span) j0++;
+    let free = 1;
+    for (let j = j0; j < n && s[j] - s[i] <= span; j++) { const dx = pts[j].rho - cx[i], dy = pts[j].y - cy[i]; if (dx * dx + dy * dy < r2) { free = 0; break; } }
+    ok[i] = free;
+  }
+  const moved = [];
+  j0 = 0;
+  for (let i = 0; i < n; i++) {
+    while (s[i] - s[j0] > span) j0++;
+    if (ok[i]) continue;
+    let best = Infinity, bq = -1;
+    for (let q = j0; q < n && s[q] - s[i] <= span; q++) { if (!ok[q]) continue; const d = (pts[i].rho - cx[q]) ** 2 + (pts[i].y - cy[q]) ** 2; if (d < best) { best = d; bq = q; } }
+    if (bq < 0) continue;
+    const d = Math.sqrt(best); if (d < 1e-9 || d - r >= r) continue;
+    moved.push([i, cx[bq] + (pts[i].rho - cx[bq]) * r / d, cy[bq] + (pts[i].y - cy[bq]) * r / d]);
+  }
+  for (const [i, rho, y] of moved) { pts[i].rho = rho; pts[i].y = y; }
 }
 /* ---------- paper cup ----------
    The printed side wall is a cone. It is designed on a rectangle that maps onto the cone conformally:
@@ -902,7 +1250,7 @@ function bagShape(o) {
 }
 
 /* draw a face canvas into its dieline rectangle, turned if the panel lies upside down on the die */
-function drawNetPanel(c, src, p, x, y, w, h, crop = null) {
+function drawNetPanel(c, src, p, x, y, w, h, crop = null, inv = false) {
   if (p.fan) {
     // the wall unrolls into a fan; render it at the canvas' real pixel density
     const t = c.getTransform(), sc = Math.hypot(t.a, t.b) || 1;
@@ -910,7 +1258,9 @@ function drawNetPanel(c, src, p, x, y, w, h, crop = null) {
     return;
   }
   c.save();
-  if (p.rot) { c.translate(x + w / 2, y + h / 2); c.rotate(Math.PI); x = -w / 2; y = -h / 2; }
+  // quarter turns (q) of a panel lying on the sheet; inv cuts a sheet region back into the face
+  const q = p.q ?? (p.rot ? 2 : 0);
+  if (q) { c.translate(x + w / 2, y + h / 2); c.rotate((inv ? -q : q) * Math.PI / 2); if (q % 2) [w, h] = [h, w]; x = -w / 2; y = -h / 2; }
   if (crop) c.drawImage(src, ...crop, x, y, w, h); else c.drawImage(src, x, y, w, h);
   c.restore();
 }
@@ -919,6 +1269,129 @@ function drawNetPanel(c, src, p, x, y, w, h, crop = null) {
    Assets & fonts
    ================================================================ */
 function addAsset(url) { const id = 'a' + uid(); assets[id] = url; return id; }
+/* ---------- asset library ----------
+   Every image added while working (layers, stickers, product photos, dielines) is kept here, once per
+   content, so it can be placed again on any face, sticker or object. It is saved with the project and,
+   when the browser allows, in the browser too, so it is at hand in other projects. */
+const library = [];   // { id: asset id, hash, name, aspect, added }
+/* ---------- vector images ----------
+   An SVG is kept as source next to its raster: vecOf[raster asset id] = svg asset id. Its colours are
+   written out as #rrggbb, so a layer or sticker can swap them (recolor: { '#old': '#new' }). */
+const vecOf = {};
+const VCOL = /((?:fill|stroke|stop-color|flood-color|lighting-color|color)\s*(?:=\s*["']|:\s*))(#[0-9a-f]{6})/gi;
+const cssColor = (() => { const x = document.createElement('canvas').getContext('2d'); return v => { x.fillStyle = '#010203'; x.fillStyle = v; const r = x.fillStyle; return /^#[0-9a-f]{6}$/i.test(r) && (r !== '#010203' || /#010203/i.test(v)) ? r.toLowerCase() : null; }; })();
+/* SVG text with every paint colour as lowercase #rrggbb (shapes without a fill get black, as browsers draw them) */
+function normSvg(text) {
+  try {
+    const doc = new DOMParser().parseFromString(text, 'image/svg+xml'), root = doc.documentElement;
+    if (root.nodeName !== 'svg' || doc.querySelector('parsererror')) return null;
+    // shapes with no fill of their own (or from a parent) are drawn black: make that a colour you can swap
+    const hasFill = el => el.hasAttribute('fill') || /(^|;)\s*fill\s*:/.test(el.getAttribute('style') || '');
+    const bare = [...doc.querySelectorAll('path,rect,circle,ellipse,polygon,polyline,text,use')].some(el => { for (let e = el; e && e !== root; e = e.parentElement) if (hasFill(e)) return false; return true; });
+    if ((bare || doc.querySelector('style')) && !hasFill(root)) root.setAttribute('fill', '#000000');
+    const PROPS = ['fill', 'stroke', 'stop-color', 'flood-color', 'lighting-color', 'color'], fix = v => { const t = (v || '').trim(); if (!t || /^(none|currentcolor|inherit|transparent)$/i.test(t) || /^url\(/i.test(t)) return v; return cssColor(t) || v; };
+    for (const el of doc.querySelectorAll('*')) {
+      for (const a of PROPS) if (el.hasAttribute(a)) el.setAttribute(a, fix(el.getAttribute(a)));
+      const st = el.getAttribute('style'); if (st) el.setAttribute('style', st.replace(/([\w-]+)\s*:\s*([^;]+)/g, (m, k, v) => PROPS.includes(k.toLowerCase()) ? `${k}:${fix(v)}` : m));
+      if (el.nodeName === 'style') el.textContent = el.textContent.replace(/(fill|stroke|stop-color|color)\s*:\s*([^;}]+)/gi, (m, k, v) => `${k}:${fix(v)}`);
+    }
+    return new XMLSerializer().serializeToString(root);
+  } catch { return null; }
+}
+const svgText = id => { const u = assets[id] || ''; const i = u.indexOf(','); if (i < 0) return ''; const body = u.slice(i + 1); return u.slice(0, i).includes('base64') ? decodeURIComponent(escape(atob(body))) : decodeURIComponent(body); };
+const svgURL = t => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(t);
+const vecColorCache = new Map();
+/* the colours of a vector, most used first */
+function vecColors(srcId) {
+  const v = vecOf[srcId]; if (!v) return [];
+  if (!vecColorCache.has(v)) {
+    const n = new Map(); for (const m of svgText(v).matchAll(VCOL)) { const c = m[2].toLowerCase(); n.set(c, (n.get(c) || 0) + 1); }
+    vecColorCache.set(v, [...n.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]));
+  }
+  return vecColorCache.get(v);
+}
+const recolorCache = new Map(), recolorBusy = new Set();
+const hasRecolor = rc => rc && Object.entries(rc).some(([a, b]) => a !== b);
+/* the image to draw for src with its colours swapped; the original until the recoloured raster is ready */
+function artImg(srcId, rc) {
+  const base = getImg(srcId);
+  if (!srcId || !vecOf[srcId] || !hasRecolor(rc) || !base) return base;
+  const key = srcId + '|' + JSON.stringify(Object.entries(rc).filter(([a, b]) => a !== b).sort());
+  if (recolorCache.has(key)) return recolorCache.get(key);
+  if (!recolorBusy.has(key)) {
+    recolorBusy.add(key);
+    const t = svgText(vecOf[srcId]).replace(VCOL, (m, pre, c) => pre + (rc[c.toLowerCase()] || c)), im = new Image();
+    im.onload = () => {
+      const c = document.createElement('canvas'); c.width = base.naturalWidth; c.height = base.naturalHeight; c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      c.naturalWidth = c.width; c.naturalHeight = c.height;
+      if (recolorCache.size > 48) recolorCache.delete(recolorCache.keys().next().value);
+      recolorCache.set(key, c); recolorBusy.delete(key); onAssetLoaded(srcId);
+    };
+    im.onerror = () => recolorBusy.delete(key);
+    im.src = svgURL(t);
+  }
+  return base;
+}
+async function contentHash(url) {
+  try { const b = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(url)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); }
+  catch { let h = 0; for (let i = 0; i < url.length; i += 7) h = (h * 31 + url.charCodeAt(i)) | 0; return 'h' + (h >>> 0).toString(16) + url.length; }
+}
+const LIB_DB = { name: 'box-studio-3d', store: 'library' };
+function libDB() {
+  return new Promise((res, rej) => {
+    try {
+      const r = indexedDB.open(LIB_DB.name, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(LIB_DB.store, { keyPath: 'hash' });
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    } catch (e) { rej(e); }
+  });
+}
+async function libStore(op, val) {
+  try {
+    const db = await libDB();
+    return await new Promise((res, rej) => {
+      const tx = db.transaction(LIB_DB.store, op === 'all' ? 'readonly' : 'readwrite'), st = tx.objectStore(LIB_DB.store);
+      const r = op === 'all' ? st.getAll() : op === 'put' ? st.put(val) : st.delete(val);
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+  } catch { return op === 'all' ? [] : null; }
+}
+/* add an image (data URL) to the library, or find it there; returns its asset id */
+async function libAdd(url, name, aspect, svg = null) {
+  const hash = await contentHash(url);
+  let it = library.find(x => x.hash === hash);
+  if (!it) {
+    it = { id: addAsset(url), hash, name: name || 'Изображение', aspect, added: Date.now() };
+    library.unshift(it); ui.lib = true;
+    if (svg) vecOf[it.id] = addAsset(svgURL(svg));
+    libStore('put', { hash, name: it.name, aspect, url, added: it.added, svg: svg ? assets[vecOf[it.id]] : null });
+  }
+  return it.id;
+}
+function libRemove(hash) {
+  const i = library.findIndex(x => x.hash === hash); if (i < 0) return;
+  library.splice(i, 1); libStore('delete', hash); ui.lib = true; scheduleSave();
+}
+/* images already in a project (older ones had no library) and the browser's library join the panel */
+async function libAdopt(ids) {
+  for (const id of ids) {
+    const url = assets[id]; if (!url || !/^data:image\//.test(url) || library.some(x => x.id === id)) continue;
+    const hash = await contentHash(url);
+    if (library.some(x => x.hash === hash)) continue;
+    const im = await loadImage(url).catch(() => null);
+    library.push({ id, hash, name: 'Изображение', aspect: im ? im.naturalWidth / im.naturalHeight : 1, added: Date.now() });
+  }
+  ui.lib = true;
+}
+async function libLoadBrowser() {
+  const rows = await libStore('all') || [];
+  for (const r of rows.sort((a, b) => b.added - a.added)) {
+    if (library.some(x => x.hash === r.hash)) continue;
+    const id = addAsset(r.url); library.push({ id, hash: r.hash, name: r.name, aspect: r.aspect, added: r.added, browser: true });
+    if (r.svg) vecOf[id] = addAsset(r.svg);
+  }
+  ui.lib = true;
+}
 function getImg(id) {
   if (!id || !assets[id]) return null;
   let im = imgCache[id];
@@ -934,7 +1407,11 @@ function onAssetLoaded(id) {
     if (o.dieline === id) markObj(o);
     for (const k in o.faces) if (o.faces[k].layers.some(l => l.src === id)) markFace(o, k);
     if (o.product?.src === id) rebuildQueue.add(o.id);
-    for (const st of o.stickers || []) if (st.src === id) { tintCache.forEach((_, key) => key.startsWith(id + '|') && tintCache.delete(key)); touchSticker(o, st); }
+    for (const st of o.stickers || []) if (st.src === id) {
+      tintCache.forEach((_, key) => key.startsWith(id + '|') && tintCache.delete(key));
+      const look = RT.get(o.id)?.stickerLook?.get(st.id); if (look) look.key = '';
+      touchSticker(o, st);
+    }
     if ((o.stickers || []).some(st => st.text)) stickerDirty.add(o.id);
   }
   ui.layers = true; ui.stickers = true;
@@ -944,6 +1421,9 @@ const loadImage = url => new Promise((res, rej) => { const i = new Image(); i.on
 
 async function importImageFile(file) {
   let url = await readURL(file);
+  // a vector: normalise its colours (so they can be swapped later) and rasterise that version
+  const isSvgFile = file.type.includes('svg') || /\.svg$/i.test(file.name || ''), svgSrc = isSvgFile ? normSvg(await file.text()) : null;
+  if (svgSrc) url = svgURL(svgSrc);
   const im = await loadImage(url);
   let w = im.naturalWidth || 2048, h = im.naturalHeight || 2048;
   const isSvg = file.type.includes('svg');
@@ -955,7 +1435,7 @@ async function importImageFile(file) {
     url = file.type === 'image/jpeg' ? c.toDataURL('image/jpeg', .92) : c.toDataURL('image/png');
     w = c.width; h = c.height;
   }
-  const id = addAsset(url); getImg(id);
+  const id = await libAdd(url, (file.name || '').replace(/\.[^.]+$/, '').slice(0, 40), w / h, svgSrc); getImg(id);
   return { id, aspect: w / h };
 }
 
@@ -1043,7 +1523,7 @@ grainTex.wrapS = grainTex.wrapT = THREE.RepeatWrapping;
 const RT = new Map();
 const dirtyFaces = new Set();
 const rebuildQueue = new Set();
-const ui = { editor: true, net: true, layers: false, stickers: false };
+const ui = { editor: true, net: true, layers: false, stickers: false, lib: true };
 function markFace(o, k) { dirtyFaces.add(o.id + '|' + k); if (o.id === sel.obj) { ui.editor = true; ui.net = true; } }
 function markObj(o) { for (const k of faceKeys(o)) markFace(o, k); }
 
@@ -1095,11 +1575,11 @@ function buildObject(o) {
     RT.set(o.id, rt); world.add(rt.group);
   }
   rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null;
-  rt.innerMat.side = o.type === 'cup' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
+  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null;
+  rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
-  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'bag') buildBag(o, rt); else buildTube(o, rt);
-  applyTransform(o); computeFrames(o, rt); applyLid(o); applyObjMaterials(o); markObj(o);
+  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'bag') buildBag(o, rt); else buildTube(o, rt);
+  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); applyLid(o); applyObjMaterials(o); markObj(o);
   rt.stickerMeshes = []; buildStickerFilms(o);
 }
 function disposeObject(id) {
@@ -1109,7 +1589,7 @@ function disposeObject(id) {
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
   for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
   rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); rt.cupLidMat.dispose(); rt.holeMat.dispose();
-  rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); RT.delete(id);
+  rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); rt.baseMat?.dispose(); rt.trayMat?.dispose(); rt.cakeMats?.forEach(m => m.dispose()); rt.sleeveIn?.dispose(); rt.sleeveEdge?.dispose(); RT.delete(id);
 }
 /* clear PET: black diffuse, so only reflections remain (stronger at grazing angles). The shader turns
    their brightness into coverage, so plain plastic stays see-through even over the page background
@@ -1149,7 +1629,7 @@ const contactMat = (() => {
 function windowPlace(o) {
   const lt = o.lidType || 'flat';
   if (lt === 'none' || clearLid(o)) return null;
-  if (lt === 'telescope') return 'lid';
+  if (lt === 'telescope' || lt === 'handle') return 'lid';
   const pl = o.window.place;
   if (pl === 'lid' || pl === 'back') return pl;
   return lt === 'flat' || lt === 'flap' ? 'edge' : 'lid';
@@ -1195,7 +1675,35 @@ function notchPts(W, H, hw, depth, r, edge) {
   return dedupe(p.getPoints(10));
 }
 /* window opening in face-canvas fractions (top-left origin); rr marks which corners are rounded */
+/* window in the drop-down front wall of a handle box: size, height of its centre above the bottom, radius (mm) */
+function frontWinMM(o) {
+  if (o.type !== 'box' || o.lidType !== 'handle' || !o.frontWin?.on) return null;
+  const [fw, fh] = faceMM(o, 'front'), f = o.frontWin, ww = clamp(f.w, 10, fw - 10), wh = clamp(f.h, 10, fh - 10);
+  return { ww, wh, cy: clamp(f.y, wh / 2 + 5, fh - wh / 2 - 5), r: clamp(f.r ?? 0, 0, Math.min(ww, wh) / 2 - .5), fw, fh };
+}
+/* the front window carried over the front edge onto the lid as one opening (handle box): its width, the
+   height of its bottom above the floor, how far it reaches back on the lid (to the bridge, else to the back
+   of the lid window, else its own depth) and the corner radii at its two ends */
+function joinWinMM(o) {
+  const fwn = frontWinMM(o); if (!fwn || !o.frontWin.join) return null;
+  const { d } = o.dims, bw = bridgeMM(o), win = winMM(o);
+  const back = bw > 0 ? d / 2 - bw / 2 : win ? d / 2 - (win.off - win.wd / 2) : clamp(o.frontWin.d ?? 40, 5, d - 10);
+  const zBack = clamp(back, 5, d - 5);
+  return { ww: fwn.ww, yb: fwn.cy - fwn.wh / 2, zBack, r: Math.min(fwn.r, fwn.ww / 2 - .5), rBack: Math.min(win ? win.r : fwn.r, fwn.ww / 2 - .5, zBack - .5) };
+}
+/* rounded rectangle x0…x1 × y0…y1 as points; r0: radius of the two corners at y0, r1 at y1 */
+function rrPoly(x0, y0, x1, y1, r0, r1) {
+  const P = Math.PI, a = (cx, cy, r, s, e) => arcPts(cx, cy, r, s, e, 8).map(([x, y]) => ({ x, y }));
+  const up = y1 > y0, s = up ? 1 : -1;
+  return [...a(x1 - r0, y0 + s * r0, r0, -s * P / 2, 0), ...a(x1 - r1, y1 - s * r1, r1, 0, s * P / 2), ...a(x0 + r1, y1 - s * r1, r1, s * P / 2, s * P), ...a(x0 + r0, y0 + s * r0, r0, s * P, s * P * 1.5)];
+}
 function faceWindow(o, k) {
+  const J = joinWinMM(o);
+  if (J && k === 'front') { const [mw, mh] = faceMM(o, 'front'); return { x: (mw - J.ww) / 2 / mw, y: 0, w: J.ww / mw, h: (mh - J.yb) / mh, rr: [0, 0, 1, 1], r: J.r / mw, rmm: J.r }; }
+  if (o.lidType === 'handle' && k === 'front') {
+    const fwn = frontWinMM(o); if (!fwn) return null;
+    return { x: (fwn.fw - fwn.ww) / 2 / fwn.fw, y: (fwn.fh - fwn.cy - fwn.wh / 2) / fwn.fh, w: fwn.ww / fwn.fw, h: fwn.wh / fwn.fh, rr: [1, 1, 1, 1], r: fwn.r / fwn.fw, rmm: fwn.r };
+  }
   const win = winMM(o); if (!win) return null;
   const [mw, mh] = faceMM(o, k), x = (mw - win.ww) / 2 / mw, w = win.ww / mw, r = win.r / mw;
   if (win.place === 'edge') {
@@ -1213,32 +1721,66 @@ function faceWindow(o, k) {
   }
   // inside the lid: the top canvas has the back at the top, the lid's inner side has the front at the top
   if (k !== 'top' && k !== 'inside') return null;
-  const h = win.wd / mh, cy = .5 + (k === 'top' ? 1 : -1) * win.off / mh;
-  return { x, y: cy - h / 2, w, h, rr: [1, 1, 1, 1], r };
+  const h = win.wd / mh, cy = .5 + (k === 'top' ? 1 : -1) * win.off / mh, fw = { x, y: cy - h / 2, w, h, rr: [1, 1, 1, 1], r };
+  const bw = bridgeMM(o);
+  if (bw > 0) {
+    // the strip the handle stands on runs across the middle of the lid: two openings, in face fractions
+    const pts = rrectPts(mw / 2, cy * mh, win.ww, win.wd, win.r);
+    fw.polys = splitBand(pts, mh / 2, bw / 2).map(q => q.map(v => ({ x: v.x / mw, y: v.y / mh })));
+  }
+  if (J) {
+    // the front part of the lid opening runs out over the front edge into the front window
+    // (top canvas: front at the bottom; the lid's inner side: front at the top)
+    const fy = k === 'top' ? y => y : y => mh - y, x0 = (mw - J.ww) / 2;
+    const front = rrPoly(x0, fy(mh - J.zBack), x0 + J.ww, fy(mh), J.rBack, 0).map(v => ({ x: v.x / mw, y: v.y / mh }));
+    const keep = (fw.polys || []).filter(q => k === 'top' ? q.every(v => v.y < .5) : q.every(v => v.y > .5));
+    Object.assign(fw, { polys: [front, ...keep], joinFront: true });
+  }
+  return fw;
 }
-function windowPath(c, fw, X, Y, sx, sy) { c.beginPath(); c.roundRect(X + fw.x * sx, Y + fw.y * sy, fw.w * sx, fw.h * sy, fw.rr.map(v => v * fw.r * sx)); }
+function windowPath(c, fw, X, Y, sx, sy) {
+  c.beginPath();
+  if (fw.polys) for (const q of fw.polys) { q.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](X + v.x * sx, Y + v.y * sy)); c.closePath(); }
+  else c.roundRect(X + fw.x * sx, Y + fw.y * sy, fw.w * sx, fw.h * sy, fw.rr.map(v => v * fw.r * sx));
+}
+/* the outline of a dieline window (rounded rectangle or polygons) as a canvas path, at scale k and offset pad */
+function netWindowPath(c, q, pad, k) {
+  c.beginPath();
+  if (q.polys) for (const pl of q.polys) { pl.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](pad + v.x * k, pad + v.y * k)); c.closePath(); }
+  else c.roundRect(pad + q.x * k, pad + q.y * k, q.w * k, q.h * k, q.radii.map(v => v * k));
+}
 /* window cut-outs in dieline mm; pieces that meet across a fold become one opening */
 function netWindows(o, n = netLayout(o)) {
-  const win = winMM(o); if (!win) return [];
-  const out = [];
+  const win = winMM(o); if (!win && !frontWinMM(o)) return [];
+  const out = [], J = joinWinMM(o);
+  if (J) {
+    // one opening over the front edge: from the front wall's window bottom to its end on the lid
+    const pf = n.panels.find(p => p.key === 'front'), pt = n.panels.find(p => p.key === 'top');
+    const sy = (p, fy) => p.y + (p.rot ? 1 - fy : fy) * p.h, ya = sy(pf, (pf.h - J.yb) / pf.h), yb = sy(pt, (pt.h - J.zBack) / pt.h);
+    const x0 = pf.x + (pf.w - J.ww) / 2, [y0, y1, r0, r1] = ya < yb ? [ya, yb, J.r, J.rBack] : [yb, ya, J.rBack, J.r];
+    out.push({ x: x0, y: y0, w: J.ww, h: y1 - y0, rr: [1, 1, 1, 1], polys: [rrPoly(x0, y0, x0 + J.ww, y1, r0, r1)] });
+  }
   for (const p of n.panels) {
-    const fw = faceWindow(o, p.key); if (!fw) continue;
+    if (J && p.key === 'front') continue;
+    let fw = faceWindow(o, p.key); if (!fw) continue;
+    if (J && fw.joinFront) { if (fw.polys.length < 2) continue; fw = { ...fw, polys: fw.polys.slice(1) }; }
     let fx = fw.x, fy = fw.y, rr = fw.rr;
     if (p.rot) { fx = 1 - fw.x - fw.w; fy = 1 - fw.y - fw.h; rr = [rr[2], rr[3], rr[0], rr[1]]; }
-    out.push({ x: p.x + fx * p.w, y: p.y + fy * p.h, w: fw.w * p.w, h: fw.h * p.h, rr: [...rr] });
+    const polys = fw.polys?.map(q => q.map(v => ({ x: p.x + (p.rot ? 1 - v.x : v.x) * p.w, y: p.y + (p.rot ? 1 - v.y : v.y) * p.h })));
+    out.push({ x: p.x + fx * p.w, y: p.y + fy * p.h, w: fw.w * p.w, h: fw.h * p.h, rr: [...rr], polys, rmm: fw.rmm });
   }
   for (let i = 0; i < out.length; i++) for (let j = out.length - 1; j > i; j--) {
     let a = out[i], b = out[j]; if (b.y < a.y) [a, b] = [b, a];
-    if (Math.abs(a.y + a.h - b.y) < .05 && Math.abs(a.x - b.x) < .05) {
+    if (!a.polys && !b.polys && Math.abs(a.y + a.h - b.y) < .05 && Math.abs(a.x - b.x) < .05) {
       out[i] = { x: a.x, y: a.y, w: a.w, h: a.h + b.h, rr: [a.rr[0], a.rr[1], b.rr[2], b.rr[3]] }; out.splice(j, 1);
     }
   }
-  return out.map(q => ({ ...q, radii: q.rr.map(v => v * win.r) }));
+  return out.map(q => ({ ...q, radii: q.rr.map(v => v * (q.rmm ?? win.r)) }));
 }
 function cutNetWindow(c, o, pad, k) {
   const ws = netWindows(o); if (!ws.length) return;
   c.save(); c.globalCompositeOperation = 'destination-out';
-  for (const q of ws) { c.beginPath(); c.roundRect(pad + q.x * k, pad + q.y * k, q.w * k, q.h * k, q.radii.map(v => v * k)); c.fill(); }
+  for (const q of ws) { netWindowPath(c, q, pad, k); c.fill(); }
   c.restore();
 }
 /* closed rounded rectangle, as points */
@@ -1254,7 +1796,7 @@ function rrectPts(cx, cy, w, h, r) {
 }
 function planeGeoHole(W, H, hole) {
   const sh = new THREE.Shape([V2(-W / 2, -H / 2), V2(W / 2, -H / 2), V2(W / 2, H / 2), V2(-W / 2, H / 2)]);
-  sh.holes.push(new THREE.Path(hole));
+  for (const h of Array.isArray(hole[0]) ? hole : [hole]) sh.holes.push(new THREE.Path(h));
   const g = new THREE.ShapeGeometry(sh), pos = g.attributes.position, uv = g.attributes.uv;
   for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / W + .5, pos.getY(i) / H + .5);
   return g;
@@ -1288,6 +1830,7 @@ function buildBox(o, rt) {
     const m = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(pts)), rt.filmMat);
     m.position.set(...p); m.rotation.set(...r); m.renderOrder = 2; m.raycast = () => {}; parent.add(m);
   };
+  if (o.lidType === 'handle') return buildHandleBox(o, rt, { addG, add, film });
   const win = winMM(o), edgeWin = win?.place === 'edge' ? win : null, lidWin = win?.place === 'lid' ? win : null, backWin = win?.place === 'back' ? win : null;
   const ww = win ? win.ww * S : 0, wd = win ? win.wd * S : 0, wr = win ? win.r * S : 0;
   const wfH = edgeWin ? edgeWin.whFront * S : 0, wfR = Math.min(wr, wfH * .999);
@@ -1384,7 +1927,10 @@ function buildBox(o, rt) {
   // an edge window notches the lid's front edge, a back window its hinge edge
   const cut = edgeWin || backWin, outerEdge = edgeWin ? 'bottom' : 'top', innerEdge = edgeWin ? 'top' : 'bottom';
   const lidNotch = cut && notchPts(WL, DL, ww / 2, wd, wr, outerEdge);
-  const lidHole = lidWin && rrectPts(0, -lidWin.off * S, ww, wd, wr), lidHoleIn = lidHole && lidHole.map(v => V2(v.x, -v.y));
+  let lidHole = lidWin && [rrectPts(0, -lidWin.off * S, ww, wd, wr)];
+  if (lidHole && bridgeMM(o) > 0) lidHole = splitBand(lidHole[0], 0, bridgeMM(o) * S / 2).map(q => q.map(v => V2(v.x, v.y)));
+  if (lidHole && !lidHole.length) lidHole = null;
+  const lidHoleIn = lidHole && lidHole.map(q => q.map(v => V2(v.x, -v.y)));
   addG(pivot, lidHole ? planeGeoHole(WL, DL, lidHole) : planeGeo(WL, DL, lidNotch, outerEdge), F('top'), [0, T, DL / 2], [-P / 2, 0, 0], { face: 'top' });
   addG(pivot, lidHoleIn ? planeGeoHole(WL, DL, lidHoleIn) : planeGeo(WL, DL, cut && notchPts(WL, DL, ww / 2, wd, wr, innerEdge), innerEdge), F('inside'), [0, 0, DL / 2], [P / 2, 0, 0], { face: 'inside' });
   if (lidNotch) {
@@ -1395,10 +1941,10 @@ function buildBox(o, rt) {
     addG(pivot, ribbonGeo(lidNotch.map(p => [p.x, T, DL / 2 - p.y]), lidNotch.map(p => [p.x, 0, DL / 2 - p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
     film(pivot, lidNotch, [0, T / 2, DL / 2], [-P / 2, 0, 0]);
   } else if (!flapOut) add(pivot, WL, T, rt.edgeMat, [0, T / 2, DL], [0, 0, 0]);
-  if (lidHole) {
-    const loop = [...lidHole, lidHole[0]];
+  for (const hole of lidHole || []) {
+    const loop = [...hole, hole[0]];
     addG(pivot, ribbonGeo(loop.map(p => [p.x, T, DL / 2 - p.y]), loop.map(p => [p.x, 0, DL / 2 - p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
-    film(pivot, lidHole, [0, T / 2, DL / 2], [-P / 2, 0, 0]);
+    film(pivot, hole, [0, T / 2, DL / 2], [-P / 2, 0, 0]);
   }
   if (!backWin) add(pivot, WL, T, rt.edgeMat, [0, T / 2, 0], [0, P, 0]);
   const EL = ld.el * S, sideEdge = DL - EL;   // lid side edges are only exposed where no ear hangs
@@ -1430,11 +1976,13 @@ function buildBox(o, rt) {
       };
       for (const sx of [-1, 1]) {
         const right = sx > 0, key = right ? 'earRight' : 'earLeft';
+        const eg = new THREE.Group(); eg.position.set(sx * WL / 2, 0, 0); fp.add(eg);
+        const X = x => x - sx * WL / 2;
         // outer plane: local +x runs toward the back on the right ear and toward the front on the left one
-        addG(fp, earGeo(!right), F(key), [sx * WL / 2, -FH / 2, -EL / 2], [0, sx * P / 2, 0], { face: key });
-        addG(fp, earGeo(right), rt.innerMat, [sx * (WL / 2 - T), -FH / 2, -EL / 2], [0, -sx * P / 2, 0], { face: 'inside', wall: true });
-        add(fp, T, EL - ch, rt.edgeMat, [sx * (WL / 2 - T / 2), -FH, -(EL - ch) / 2], [P / 2, 0, 0]);
-        add(fp, T, FH - ch, rt.edgeMat, [sx * (WL / 2 - T / 2), -(FH - ch) / 2, -EL], [0, P, 0]);
+        addG(eg, earGeo(!right), F(key), [0, -FH / 2, -EL / 2], [0, sx * P / 2, 0], { face: key });
+        addG(eg, earGeo(right), rt.innerMat, [X(sx * (WL / 2 - T)), -FH / 2, -EL / 2], [0, -sx * P / 2, 0], { face: 'inside', wall: true });
+        add(eg, T, EL - ch, rt.edgeMat, [X(sx * (WL / 2 - T / 2)), -FH, -(EL - ch) / 2], [P / 2, 0, 0]);
+        add(eg, T, FH - ch, rt.edgeMat, [X(sx * (WL / 2 - T / 2)), -(FH - ch) / 2, -EL], [0, P, 0]);
       }
     } else for (const sx of [-1, 1]) add(fp, T, FH, rt.edgeMat, [sx * WL / 2, -FH / 2, -T / 2], [0, sx * P / 2, 0]);
     // soft contact shadow on the walls just under the closed flap and ears
@@ -1453,6 +2001,481 @@ function buildBox(o, rt) {
     add(pivot, TW, T, rt.edgeMat, [0, -TF, z - T / 2], [P / 2, 0, 0]);
   }
 }
+/* an arbitrary quad (clockwise-free: any four corners, in order) with its own UVs */
+function quadGeo(pts, uvs) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap(p => p.map(v => v * S)), 3));
+  if (uvs) g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs.flat(), 2));
+  g.setIndex([0, 1, 2, 0, 2, 3]); g.computeVertexNormals();
+  return g;
+}
+/* rounded rectangle as a ring of points (x, z) at height y, A and B are half sizes */
+function rrLoop(A, B, r, y, n = 5) {
+  const out = [];
+  for (const [cx, cz, a0] of [[A - r, B - r, 0], [-(A - r), B - r, 1], [-(A - r), -(B - r), 2], [A - r, -(B - r), 3]])
+    for (let i = 0; i <= n; i++) { const t = (a0 + i / n) * Math.PI / 2; out.push([cx + r * Math.cos(t), y, cz + r * Math.sin(t)]); }
+  return out;
+}
+/* surface through a stack of equal-sized rings, i0…i1 of the lid profile; the flat top closes it if cap is set */
+function loopSurface(loops, i0, i1, cap) {
+  const m = loops[0].length, P = [], I = [];
+  for (let j = i0; j <= i1; j++) for (const p of loops[j]) P.push(p[0] * S, p[1] * S, p[2] * S);
+  for (let j = 0; j < i1 - i0; j++) for (let i = 0; i < m; i++) {
+    const a = j * m + i, b = j * m + (i + 1) % m, c = a + m, d = b + m; I.push(a, c, b, b, c, d);
+  }
+  if (cap) {
+    const top = loops[i1], ci = P.length / 3, y = top[0][1];
+    P.push(0, y * S, 0);
+    for (let i = 0; i < m; i++) I.push(ci, (i1 - i0) * m + (i + 1) % m, (i1 - i0) * m + i);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setIndex(I); g.computeVertexNormals();
+  return g;
+}
+function buildDome(o, rt) {
+  const G = domeGeom(o), { w, d, wb, db, T, trayH: H } = G, g = rt.group, P = Math.PI, F = k => rt.faces[k].mat;
+  const mesh = (parent, geo, mat, data = {}, shadow = true) => {
+    const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = shadow; m.userData = { objId: o.id, face: null, ...data }; parent.add(m); return m;
+  };
+  // the four flared walls. Each is a quad from the floor edge up to the rim; the design is the sheet
+  // rectangle (rim width × slant), so the floor edge shows the middle part of it, as on the die
+  const walls = [['front', 0, 1, w, wb, d / 2, db / 2], ['back', 0, -1, w, wb, d / 2, db / 2], ['right', 1, 0, d, db, w / 2, wb / 2], ['left', -1, 0, d, db, w / 2, wb / 2]];
+  for (const [key, nx, nz, wt, wf, dt, df] of walls) {
+    const tx = nz, tz = -nx;   // runs to the right as seen from outside
+    const pt = (dist, wid, k, y) => [nx * dist + tx * wid * k, y, nz * dist + tz * wid * k];
+    mesh(g, quadGeo([pt(df, wf, -.5, 0), pt(df, wf, .5, 0), pt(dt, wt, .5, H), pt(dt, wt, -.5, H)],
+      [[.5 - wf / wt / 2, 0], [.5 + wf / wt / 2, 0], [1, 1], [0, 1]]), F(key), { face: key });
+    // inner side and the rim strip (the cut edge of the board)
+    const q = (dist, wid, k, y) => pt(dist - T, wid - 2 * T, k, y);
+    mesh(g, quadGeo([q(df, wf, -.5, T), q(df, wf, .5, T), q(dt, wt, .5, H), q(dt, wt, -.5, H)]), rt.innerMat, {});
+    mesh(g, quadGeo([pt(dt, wt, -.5, H), pt(dt, wt, .5, H), q(dt, wt, .5, H), q(dt, wt, -.5, H)]), rt.edgeMat, {}, false);
+  }
+  const bottom = mesh(g, new THREE.PlaneGeometry(wb * S, db * S), F('bottom'), { face: 'bottom' }); bottom.rotation.x = P / 2;
+  const floor = mesh(g, new THREE.PlaneGeometry((wb - 2 * T) * S, (db - 2 * T) * S), F('insideBottom'), { face: 'insideBottom' }); floor.rotation.x = -P / 2; floor.position.y = T * S;
+  // clear PET lid: a thin shell (flange, then the dome) plus its print overlay on the flat top
+  const lg = new THREE.Group(); lg.position.y = H * S; g.add(lg); rt.domeLid = lg;
+  const prof = domeProfile(G), loops = prof.map(q => rrLoop(q.A, q.B, q.r, q.y));
+  for (const [i0, i1, cap] of [[0, prof.base, false], [prof.base, prof.length - 1, true]]) { const sh = mesh(lg, loopSurface(loops, i0, i1, cap), rt.petMat, {}, false); sh.raycast = () => {}; }
+  for (const i of [1, prof.base, prof.length - 1]) {
+    const ln = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(loops[i].map(p => new THREE.Vector3(p[0] * S, p[1] * S, p[2] * S))), rt.petEdgeMat);
+    ln.raycast = () => {}; ln.renderOrder = 4; lg.add(ln);
+  }
+  for (const key of LID_WALLS) {
+    const sd = domeSide(o, key, G, prof), b = sd.base, e = sd.pts[b + 1].ext / sd.pts[b].ext / 2;
+    const P4 = [sd.at(b, -1), sd.at(b, 1), sd.at(b + 1, 1), sd.at(b + 1, -1)].map(p => new THREE.Vector3(...p));
+    const n = new THREE.Vector3().crossVectors(P4[1].clone().sub(P4[0]), P4[3].clone().sub(P4[0])).normalize().multiplyScalar(.06);
+    const m = mesh(lg, quadGeo(P4.map(p => p.add(n).toArray()), [[0, 0], [1, 0], [.5 + e, 1], [.5 - e, 1]]), F(key), { face: key }, false); m.renderOrder = 3;
+  }
+  const [tw, th] = faceMM(o, 'top'), top = prof[prof.length - 1], rf = Math.min(top.r, tw / 2 - .1, th / 2 - .1);
+  const pg = new THREE.ShapeGeometry(new THREE.Shape(rrectPts(0, 0, tw * S, th * S, rf * S))), pp = pg.attributes.position, pu = pg.attributes.uv;
+  for (let i = 0; i < pp.count; i++) pu.setXY(i, pp.getX(i) / (tw * S) + .5, pp.getY(i) / (th * S) + .5);
+  const print = mesh(lg, pg, F('top'), { face: 'top' }, false); print.rotation.x = -P / 2; print.position.y = (top.y + .06) * S; print.renderOrder = 3;
+}
+/* carry handle of a cake box: two leaves standing up from the middle of the lid, back to back, printed
+   on their outer sides; folded down they lie flat on the lid */
+/* points of a rounded rectangle x0…x1 × y0…y1, counter-clockwise from the end of its bottom edge; rT, rB:
+   top and bottom corner radii */
+function arcPts(cx, cy, r, a0, a1, n = 10) { const out = []; for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); } return out; }
+function handleShape(w, h, H) {
+  const P = Math.PI, x0 = -w / 2, x1 = w / 2, y0 = -h / 2, y1 = h / 2;
+  const rB = clamp(H.rBot ?? 0, 0, w / 2), rT = clamp(H.rTop ?? 0, 0, Math.min(w / 2, h - rB));
+  const outer = [...arcPts(x1 - rB, y0 + rB, rB, -P / 2, 0), ...arcPts(x1 - rT, y1 - rT, rT, 0, P / 2), ...arcPts(x0 + rT, y1 - rT, rT, P / 2, P), ...arcPts(x0 + rB, y0 + rB, rB, P, P * 1.5)];
+  const hl = H.hole || {}, hw = clamp(hl.w ?? 0, 0, w - 4), hy = clamp(hl.y ?? 0, 0, h - 6), hh = clamp(hl.h ?? 0, 0, h - hy - 2);
+  if (hw < 1 || hh < 1) return new THREE.Shape(outer.map(p => V2(...p)));
+  const hx0 = -hw / 2, hx1 = hw / 2, hb = y0 + hy, ht = hb + hh;
+  if (hy < .5) {
+    // the hole reaches the bridge: it opens at the bottom and the leaf stands on two legs.
+    // One contour: the outline from the right leg round to the left leg, then back over the hole's arch
+    const ow = Math.min(hw, w - 2 * Math.max(2, rB)), ox0 = -ow / 2, ox1 = ow / 2, hT = clamp(hl.rTop ?? 0, 0, Math.min(ow / 2, hh));
+    const arch = [[ox0, y0], ...arcPts(ox0 + hT, ht - hT, hT, P, P / 2), ...arcPts(ox1 - hT, ht - hT, hT, P / 2, 0)];
+    return new THREE.Shape(dedupe([[ox1, y0], ...outer, ...arch].map(p => V2(...p))));
+  }
+  const hB = clamp(hl.rBot ?? 0, 0, hw / 2), hT = clamp(hl.rTop ?? 0, 0, Math.min(hw / 2, hh - hB));
+  const hole = [...arcPts(hx1 - hB, hb + hB, hB, -P / 2, 0), ...arcPts(hx1 - hT, ht - hT, hT, 0, P / 2), ...arcPts(hx0 + hT, ht - hT, hT, P / 2, P), ...arcPts(hx0 + hB, hb + hB, hB, P, P * 1.5)];
+  const sh = new THREE.Shape(dedupe(outer.map(p => V2(...p))));
+  sh.holes.push(new THREE.Path(dedupe(hole.map(p => V2(...p)))));
+  return sh;
+}
+function buildHandle(o, rt, pivot, T, zc, addG) {
+  const [w, h] = faceMM(o, 'handleFront'), up = o.handle.up !== false;
+  // the outline is drawn in mm (its hand hole and band have sizes in mm), then scaled into the scene
+  const geo = mirror => {
+    const g = new THREE.ShapeGeometry(handleShape(w, h, o.handle), 24), pos = g.attributes.position, uv = g.attributes.uv;
+    for (let i = 0; i < pos.count; i++) { if (mirror) pos.setX(i, -pos.getX(i)); uv.setXY(i, pos.getX(i) / w + .5, pos.getY(i) / h + .5); }
+    if (mirror) g.index.array.reverse();
+    g.scale(S, S, S);
+    return g;
+  };
+  // the leaves fold up from the two edges of the bridge and lean in until their tops meet
+  const half = Math.max(.5, bridgeMM(o) / 2), lean = Math.asin(clamp((half - .5) / h, 0, .9));
+  for (const [key, sz] of [['handleFront', 1], ['handleBack', -1]]) {
+    const hinge = new THREE.Group(); hinge.position.set(0, T, zc + sz * half * S); hinge.rotation.x = up ? -sz * lean : sz * (Math.PI / 2 - .02); pivot.add(hinge);
+    addG(hinge, geo(false), rt.faces[key].mat, [0, h / 2 * S, 0], [0, sz > 0 ? 0 : Math.PI, 0], { face: key });
+    addG(hinge, geo(true), rt.foldMat, [0, h / 2 * S, -sz * .05 * S], [0, sz > 0 ? Math.PI : 0, 0]);   // the unprinted back of the leaf
+  }
+}
+/* ---------- cake box with a handle, opening at the end ----------
+   A sleeve (front, lid with window and handle, back, floor glued round). An end that opens is closed by an
+   upper flap hinged at the lid's edge and a lower one hinged at the floor's edge, meeting halfway with a
+   tongue tucked into a slot; behind them two dust flaps from the front and back walls. A flat tray with the
+   cake slides out through the open end. */
+const HB_SIDES = { right: 'Справа', left: 'Слева', both: 'С обеих сторон' };
+const TRAY_FIN = { board: 'Картон (с печатью)', gold: 'Золото', silver: 'Серебро' };
+const hbOpen = o => { const s = o.hbSides || 'right'; return { right: s !== 'left', left: s !== 'right' }; };
+const HB_END_KEYS = ['rightTop', 'rightBottom', 'leftTop', 'leftBottom'];
+function hbDims(o) {
+  const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4);
+  return { w, h, d, t, dl: Math.round(clamp(d * .3, 15, h * .9)), tw: clamp(d * .22, 12, 45), th: clamp(h * .1, 6, 16), slot: 3,
+    trW: Math.max(10, w - 2 * t - 2), trD: Math.max(10, d - 2 * t - 2), trT: 1.5 };
+}
+/* the die: a vertical strip front, lid, back, floor, glue flap; the right end's parts on the sheet's left
+   (the sheet is seen from outside, so +x of the box is on the left), the left end's parts on the right */
+function hbNet(o) {
+  const B = hbDims(o), { w, h, d, dl } = B, op = hbOpen(o), keys = faceKeys(o), half = h / 2;
+  const XL = op.right ? Math.max(half, dl) : d, XR = op.left ? Math.max(half, dl) : d, x0 = XL + w;
+  const panels = [
+    { key: 'front', x: XL, y: 0, w, h, rot: true }, { key: 'top', x: XL, y: h, w, h: d, rot: true },
+    { key: 'back', x: XL, y: h + d, w, h }, { key: 'bottom', x: XL, y: 2 * h + d, w, h: d, rot: true },
+    { key: 'glue', blank: 'клеевой клапан', x: XL, y: 2 * h + 2 * d, w, h: 12 }];
+  const tabs = [], slots = [];
+  for (const side of ['right', 'left']) {
+    const R = side === 'right', ex = R ? XL : x0, out = R ? -1 : 1;   // the strip edge on this side, and the way out
+    if (!op[side]) { panels.push({ key: side, x: R ? XL - d : x0, y: h + d, w: d, h }); continue; }
+    panels.push({ key: side + 'Top', x: R ? XL - half : x0, y: h, w: half, h: d, q: R ? 1 : 3 },
+      { key: side + 'Bottom', x: R ? XL - half : x0, y: 2 * h + d, w: half, h: d, q: R ? 3 : 1 });
+    for (const y of [0, h + d]) panels.push({ key: 'dust', blank: 'клапан', x: R ? XL - dl : x0, y, w: dl, h });
+    // tongue on the upper flap's free edge, slot near the lower flap's free edge
+    const fe = ex + out * half, cy = h + d / 2, cyb = 2 * h + d + d / 2, ins = B.th * .35;
+    tabs.push({ base: [fe, cy - B.tw / 2, fe, cy + B.tw / 2], pts: [[fe, cy - B.tw / 2], [fe + out * B.th, cy - B.tw / 2 + ins], [fe + out * B.th, cy + B.tw / 2 - ins], [fe, cy + B.tw / 2]] });
+    slots.push([fe - out * B.slot, cyb - B.tw / 2 - 1, fe - out * B.slot, cyb + B.tw / 2 + 1]);
+  }
+  let W = XL + w + XR, H = 2 * h + 2 * d + 12;
+  const gap = 15, y = H + gap; let x = 0, rowH = 0;
+  const part = (key, pw, ph, extra = {}) => { panels.push({ key, x, y, w: pw, h: ph, part: true, ...extra(x, y) }); x += pw + gap; rowH = Math.max(rowH, ph); };
+  for (const k of keys.filter(k => HANDLE_KEYS.includes(k))) {
+    const [pw, ph] = faceMM(o, k), sp = handleShape(pw, ph, o.handle).extractPoints(10);
+    part(k, pw, ph, (px, py) => { const m = v => [px + pw / 2 + v.x, py + ph / 2 - v.y]; return { poly: sp.shape.map(m), holes: sp.holes.map(hl => hl.map(m)) }; });
+  }
+  part('tray', B.trW, B.trD, () => ({}));
+  W = Math.max(W, x - gap); H = y + rowH;
+  return { W, H, panels, hb: true, tabs, slots };
+}
+/* the handle box's die in SVG: an edge two panels share is a crease, any other edge is cut (except the
+   tongues' bases, which crease); tongues, slots, windows and the separate parts */
+function handleBoxSVG(o, n, f, label) {
+  const line = (l, st) => `<line x1="${f(l[0])}" y1="${f(l[1])}" x2="${f(l[2])}" y2="${f(l[3])}" ${st}/>`;
+  const CUT = 'stroke="#00a0e3" stroke-width="0.3"', FOLD = 'stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"';
+  const ps = n.panels.filter(p => !p.part), edges = p => [[p.x, p.y, p.x + p.w, p.y], [p.x, p.y + p.h, p.x + p.w, p.y + p.h], [p.x, p.y, p.x, p.y + p.h], [p.x + p.w, p.y, p.x + p.w, p.y + p.h]];
+  const cut = [], fold = new Map(), near = (a, b) => Math.abs(a - b) < 1e-6;
+  for (const p of ps) for (const [x1, y1, x2, y2] of edges(p)) {
+    const hor = near(y1, y2); let parts = [[hor ? x1 : y1, hor ? x2 : y2]];
+    const sub = (s0, s1) => { parts = parts.flatMap(([u, v]) => [[u, Math.min(v, s0)], [Math.max(u, s1), v]].filter(([a, b]) => b - a > .01)); };
+    for (const q of ps) if (q !== p) for (const [a1, b1, a2, b2] of edges(q)) {
+      if (hor ? near(b1, b2) && near(b1, y1) : near(a1, a2) && near(a1, x1)) {
+        const s0 = Math.max(hor ? x1 : y1, hor ? a1 : b1), s1 = Math.min(hor ? x2 : y2, hor ? a2 : b2);
+        if (s1 - s0 > .01) { fold.set(`${hor}|${s0.toFixed(2)}|${s1.toFixed(2)}|${(hor ? y1 : x1).toFixed(2)}`, hor ? [s0, y1, s1, y1] : [x1, s0, x1, s1]); sub(s0, s1); }
+      }
+    }
+    for (const t of n.tabs) { const [bx, b0, , b1] = t.base; if (!hor && near(bx, x1)) { fold.set('tab' + bx + b0, [bx, b0, bx, b1]); sub(b0, b1); } }
+    for (const [u, v] of parts) cut.push(hor ? [u, y1, v, y1] : [x1, u, x1, v]);
+  }
+  const wins = netWindows(o, n), trim = ([x1, y1, x2, y2]) => {
+    const hor = near(y1, y2); let segs = [[hor ? x1 : y1, hor ? x2 : y2]];
+    for (const q of wins) {
+      if (!(hor ? y1 > q.y + .01 && y1 < q.y + q.h - .01 : x1 > q.x + .01 && x1 < q.x + q.w - .01)) continue;
+      const a = hor ? q.x : q.y, b = hor ? q.x + q.w : q.y + q.h;
+      segs = segs.flatMap(([u, v]) => [[u, Math.min(v, a)], [Math.max(u, b), v]].filter(([s0, s1]) => s1 - s0 > .01));
+    }
+    return segs.map(([u, v]) => hor ? [u, y1, v, y1] : [x1, u, x1, v]);
+  };
+  let body = cut.map(l => line(l, CUT)).join('') + [...fold.values()].flatMap(trim).map(l => line(l, FOLD)).join('');
+  body += n.tabs.map(t => `<polyline points="${t.pts.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${CUT}/>`).join('');
+  body += n.slots.map(l => line(l, CUT)).join('');
+  for (const q of wins) {
+    if (q.polys) { for (const pl of q.polys) body += `<path d="${pl.map((v, i) => `${i ? 'L' : 'M'}${f(v.x)},${f(v.y)}`).join(' ')} Z" fill="none" ${CUT}/>`; continue; }
+    body += `<rect x="${f(q.x)}" y="${f(q.y)}" width="${f(q.w)}" height="${f(q.h)}" rx="${f(Math.min(q.radii[0], q.w / 2, q.h / 2))}" fill="none" ${CUT}/>`;
+  }
+  const poly = q => `<polygon points="${q.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${CUT}/>`;
+  for (const p of n.panels.filter(p => p.part)) body += p.poly ? poly(p.poly) + (p.holes || []).map(poly).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" ${CUT}/>`;
+  for (const p of n.panels) {
+    if (p.blank) { if (p.blank.length) body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.max(2.5, Math.min(p.w, p.h) * .12))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle"${p.h > p.w ? ` transform="rotate(-90 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''}>${esc(p.blank.toUpperCase())}</text>`; }
+    else body += label(p);
+  }
+  return body;
+}
+function buildHandleBox(o, rt, { addG, add, film }) {
+  const B = hbDims(o), W = B.w * S, H = B.h * S, D = B.d * S, T = B.t * S, P = Math.PI, g = rt.group, F = k => rt.faces[k].mat, op = hbOpen(o);
+  rt.hb = { flaps: [], dust: [], tongues: [], tray: null, dir: op.right ? 1 : -1 };
+  rt.lidPivot = rt.lidGroup = null;
+  // front wall, with its window
+  const J = joinWinMM(o), fwn = !J && frontWinMM(o), fHole = fwn && rrectPts(0, fwn.cy * S - H / 2, fwn.ww * S, fwn.wh * S, fwn.r * S);
+  if (J) {
+    // the window runs out of the front wall's top edge (and on over the lid)
+    const jw = J.ww * S / 2, jr = J.r * S, nO = notchPts(W, H, jw, H - J.yb * S, jr, 'top'), nI = notchPts(W - 2 * T, H - 2 * T, jw, H - T - J.yb * S, jr, 'top');
+    addG(g, planeGeo(W, H, nO, 'top'), F('front'), [0, H / 2, D / 2], [0, 0, 0], { face: 'front' });
+    addG(g, planeGeo(W - 2 * T, H - 2 * T, nI, 'top'), rt.innerMat, [0, H / 2, D / 2 - T], [0, P, 0], { face: 'inside', wall: true });
+    addG(g, ribbonGeo(nO.map(p => [p.x, H / 2 + p.y, D / 2]), nO.map(p => [p.x, H / 2 + p.y, D / 2 - T])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+    film(g, nO, [0, H / 2, D / 2 - T / 2], [0, 0, 0]);
+  } else addG(g, fHole ? planeGeoHole(W, H, fHole) : new THREE.PlaneGeometry(W, H), F('front'), [0, H / 2, D / 2], [0, 0, 0], { face: 'front' });
+  if (!J) addG(g, fHole ? planeGeoHole(W - 2 * T, H - 2 * T, fHole.map(v => V2(-v.x, v.y))) : new THREE.PlaneGeometry(W - 2 * T, H - 2 * T), rt.innerMat, [0, H / 2, D / 2 - T], [0, P, 0], { face: 'inside', wall: true });
+  if (fHole) {
+    const loop = [...fHole, fHole[0]];
+    addG(g, ribbonGeo(loop.map(p => [p.x, H / 2 + p.y, D / 2]), loop.map(p => [p.x, H / 2 + p.y, D / 2 - T])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+    film(g, fHole, [0, H / 2, D / 2 - T / 2], [0, 0, 0]);
+  }
+  add(g, W, H, F('back'), [0, H / 2, -D / 2], [0, P, 0], { face: 'back' });
+  add(g, W - 2 * T, H - 2 * T, rt.innerMat, [0, H / 2, -D / 2 + T], [0, 0, 0], { face: 'inside', wall: true });
+  add(g, W, D, F('bottom'), [0, 0, 0], [P / 2, 0, 0], { face: 'bottom' });
+  add(g, W - 2 * T, D - 2 * T, F('insideBottom'), [0, T, 0], [-P / 2, 0, 0], { face: 'insideBottom' });
+  // the lid: window split by the bridge, the handle standing on it
+  const lg = new THREE.Group(); lg.position.set(0, H, 0); g.add(lg);
+  const win = winMM(o);
+  let holes = win && [rrectPts(0, -win.off * S, win.ww * S, win.wd * S, win.r * S)];
+  if (holes && bridgeMM(o) > 0) holes = splitBand(holes[0], 0, bridgeMM(o) * S / 2).map(q => q.map(v => V2(v.x, v.y)));
+  // a window joined with the front one: its front part becomes a notch in the lid's front edge
+  // (shape y runs to the back; the front edge is at y = -D/2)
+  const jn = J && notchPts(W, D, J.ww * S / 2, J.zBack * S, J.rBack * S, 'bottom');
+  if (J && holes) holes = bridgeMM(o) > 0 ? holes.filter(q => q.every(v => v.y > 0)) : [];
+  if (holes && !holes.length) holes = null;
+  const lidGeo = (hl, mirror) => {
+    if (!jn) return hl ? planeGeoHole(W, D, hl) : new THREE.PlaneGeometry(W, D);
+    const notch = mirror ? notchPts(W, D, J.ww * S / 2, J.zBack * S, J.rBack * S, 'top') : jn;
+    const outer = mirror ? [V2(-W / 2, -D / 2), V2(W / 2, -D / 2), V2(W / 2, D / 2), ...notch, V2(-W / 2, D / 2)] : [V2(-W / 2, -D / 2), ...notch, V2(W / 2, -D / 2), V2(W / 2, D / 2), V2(-W / 2, D / 2)];
+    const sh = new THREE.Shape(dedupe(outer)); for (const h of hl || []) sh.holes.push(new THREE.Path(h));
+    const geo = new THREE.ShapeGeometry(sh), pos = geo.attributes.position, uv = geo.attributes.uv;
+    for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / W + .5, pos.getY(i) / D + .5);
+    return geo;
+  };
+  addG(lg, lidGeo(holes, false), F('top'), [0, 0, 0], [-P / 2, 0, 0], { face: 'top' });
+  addG(lg, lidGeo(holes && holes.map(q => q.map(v => V2(v.x, -v.y))), true), F('inside'), [0, -T, 0], [P / 2, 0, 0], { face: 'inside' });
+  if (jn) {
+    addG(lg, ribbonGeo(jn.map(p => [p.x, 0, -p.y]), jn.map(p => [p.x, -T, -p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+    film(lg, jn, [0, -T / 2, 0], [-P / 2, 0, 0]);
+  }
+  for (const hole of holes || []) {
+    const loop = [...hole, hole[0]];
+    addG(lg, ribbonGeo(loop.map(p => [p.x, 0, -p.y]), loop.map(p => [p.x, -T, -p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+    film(lg, hole, [0, -T / 2, 0], [-P / 2, 0, 0]);
+  }
+  add(lg, W, T, rt.edgeMat, [0, -T / 2, -D / 2], [0, P, 0]);
+  if (jn) { const sw = (W - J.ww * S) / 2; for (const sx of [-1, 1]) add(lg, sw, T, rt.edgeMat, [sx * (W - sw) / 2, -T / 2, D / 2], [0, 0, 0]); }
+  else add(lg, W, T, rt.edgeMat, [0, -T / 2, D / 2], [0, 0, 0]);
+  if (o.handle?.on) buildHandle(o, rt, lg, 0, 0, addG);
+  // the ends
+  const half = H / 2, fH = half - .15 * S;
+  for (const sx of [1, -1]) {
+    const side = sx > 0 ? 'right' : 'left', ry = sx * P / 2;
+    if (!op[side]) {
+      add(g, D, H, F(side), [sx * W / 2, H / 2, 0], [0, ry, 0], { face: side });
+      add(g, D - 2 * T, H - 2 * T, rt.innerMat, [sx * (W / 2 - T), H / 2, 0], [0, -ry, 0], { face: 'inside', wall: true });
+      continue;
+    }
+    // upper flap on the lid's edge, lower flap on the floor's edge; each with its board back and cut edge
+    const uh = new THREE.Group(); uh.position.set(sx * W / 2, H, 0); g.add(uh);
+    add(uh, D, fH, F(side + 'Top'), [0, -fH / 2, 0], [0, ry, 0], { face: side + 'Top' });
+    add(uh, D, fH, rt.innerMat, [-sx * T, -fH / 2, 0], [0, -ry, 0], { face: 'inside', wall: true });
+    add(uh, D, T, rt.edgeMat, [-sx * T / 2, -fH, 0], [P / 2, 0, ry]);
+    const tg = new THREE.Mesh(new THREE.PlaneGeometry(B.tw * S, B.th * S), rt.foldMat); tg.rotation.set(0, ry, 0); tg.castShadow = true; tg.userData = { objId: o.id, face: null };
+    uh.add(tg); rt.hb.tongues.push({ m: tg, sx, y: -fH - B.th * S / 2 });
+    const lh = new THREE.Group(); lh.position.set(sx * W / 2, 0, 0); g.add(lh);
+    add(lh, D, fH, F(side + 'Bottom'), [0, fH / 2, 0], [0, ry, 0], { face: side + 'Bottom' });
+    add(lh, D, fH, rt.innerMat, [-sx * T, fH / 2, 0], [0, -ry, 0], { face: 'inside', wall: true });
+    add(lh, D, T, rt.edgeMat, [-sx * T / 2, fH, 0], [P / 2, 0, ry]);
+    const slot = new THREE.Mesh(new THREE.PlaneGeometry((B.tw + 2) * S, .7 * S), rt.holeMat); slot.position.set(sx * .05 * S, fH - B.slot * S, 0); slot.rotation.set(0, ry, 0); slot.raycast = () => {}; lh.add(slot);
+    rt.hb.flaps.push({ u: uh, l: lh, sx });
+    // dust flaps fold in from the front and back walls, just inside the end flaps
+    for (const zs of [1, -1]) {
+      const dg = new THREE.Group(); dg.position.set(sx * (W / 2 - 1.6 * T), H / 2, zs * (D / 2 - T)); g.add(dg);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(B.dl * S, H - 2.4 * T), rt.foldMat); m.position.set(0, 0, -zs * B.dl * S / 2); m.rotation.y = P / 2;
+      m.castShadow = m.receiveShadow = true; m.userData = { objId: o.id, face: null }; dg.add(m);
+      rt.hb.dust.push({ g: dg, sx, zs });
+    }
+  }
+  // the tray and the cake on it
+  const tr = new THREE.Group(); tr.position.set(0, T, 0); g.add(tr); rt.hb.tray = tr;
+  const TW = B.trW * S, TD = B.trD * S, TT = B.trT * S, metal = o.tray?.fin === 'gold' || o.tray?.fin === 'silver';
+  rt.trayMat ??= new THREE.MeshPhysicalMaterial({ roughness: .3, side: THREE.DoubleSide });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(TW, TT, TD), metal ? rt.trayMat : rt.foldMat); body.position.y = TT / 2; body.castShadow = body.receiveShadow = true; body.userData = { objId: o.id, face: null }; tr.add(body);
+  addG(tr, new THREE.PlaneGeometry(TW, TD), metal ? rt.trayMat : F('tray'), [0, TT + .02 * S, 0], [-P / 2, 0, 0], { face: 'tray' });
+  const pr = o.product || {}, im = pr.src && getImg(pr.src);
+  if (im) {
+    rt.productTex?.dispose(); rt.productTex = new THREE.Texture(im); rt.productTex.colorSpace = THREE.SRGBColorSpace; rt.productTex.needsUpdate = true;
+    rt.productMat.map = rt.productTex; rt.productMat.needsUpdate = true;
+    const pw = clamp(pr.w ?? B.trW * .8, 5, 1000) * S, ph = pw * im.naturalHeight / im.naturalWidth;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), rt.productMat); m.position.set((pr.x || 0) * S, TT + ph / 2, 0); m.raycast = () => {}; m.userData = { objId: o.id, face: null }; tr.add(m);
+  } else if (pr.cake !== false) {
+    // a plain cake while there is no photo: sponge, cream top, a ring of cream dollops and berries
+    rt.cakeMats ??= ['#efdcbc', '#fbf6ee', '#ffffff', '#a51d36'].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: .7 }));
+    const R = Math.min(TW, TD) * .38, hc = Math.min(H * .42, 70 * S, R * 1.1), [sponge, cream, dollop, berry] = rt.cakeMats;
+    const cyl = (r, h, y, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 72), mat); m.position.y = y; m.castShadow = m.receiveShadow = true; m.userData = { objId: o.id, face: null }; tr.add(m); };
+    cyl(R, hc * .82, TT + hc * .41, sponge); cyl(R * 1.01, hc * .18, TT + hc * .91, cream);
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * P * 2, s = new THREE.Mesh(new THREE.SphereGeometry(R * .09, 16, 12), i % 3 ? dollop : berry);
+      s.position.set(Math.cos(a) * R * .8, TT + hc + R * .05, Math.sin(a) * R * .8); s.castShadow = true; s.userData = { objId: o.id, face: null }; tr.add(s);
+    }
+  }
+}
+/* ---------- sleeve ----------
+   A paper band glued into a tube around a closed box (or round an open tray: a matchbox-style box).
+   It goes round the box across its width (top, front, bottom, back; axis x) or across its depth (top,
+   right, bottom, left; axis z). Its design is one strip: across the band = canvas x, along the band = canvas
+   y, starting at the top, so the panels read top, front/right, bottom, back/left. */
+const SLEEVE_AXES = { x: 'Поперёк ширины: верх, перед, дно, зад', z: 'Поперёк глубины: верх, бока, дно' };
+const SLEEVE_FIN = { matte: 'Матовая бумага', gloss: 'Глянцевая ламинация', soft: 'Soft-touch', kraft: 'Крафт' };
+const SLEEVE_GLUE = 15;   // mm of glue flap on the die
+const sleeveOn = o => o.type === 'box' && o.lidType !== 'handle' && !!o.sleeve?.on;
+const defaultSleeveHandle = () => ({ on: false, h: 75, r: 18, rf: 10, hole: { w: 70, h: 22, y: 38, r: 11 } });
+const defaultSleeve = dims => ({ on: false, axis: 'x', w: Math.round(dims.w * .5), x: 0, slide: 0, fin: 'matte', handle: defaultSleeveHandle() });
+/* the closed box's outline the sleeve wraps (mm): x half width, z front/back, y top */
+function boxEnvelope(o) {
+  const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4), lt = o.lidType || 'flat';
+  let hx = w / 2, zf = d / 2, zb = -d / 2, top = h;
+  if (lt === 'flat' || lt === 'tuck') top = h + t;
+  if (lt === 'flap') { hx = w / 2 + t + .3; zf = d / 2 + t + .3; top = h + t; }
+  if (lt === 'telescope') {
+    if (o.lidMat === 'clear') {
+      const LH = clamp(o.lidH, 3, 1000);
+      if (o.lidFit === 'inside') top = Math.max(h, t + LH); else { hx = w / 2 + .9; zf = d / 2 + .9; zb = -zf; top = Math.max(h + .3, LH); }
+    } else { hx = w / 2 + t + .5; zf = d / 2 + t + .5; zb = -zf; top = h + t; }
+  }
+  return { hx, zf, zb, top };
+}
+function sleeveDims(o) {
+  const E = boxEnvelope(o), S0 = o.sleeve || {}, g = .45, st = .3, ax = S0.axis === 'z' ? 'z' : 'x';
+  // the cross-section the band goes round, and the length of the box along the band's axis
+  const y0 = -g, y1 = E.top + g, a0 = ax === 'x' ? E.zb - g : -E.hx - g, a1 = ax === 'x' ? E.zf + g : E.hx + g;
+  const len = ax === 'x' ? 2 * E.hx : E.zf - E.zb, mid = ax === 'x' ? 0 : (E.zf + E.zb) / 2;
+  const bw = clamp(S0.w ?? len * .5, 10, len + 2 * g), c = mid + clamp(S0.x || 0, -(len - bw) / 2 - g, (len - bw) / 2 + g);
+  const A = a1 - a0, Hh = y1 - y0;
+  // a carry handle: the band rises from the middle of the top in two layers and comes down again
+  const hh = S0.handle?.on ? clamp(S0.handle.h ?? 70, 15, 300) : 0;
+  // where the band turns up into the handle it bends round a radius rf instead of folding sharp
+  const rf = hh ? clamp(S0.handle.rf ?? 10, 0, Math.min(hh * .4, A / 2 * .4)) : 0, q = Math.PI * rf / 2;
+  const names = hh ? ['topA', 'handleA', 'handleB', 'topB', ...(ax === 'x' ? ['front', 'bottom', 'back'] : ['right', 'bottom', 'left'])]
+    : ax === 'x' ? ['top', 'front', 'bottom', 'back'] : ['top', 'right', 'bottom', 'left'];
+  const lens = hh ? [A / 2 - rf + q / 2, hh - rf + q / 2, hh - rf + q / 2, A / 2 - rf + q / 2, Hh, A, Hh] : [A, Hh, A, Hh], stops = [0];
+  for (const l of lens) stops.push(stops[stops.length - 1] + l);
+  const P = stops[stops.length - 1];
+  // along the band: top straight to sT1, bend to sA0, leaf up to the fold sF, leaf down to sB0, bend to sT2
+  const sT1 = A / 2 - rf, sA0 = sT1 + q, sF = sA0 + hh - rf, sB0 = sF + hh - rf, sT2 = sB0 + q;
+  return { ax, y0, y1, a0, a1, am: (a0 + a1) / 2, A, Hh, P, bw, c, len, names, lens, stops, st, E, hh, rf, sT1, sA0, sF, sB0, sT2, leaf: hh ? sleeveLeaf(S0.handle, bw, hh, rf) : null };
+}
+/* the handle leaf of a sleeve (mm, x across the band from its centre, y up from the top of the box): the
+   outline's top corners are rounded, the hand hole sits y above the box */
+function sleeveLeaf(H, bw, hh, rf = 0) {
+  const r = clamp(H.r ?? 18, 0, Math.min(bw / 2, hh - rf) - .5), hl = H.hole || {};
+  const hw = clamp(hl.w ?? bw * .55, 0, bw - 8), hhh = clamp(hl.h ?? 22, 0, hh - rf - 6), lo = Math.max(3, rf + 2), hy = clamp(hl.y ?? hh - hhh - 14, lo, Math.max(lo, hh - hhh - 3)), hr = clamp(hl.r ?? hhh / 2, 0, Math.min(hw, hhh) / 2);
+  // the flat leaf starts where the bend ends, rf above the box
+  const P = Math.PI, outer = [[bw / 2, rf], ...arcPts(bw / 2 - r, hh - r, r, 0, P / 2), ...arcPts(-bw / 2 + r, hh - r, r, P / 2, P), [-bw / 2, rf]];
+  const hole = hw > 1 && hhh > 1 ? rrPoly(-hw / 2, hy, hw / 2, hy + hhh, hr, hr).map(v => [v.x, v.y]) : null;
+  // half width of the leaf at height y (the outline narrows only in the rounded corners)
+  const half = y => y <= hh - r ? bw / 2 : bw / 2 - r + Math.sqrt(Math.max(0, r * r - (y - hh + r) ** 2));
+  return { r, outer, hole, half };
+}
+const SLEEVE_PANEL = { top: 'верх', front: 'перед', bottom: 'дно', back: 'зад', right: 'правый бок', left: 'левый бок' };
+const sleevePanelLabel = (SD, k) => k === 'topA' ? `верх: ${SD.ax === 'x' ? 'задняя' : 'левая'} половина` : k === 'topB' ? `верх: ${SD.ax === 'x' ? 'передняя' : 'правая'} половина`
+  : k === 'handleA' ? `ручка: ${SD.ax === 'x' ? 'задняя' : 'левая'} сторона` : k === 'handleB' ? `ручка: ${SD.ax === 'x' ? 'передняя' : 'правая'} сторона` : SLEEVE_PANEL[k];
+/* the sleeve on the sheet: canvas mm (x across, y along the band from its start), as the outline with the
+   handle's rounded corners, the hand holes and the creases */
+function sleeveSheet(SD) {
+  const { bw, P, stops, leaf, hh } = SD;
+  if (!leaf) return { outline: null, holes: [], creases: stops.slice(1, -1).map(s => [0, s, bw, s]) };
+  const { rf, sA0, sF } = SD, N = 16, up = y => sA0 + y - rf, down = y => sF + hh - y, side = sg => {
+    const pts = [];
+    for (let i = 0; i <= N; i++) { const y = rf + (hh - rf) * i / N; pts.push([bw / 2 + sg * leaf.half(y), up(y)]); }
+    for (let i = N - 1; i >= 0; i--) { const y = rf + (hh - rf) * i / N; pts.push([bw / 2 + sg * leaf.half(y), down(y)]); }
+    return pts;
+  };
+  const L = side(-1), R = side(1).reverse();
+  const outline = [[0, 0], ...L, [0, P + SLEEVE_GLUE], [bw, P + SLEEVE_GLUE], ...R, [bw, 0]];
+  const holes = leaf.hole ? [leaf.hole.map(([x, y]) => [bw / 2 + x, up(y)]), leaf.hole.map(([x, y]) => [bw / 2 + x, down(y)])] : [];
+  const fold = leaf.half(hh);
+  // the bends at the handle's foot are soft (no crease); the fold at its top is narrowed by the corners
+  const creases = stops.slice(1, -1).flatMap((s, i) => i === 0 || i === 2 ? (rf > .5 ? [] : [[0, s, bw, s]]) : i === 1 ? [[bw / 2 - fold, s, bw / 2 + fold, s]] : [[0, s, bw, s]]);
+  return { outline, holes, creases };
+}
+function buildSleeve(o, rt) {
+  rt.sleeve = null;
+  if (!sleeveOn(o)) return;
+  const D = sleeveDims(o), g = new THREE.Group(), st = D.st;
+  sleeveColors(o, rt);
+  // map (along-axis b, section a, y) to box space; across the band runs to the right as seen from the front (x) / right (z)
+  const X = (b, a, y) => D.ax === 'x' ? [b, y, a] : [a, y, b];
+  const b0 = D.c - D.bw / 2, b1 = D.c + D.bw / 2, mat = rt.faces.sleeve.mat, [L, R] = D.ax === 'x' ? [b0, b1] : [b1, b0];
+  const toV3 = (na, ny) => new THREE.Vector3(...X(0, na, ny)).sub(new THREE.Vector3(...X(0, 0, 0))).normalize();
+  const quad = (pts, uvs, m, face, outward) => {
+    let geo = quadGeo(pts, uvs);
+    const n = new THREE.Vector3().fromBufferAttribute(geo.attributes.normal, 0);
+    if (n.dot(outward) < 0) { geo.dispose(); geo = quadGeo([pts[0], pts[3], pts[2], pts[1]], uvs && [uvs[0], uvs[3], uvs[2], uvs[1]]); }
+    const mesh = new THREE.Mesh(geo, m); mesh.castShadow = mesh.receiveShadow = true; mesh.userData = { objId: o.id, face }; g.add(mesh); return mesh;
+  };
+  // the flat parts of the loop, as (a, y) points out by `out`, with their stretch of the band
+  const gap = .2, pts = out => ({ TB: [D.a0 - out, D.y1 + out], M1: [D.am - gap - D.rf, D.y1 + out], M2: [D.am + gap + D.rf, D.y1 + out], TF: [D.a1 + out, D.y1 + out], BF: [D.a1 + out, D.y0 - out], BB: [D.a0 - out, D.y0 - out] });
+  const s = D.stops, segs = D.hh ? [['TB', 'M1', s[0], D.sT1], ['M2', 'TF', D.sT2, s[4]], ['TF', 'BF', s[4], s[5]], ['BF', 'BB', s[5], s[6]], ['BB', 'TB', s[6], s[7]]]
+    : [['TB', 'TF', s[0], s[1]], ['TF', 'BF', s[1], s[2]], ['BF', 'BB', s[2], s[3]], ['BB', 'TB', s[3], s[4]]];
+  const O = pts(st), I = pts(0);
+  for (const [k0, k1, s0, s1] of segs) {
+    const [pa, py] = O[k0], [qa, qy] = O[k1], [ia, iy] = I[k0], [ja, jy] = I[k1], v0 = 1 - s0 / D.P, v1 = 1 - s1 / D.P;
+    const ta = qa - pa, ty = qy - py, tl = Math.hypot(ta, ty) || 1, out = toV3(-ty / tl, ta / tl);
+    quad([X(L, pa, py), X(R, pa, py), X(R, qa, qy), X(L, qa, qy)], [[0, v0], [1, v0], [1, v1], [0, v1]], mat, 'sleeve', out);
+    quad([X(L, ia, iy), X(R, ia, iy), X(R, ja, jy), X(L, ja, jy)], null, rt.sleeveIn, null, out.clone().negate());
+    for (const [b, sg] of [[b0, -1], [b1, 1]]) {
+      const e = new THREE.Vector3(...(D.ax === 'x' ? [sg, 0, 0] : [0, 0, sg]));
+      quad([X(b, ia, iy), X(b, pa, py), X(b, qa, qy), X(b, ja, jy)], null, rt.sleeveEdge, null, e);
+    }
+  }
+  if (D.leaf && D.rf > .3) {
+    // the soft bends at the handle's foot: the band is concave there, its printed side faces the bend's centre
+    const N = 10;
+    for (const [sg, sa, sb] of [[-1, D.sT1, D.sA0], [1, D.sB0, D.sT2]]) {
+      const ca = D.am + sg * (gap + D.rf);
+      for (const [r, m, face, inward] of [[D.rf, mat, 'sleeve', 1], [D.rf + st, rt.sleeveIn, null, -1]]) {
+        const cy = D.y1 + st + D.rf;
+        // the arc from the top (below the centre) round to the leaf (beside it, towards the middle)
+        const P0 = t => { const an = sg < 0 ? -Math.PI / 2 + t * Math.PI / 2 : -Math.PI / 2 - t * Math.PI / 2; return [ca + r * Math.cos(an), cy + r * Math.sin(an)]; };
+        for (let i = 0; i < N; i++) {
+          const t0 = i / N, t1 = (i + 1) / N, [pa, py] = P0(t0), [qa, qy] = P0(t1);
+          const ma = (pa + qa) / 2, my = (py + qy) / 2, out = toV3(inward * (ca - ma), inward * (cy - my));
+          const sv0 = sg < 0 ? sa + (sb - sa) * t0 : sb - (sb - sa) * t0, sv1 = sg < 0 ? sa + (sb - sa) * t1 : sb - (sb - sa) * t1, v0 = 1 - sv0 / D.P, v1 = 1 - sv1 / D.P;
+          quad([X(L, pa, py), X(R, pa, py), X(R, qa, qy), X(L, qa, qy)], face ? [[0, v0], [1, v0], [1, v1], [0, v1]] : null, m, face, out);
+        }
+      }
+    }
+  }
+  if (D.leaf) {
+    // the handle: two leaves back to back standing on the middle of the top, the hand hole through both
+    const sh = new THREE.Shape(D.leaf.outer.map(p => V2(...p)));
+    if (D.leaf.hole) sh.holes.push(new THREE.Path(D.leaf.hole.map(p => V2(...p))));
+    for (const [sg, outA] of [[-1, -1], [1, 1]]) {
+      const geo = new THREE.ShapeGeometry(sh, 16), pos = geo.attributes.position, uv = geo.attributes.uv, base = D.y1 + st;
+      for (let i = 0; i < pos.count; i++) {
+        const xs = pos.getX(i), ys = pos.getY(i), b = D.c + xs, sp = sg < 0 ? D.sA0 + ys - D.rf : D.sF + D.hh - ys;
+        uv.setXY(i, D.ax === 'x' ? (b - b0) / D.bw : (b1 - b) / D.bw, 1 - sp / D.P);
+        const p = X(b, D.am + sg * gap, base + ys); pos.setXYZ(i, p[0] * S, p[1] * S, p[2] * S);
+      }
+      geo.computeVertexNormals();
+      const want = toV3(outA, 0), n = new THREE.Vector3().fromBufferAttribute(geo.attributes.normal, 0);
+      if (n.dot(want) < 0) { geo.index.array.reverse(); geo.computeVertexNormals(); }
+      const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; m.userData = { objId: o.id, face: 'sleeve' }; g.add(m);
+      const back = new THREE.Mesh(geo.clone(), rt.sleeveIn); back.geometry.index.array.reverse(); back.geometry.computeVertexNormals(); back.userData = { objId: o.id, face: null }; g.add(back);
+    }
+  }
+  rt.sleeve = g; rt.group.add(g);
+  applySleeve(o);
+}
+function applySleeve(o) {
+  const rt = RT.get(o.id); if (!rt?.sleeve) return;
+  const D = sleeveDims(o), s = clamp(o.sleeve.slide || 0, 0, D.len + D.bw) * S;
+  rt.sleeve.position.set(D.ax === 'x' ? s : 0, 0, D.ax === 'z' ? s : 0);
+}
+function sleeveColors(o, rt) {
+  rt.sleeveIn ??= new THREE.MeshStandardMaterial({ roughness: .9, side: THREE.FrontSide });
+  rt.sleeveEdge ??= new THREE.MeshStandardMaterial({ roughness: .9, side: THREE.DoubleSide });
+  const paper = new THREE.Color(o.faces.sleeve?.bg || '#ffffff');
+  if (o.sleeve?.fin === 'kraft') paper.multiply(new THREE.Color(FINISHES.kraft.kraft));
+  // the inside of the band is unprinted paper; the cut edges show the paper's colour
+  rt.sleeveIn.color.copy(o.sleeve?.fin === 'kraft' ? paper : new THREE.Color('#f6f3ec')); rt.sleeveEdge.color.copy(paper).multiplyScalar(.92);
+}
+const faceGrain = (o, k) => k === 'sleeve' ? (o.sleeve?.fin === 'kraft' ? .45 : .06) : o.grain;
 function buildTube(o, rt) {
   const R = o.dims.w / 2 * S, H = o.dims.h * S;
   const geo = new THREE.CylinderGeometry(R, R, H, 144, 1, false, Math.PI, Math.PI * 2);
@@ -1659,6 +2682,25 @@ function applyLid(o) {
     rt.cupLid.position.set(0, (o.dims.h + f * (o.dims.h * .12 + 22)) * S, -f * o.dims.w * .55 * S);
     rt.cupLid.rotation.x = -f * .45;
   }
+  if (rt.torteLid) {
+    // the lid lifts out of the channel, slides back a little and tilts
+    const f = clamp(o.lid / 125, 0, 1);
+    rt.torteLid.position.set(0, f * (o.dims.h * .55 + 25) * S, -f * o.dims.w * .22 * S); rt.torteLid.rotation.x = -f * .3;
+  }
+  if (rt.domeLid) {
+    // the lid lifts off, slides back a little and tilts
+    const f = clamp(o.lid / 125, 0, 1), G = domeGeom(o);
+    rt.domeLid.position.set(0, (G.trayH + f * (G.hd + 25)) * S, -f * G.d * .18 * S); rt.domeLid.rotation.x = -f * .32;
+  }
+  if (rt.hb) {
+    // handle box end: the upper flap swings up, the lower one down onto the table, then the dust flaps open
+    const f = clamp(o.lid / 125, 0, 1), a = clamp(f / .6, 0, 1), b = clamp((f - .5) / .5, 0, 1), T = clamp(o.thickness, .3, 40) * S;
+    for (const { u, l, sx } of rt.hb.flaps) { u.rotation.z = sx * a * 150 * DEG; l.rotation.z = -sx * a * 90 * DEG; }
+    for (const { g: d, sx, zs } of rt.hb.dust) d.rotation.y = -sx * zs * b * 90 * DEG;
+    // the tongue is tucked through the slot (behind the lower flap) while closed, straight once open
+    for (const { m, sx, y } of rt.hb.tongues) { m.position.set(a > .02 ? 0 : -sx * 1.6 * T, y, 0); }
+    if (rt.hb.tray) rt.hb.tray.position.x = rt.hb.dir * clamp(o.tray?.out ?? 0, 0, o.dims.w) * S;
+  }
   if (rt.lidPivot) rt.lidPivot.rotation.x = -o.lid * DEG;
   for (const m of rt.contact || []) m.visible = o.lid < 1.5;
   if (rt.lidGroup) {
@@ -1671,13 +2713,20 @@ function applyLid(o) {
 function applyObjMaterials(o) {
   const rt = RT.get(o.id); if (!rt) return;
   rt.edgeMat.color.set(o.edge);
-  const inner = new THREE.Color(o.type === 'bag' ? (o.whiteInside ? WHITE_INSIDE : o.board) : o.faces.inside?.bg || '#f4f1ea');
+  const inner = new THREE.Color(o.type === 'bag' ? (o.whiteInside ? WHITE_INSIDE : o.board) : o.type === 'dome' ? o.faces.insideBottom?.bg || '#f4f1ea' : o.faces.inside?.bg || '#f4f1ea');
   if (FINISHES[o.finish]?.kraft) inner.multiply(new THREE.Color(FINISHES[o.finish].kraft));
   rt.innerMat.color.copy(inner);
   const fold = new THREE.Color(o.faces.front?.bg || o.board || '#ffffff');
   if (FINISHES[o.finish]?.kraft) fold.multiply(new THREE.Color(FINISHES[o.finish].kraft));
   rt.foldMat.color.copy(fold);
   rt.cupLidMat.color.set(o.lidColor || LID_COLORS[0][0]);
+  if (rt.sleeve) sleeveColors(o, rt);
+  if (rt.trayMat) { const gold = o.tray?.fin === 'gold'; rt.trayMat.color.set(gold ? '#d6b25e' : '#c9cdd3'); rt.trayMat.metalness = .9; rt.trayMat.roughness = .3; }
+  if (rt.baseMat) {
+    const metal = o.baseFin === 'metal';
+    Object.assign(rt.baseMat, { metalness: metal ? .85 : 0, roughness: metal ? .32 : .22, clearcoat: metal ? .3 : .8, clearcoatRoughness: .08 });
+    rt.baseMat.color.set(o.baseColor || TORTE_COLORS[0][0]);
+  }
   rt.cardMat.color.set(o.faces.extFront?.bg || '#ffffff');
   rt.foldMat.bumpMap = o.grain > 0 ? rt.faces.front?.grain ?? null : null; rt.foldMat.bumpScale = o.grain * 1.2; rt.foldMat.needsUpdate = true;
   rt.innerMat.bumpMap = o.grain > 0 ? rt.faces.inside?.grain ?? null : null;
@@ -1723,7 +2772,7 @@ function drawLayer(ctx, L, W, H, paint = null, alpha = null) {
   ctx.globalCompositeOperation = paint ? 'source-over' : (L.blend || 'source-over');
   ctx.translate(L.x * W, L.y * H); ctx.rotate(L.rot * DEG);
   if (L.type === 'image') {
-    const im = getImg(L.src);
+    const im = artImg(L.src, L.recolor);
     if (im) {
       ctx.scale(L.flipX ? -1 : 1, L.flipY ? -1 : 1);
       let src = im;
@@ -1770,14 +2819,14 @@ function renderFace(o, k) {
   // print on a clear PET lid: no board colour, paper grain or kraft, only the layers
   const clear = f.clear = isClearFace(o, k);
   const bf = clear && o.type === 'bag' ? BAG_FILM[o.bagMat] : null;
-  const fin = clear ? bf?.fin || PET_PRINT : FINISHES[o.finish] || FINISHES.matte;
+  const fin = clear ? bf?.fin || PET_PRINT : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = faceGrain(o, k);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   if (clear) { ctx.clearRect(0, 0, W, H); if (bf?.ground) { ctx.fillStyle = bf.ground; ctx.fillRect(0, 0, W, H); } }
   else { ctx.fillStyle = face.bg; ctx.fillRect(0, 0, W, H); }
   if (!clear && o.dieline && outerKeys(o).includes(k)) {
     const im = getImg(o.dieline), net = netLayout(o), p = net.panels.find(p => p.key === k);
     if (im && p?.fan) ctx.drawImage(fanToRect(p.fan, im, W, H, o.dieline), 0, 0);
-    else if (im && p) drawNetPanel(ctx, im, p, 0, 0, W, H, [p.x / net.W * im.naturalWidth, p.y / net.H * im.naturalHeight, p.w / net.W * im.naturalWidth, p.h / net.H * im.naturalHeight]);
+    else if (im && p) drawNetPanel(ctx, im, p, 0, 0, W, H, [p.x / net.W * im.naturalWidth, p.y / net.H * im.naturalHeight, p.w / net.W * im.naturalWidth, p.h / net.H * im.naturalHeight], true);
   }
   const fxl = [];
   for (const L of face.layers) {
@@ -1787,10 +2836,10 @@ function renderFace(o, k) {
     else { drawLayer(ctx, L, W, H); if (L.effect !== 'none') fxl.push(L); }
   }
   if (fin.kraft && !clear) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = fin.kraft; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
-  if (o.grain > 0 && !clear) {
+  if (grain > 0 && !clear) {
     const grainPat = f.pat || (f.pat = ctx.createPattern(grainCanvas, 'repeat'));
     grainPat.setTransform(new DOMMatrix().scale(f.ppm * 45 / 256));
-    ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = Math.min(1, o.grain * (fin.kraft ? .9 : .45));
+    ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = Math.min(1, grain * (fin.kraft ? .9 : .45));
     ctx.fillStyle = grainPat; ctx.fillRect(0, 0, W, H);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
@@ -1858,9 +2907,9 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
     const c = aux(f, 'bump'), x = f.bumpCtx, W = c.width, H = c.height;
     x.filter = 'none'; x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
     x.fillStyle = '#808080'; x.fillRect(0, 0, W, H);
-    if (o.grain > 0 && !f.clear) {
+    if (faceGrain(o, k) > 0 && !f.clear) {
       const p = x.createPattern(grainCanvas, 'repeat'); p.setTransform(new DOMMatrix().scale(f.ppm / 2 * 45 / 256));
-      x.globalCompositeOperation = 'overlay'; x.globalAlpha = o.grain * .6; x.fillStyle = p; x.fillRect(0, 0, W, H);
+      x.globalCompositeOperation = 'overlay'; x.globalAlpha = faceGrain(o, k) * .6; x.fillStyle = p; x.fillRect(0, 0, W, H);
       x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1;
     }
     x.filter = `blur(${Math.max(.6, f.ppm / 2 * .35)}px)`;
@@ -1873,7 +2922,7 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
     x.filter = 'none';
     f.bumpTex.needsUpdate = true;
     m.bumpMap = f.bumpTex; m.bumpScale = 4;
-  } else if (o.grain > 0 && !f.clear) { m.bumpMap = f.grain; m.bumpScale = o.grain * 1.2; }
+  } else if (faceGrain(o, k) > 0 && !f.clear) { m.bumpMap = f.grain; m.bumpScale = faceGrain(o, k) * 1.2; }
   else m.bumpMap = null;
   m.clearcoat = fin.cc; m.clearcoatRoughness = fin.ccr;
   m.sheen = fin.sheen || 0; m.sheenRoughness = .8; m.sheenColor.set(0xffffff);
@@ -1908,8 +2957,11 @@ function stickerSize(st) {
 function computeFrames(o, rt) {
   rt.frames = null;
   if (o.type === 'bag') { rt.frames = rt.bagFrames || null; return; }
+  if (o.type === 'dome') { rt.frames = domeFrames(o, rt); return; }
+  if (o.type === 'torte') { rt.frames = {}; return; }   // films are laid along sections of the solid (torteSample)
   if (o.type !== 'box') return;
-  const saved = o.lid; o.lid = 0; applyLid(o);
+  // frames are taken closed: lid shut, tray pushed in (and the tray is never a neighbour for stickers)
+  const saved = o.lid, savedOut = o.tray?.out; o.lid = 0; if (o.tray) o.tray.out = 0; applyLid(o);
   rt.group.updateMatrixWorld(true);
   const inv = rt.group.matrixWorld.clone().invert(), frames = {};
   rt.group.traverse(m => {
@@ -1922,8 +2974,80 @@ function computeFrames(o, rt) {
     const pinv = inv.clone().multiply(m.parent.matrixWorld).invert();   // object space → the part's own space (closed)
     frames[k] = { c, u, v, n: new THREE.Vector3().crossVectors(u, v).normalize(), w, h, parent: m.parent, pinv };
   });
-  o.lid = saved; applyLid(o);
+  o.lid = saved; if (o.tray) o.tray.out = savedOut; applyLid(o);
+  delete frames.tray;
   rt.frames = frames;
+}
+/* sticker frames of the tray: four sloping walls, the floor and the lid's flat top. A wall's frame is the
+   sheet rectangle (rim width × slant) lying in the wall's plane; the part of it beyond the wall's slanted
+   side edges is cut off by the mitre plane through that corner, so a film turns the corner instead */
+function domeFrames(o, rt) {
+  const G = domeGeom(o), { w, d, wb, db, trayH: H, hd, fl } = G, V = a => new THREE.Vector3(...a), I4 = new THREE.Matrix4(), frames = {};
+  const lidInv = new THREE.Matrix4().makeTranslation(0, -H * S, 0), lid = rt.domeLid;
+  const link = (a, b, e0, e1, { oneWay = false, clip = false } = {}) => {
+    frames[a].links.push({ to: b, e0, e1, clip });
+    if (!oneWay) frames[b].links.push({ to: a, e0, e1, clip });
+  };
+  const walls = [['front', 0, 1, w, wb, d / 2, db / 2], ['back', 0, -1, w, wb, d / 2, db / 2], ['right', 1, 0, d, db, w / 2, wb / 2], ['left', -1, 0, d, db, w / 2, wb / 2]];
+  for (const [key, nx, nz, wt, wf, dt, df] of walls) {
+    const tx = nz, tz = -nx, pt = (dist, wid, k, y) => V([nx * dist + tx * wid * k, y, nz * dist + tz * wid * k]);
+    const corners = [pt(df, wf, -.5, 0), pt(df, wf, .5, 0), pt(dt, wt, .5, H), pt(dt, wt, -.5, H)];
+    const bc = corners[0].clone().add(corners[1]).multiplyScalar(.5), sv = corners[2].clone().add(corners[3]).multiplyScalar(.5).sub(bc), h = sv.length();
+    sv.divideScalar(h);
+    const u = V([tx, 0, tz]);
+    frames[key] = { key, c: bc.clone().addScaledVector(sv, h / 2), u, v: sv, n: new THREE.Vector3().crossVectors(u, sv).normalize(), w: wt, h, parent: rt.group, pinv: I4, corners, clip: [], links: [] };
+  }
+  frames.bottom = { key: 'bottom', c: V([0, 0, 0]), u: V([1, 0, 0]), v: V([0, 0, 1]), n: V([0, -1, 0]), w: wb, h: db, parent: rt.group, pinv: I4, links: [],
+    corners: [V([-wb / 2, 0, -db / 2]), V([wb / 2, 0, -db / 2]), V([wb / 2, 0, db / 2]), V([-wb / 2, 0, db / 2])] };
+  const [tw, th] = faceMM(o, 'top');
+  frames.top = { key: 'top', c: V([0, H + hd, 0]), u: V([1, 0, 0]), v: V([0, 0, -1]), n: V([0, 1, 0]), w: tw, h: th, parent: lid, pinv: lidInv, links: [] };
+  // walls meet each other at the corners (mitre planes cut each wall's sheet rectangle there) and the floor at its edges
+  const shared = (A, B) => A.corners.filter(p => B.corners.some(q => p.distanceToSquared(q) < 1e-4));
+  const wk = ['front', 'back', 'right', 'left'];
+  for (const a of wk) for (const b of [...wk, 'bottom']) {
+    const A = frames[a], B = frames[b], e = a !== b ? shared(A, B) : [];
+    if (e.length !== 2) continue;
+    if (b !== 'bottom') { const m = A.n.clone().sub(B.n).normalize(); A.clip.push({ n: m, d: m.dot(e[0]), sign: 1 }); }
+    if (wk.indexOf(b) > wk.indexOf(a) || b === 'bottom') link(a, b, e[0], e[1]);
+  }
+  // the lid, side by side: strips between its profile rings (flange lip, flange, step, the slope that is the
+  // printed side, the shoulder) up to the flat top. Off the flange lip a sticker cannot follow the plastic:
+  // it bridges through the air onto the tray wall, and only from the lid down (one way)
+  const prof = domeProfile(G);
+  for (const wall of wk) {
+    const lidKey = DOME_SIDES[wall][0], sd = domeSide(o, lidKey, G, prof), at = (i, sg) => V(sd.at(i, sg)).add(V([0, H, 0]));
+    const strip = (key, lo, hi, parent, pinv) => {
+      const lc = lo[0].clone().add(lo[1]).multiplyScalar(.5), v = hi[0].clone().add(hi[1]).multiplyScalar(.5).sub(lc), h = v.length(); v.divideScalar(h);
+      const u = lo[1].clone().sub(lo[0]).normalize();
+      frames[key] = { key, c: lc.clone().addScaledVector(v, h / 2), u, v, n: new THREE.Vector3().crossVectors(u, v).normalize(),
+        w: Math.max(lo[0].distanceTo(lo[1]), hi[0].distanceTo(hi[1])), h, parent, pinv, links: [] };
+    };
+    const ring = i => [at(i, -1), at(i, 1)], key = i => i === sd.base ? lidKey : `dome:${wall}:${i}`;
+    for (let i = 0; i < sd.n - 1; i++) strip(key(i), ring(i), ring(i + 1), lid, lidInv);
+    for (let i = 0; i < sd.n - 2; i++) link(key(i), key(i + 1), ...ring(i + 1));
+    link(key(sd.n - 2), 'top', ...ring(sd.n - 1));
+    const W = frames[wall], yb = clamp(fl * .6 + 2, 2, H * .5), f = (H - yb) / H;
+    const foot = [W.corners[0].clone().lerp(W.corners[3], f), W.corners[1].clone().lerp(W.corners[2], f)];
+    strip(`dome:${wall}:bridge`, foot, ring(0), lid, lidInv);
+    link(`dome:${wall}:bridge`, key(0), ...ring(0));
+    link(`dome:${wall}:bridge`, wall, ...foot, { oneWay: true, clip: true });
+  }
+  Object.defineProperty(frames, 'walk', { value: Object.keys(frames) });
+  Object.defineProperty(frames, 'maxDepth', { value: 16 });
+  return frames;
+}
+/* a sticker folded about the edge two faces share: rotate its centre and axes by the angle between the
+   normals. Where the edge runs across a face (the bridge meeting the tray wall), each side keeps only its part */
+function domeAcross(A, F, cur) {
+  const L = A.links.find(l => l.to === F.key); if (!L) return null;
+  const q = new THREE.Quaternion().setFromUnitVectors(A.n, F.n), rot = x => x.clone().applyQuaternion(q);
+  const m = { c: rot(new THREE.Vector3().subVectors(cur.c, L.e0)).add(L.e0), su: rot(cur.su), sv: rot(cur.sv) };
+  if (L.clip) {
+    const e = L.e1.clone().sub(L.e0).normalize(), dA = L.e0.clone().sub(A.c); dA.addScaledVector(e, -dA.dot(e)).normalize();
+    const dF = rot(dA);
+    m.clipA = { n: dA, d: dA.dot(L.e0), sign: -1 }; m.clipF = { n: dF, d: dF.dot(L.e0), sign: 1 };
+  }
+  return m;
 }
 /* where a sticker lands: one affine map (sticker mm → face mm) per surface it reaches, found by
    walking from the anchor face to its neighbours and on (up to four steps). A neighbour can lie
@@ -1970,17 +3094,17 @@ function placementsFor(o, st) {
   const c = A.c.clone().addScaledVector(A.u, st.x * aw - aw / 2).addScaledVector(A.v, ah / 2 - st.y * ah);
   const [sw, sh] = stickerSize(st), R = Math.hypot(sw, sh) / 2 + stickerMargin(st) + 1, tol = Math.max(3, 2 * o.thickness + 2);
   const inner = st.face === 'inside' || st.face === 'insideBottom';
-  const keys = inner ? [] : [...outerKeys(o), ...SUPPORTS].filter(k => fr[k]);
+  const keys = inner ? [] : fr.walk || [...outerKeys(o), ...SUPPORTS].filter(k => fr[k]);
   const toM = (e, F) => { const d = V().subVectors(e.c, F.c); return [e.su.dot(F.u), -e.su.dot(F.v), -e.sv.dot(F.u), e.sv.dot(F.v), d.dot(F.u) + F.w / 2, F.h / 2 - d.dot(F.v)]; };
-  const start = { key: st.face, c, su, sv, depth: 0, clips: [] };
+  const start = { key: st.face, c, su, sv, depth: 0, clips: [...(A.clip || [])] };
   const seen = new Map([[st.face, start]]), queue = [start];
   while (queue.length) {
     const cur = queue.shift(), Af = fr[cur.key];
-    if (cur.depth >= 4) continue;
+    if (cur.depth >= (fr.maxDepth || 4)) continue;
     for (const k of keys) {
       if (seen.has(k)) continue;
-      const F = fr[k], m = mapAcross(Af, F, cur, tol); if (!m) continue;
-      const ent = { key: k, c: m.c, su: m.su, sv: m.sv, depth: cur.depth + 1, clips: m.clipF ? [m.clipF] : [] };
+      const F = fr[k], m = Af.links ? domeAcross(Af, F, cur) : mapAcross(Af, F, cur, tol); if (!m) continue;
+      const ent = { key: k, c: m.c, su: m.su, sv: m.sv, depth: cur.depth + 1, clips: [...(m.clipF ? [m.clipF] : []), ...(F.clip || [])] };
       const M = toM(ent, F);
       if (M[4] < -R || M[4] > F.w + R || M[5] < -R || M[5] > F.h + R) continue;
       if (m.clipA) cur.clips.push(m.clipA);
@@ -2040,14 +3164,14 @@ function drawSticker(c, st, ppm, withShadow = true) {
     stickerMask(c, st, '#ffffff'); c.restore();
   }
   if (st.kind === 'custom') {
-    const ol = st.outline || 0, im = getImg(st.src);
+    const ol = st.outline || 0, im = artImg(st.src, st.recolor);
     if (ol > 0) { const t = tinted(st.src, '#ffffff'); if (t) for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.drawImage(t, -w / 2 + Math.cos(a) * ol, -h / 2 + Math.sin(a) * ol, w, h); } }
     if (im && foil) { const t = tinted(st.src, '#000000'); c.save(); c.drawImage(t, -w / 2, -h / 2, w, h); c.globalCompositeOperation = 'source-atop'; c.fillStyle = stickerFoil(c, st.finish, w, h); c.fillRect(-w / 2, -h / 2, w, h); c.restore(); }
     else if (im) c.drawImage(im, -w / 2, -h / 2, w, h);
   } else {
     c.save(); stickerPath(c, st, w, h); c.clip();
     if (!st.clear) { c.fillStyle = foil ? stickerFoil(c, st.finish, w, h) : st.fill; c.fillRect(-w / 2, -h / 2, w, h); }
-    const im = st.src && getImg(st.src);
+    const im = st.src && artImg(st.src, st.recolor);
     if (im) {
       const a = im.naturalWidth / im.naturalHeight, k = st.imgScale || .7;
       let iw = w * k, ih = iw / a; if (ih > h * k) { ih = h * k; iw = ih * a; }
@@ -2117,11 +3241,12 @@ function buildStickerFilms(o) {
   const lift = .1, V = () => new THREE.Vector3();
   for (const st of o.stickers || []) {
     if (!st.visible) continue;
-    const pls = placementsFor(o, st).filter(pl => rt.frames[pl.key]); if (!pls.length) continue;
+    const torte = o.type === 'torte', pls = torte ? [] : placementsFor(o, st).filter(pl => rt.frames[pl.key]); if (!pls.length && !torte) continue;
     const look = stickerLook(rt, st), [ew, eh] = look.ext;
     const step = Math.max(.7, Math.max(ew, eh) / 110) * (dragSt ? 2 : 1), nx = Math.max(2, Math.ceil(ew / step) + 1), ny = Math.max(2, Math.ceil(eh / step) + 1), N = nx * ny;
     const P = new Array(N), Nn = new Array(N), own = new Array(N), sup = new Array(N);
-    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    if (torte) torteSample(o, rt, st, ew, eh, nx, ny, P, Nn, own, sup, lift);
+    else for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
       const sx = -ew / 2 + ew * i / (nx - 1), sy = -eh / 2 + eh * j / (ny - 1);
       let best = null, near = null, nearD = Infinity;
       for (const { key, M, clips } of pls) {
@@ -2139,6 +3264,7 @@ function buildStickerFilms(o) {
     // from outside can reach, so it fillets inner corners and ramps over steps, while flat areas and
     // outer edges keep full contact. For each point: rest balls on nearby surface samples, keep the
     // ones that don't dig into any other sample, and lift the point onto the nearest such ball.
+    if (!torte) {
     const t = clamp(st.tension ?? .5, 0, 1), r = .3 + 15 * t * t;
     const cell = Math.max(r, step * 1.5), X = new Float64Array(N * 3), CC = new Float64Array(N * 3);
     for (let k = 0; k < N; k++) { X[k * 3] = P[k].x; X[k * 3 + 1] = P[k].y; X[k * 3 + 2] = P[k].z; }
@@ -2183,6 +3309,7 @@ function buildStickerFilms(o) {
       const f = r / d; moved[k] = new THREE.Vector3(CC[bq * 3] + (px - CC[bq * 3]) * f, CC[bq * 3 + 1] + (py - CC[bq * 3 + 1]) * f, CC[bq * 3 + 2] + (pz - CC[bq * 3 + 2]) * f);
     }
     for (let k = 0; k < N; k++) if (moved[k]) P[k].copy(moved[k]);
+    }
     // one geometry per rigid part; a cell rides with the part under its first corner
     const byPart = new Map();
     for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
@@ -2351,6 +3478,7 @@ renderer.setAnimationLoop(now => {
   if (ui.net) { ui.net = false; drawNet(); }
   if (ui.layers) { ui.layers = false; renderLayers(); }
   if (ui.stickers) { ui.stickers = false; renderStickers(); }
+  if (ui.lib) { ui.lib = false; renderLibrary(); }
 });
 
 /* ================================================================
@@ -2369,9 +3497,9 @@ function select(objId, face = undefined, layerId = null, { flash = false } = {})
   if (flash && o) { const f = RT.get(o.id)?.faces[sel.face]; if (f) { f.flash = 1; accent.set(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0a7aa1'); } }
   if (changedObj) { renderObjects(); renderModel(); renderStickers(); if (orbitLock) focusSelected(); }
   renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps();
-  ui.editor = ui.net = true;
+  ui.editor = ui.net = ui.lib = true;
 }
-function selectLayer(id) { sel.layer = id; if (id && sel.sticker) { sel.sticker = null; ui.stickers = true; } renderLayers(); renderLayerProps(); ui.editor = true; }
+function selectLayer(id) { ui.lib = true; sel.layer = id; if (id && sel.sticker) { sel.sticker = null; ui.stickers = true; } renderLayers(); renderLayerProps(); ui.editor = true; }
 
 /* ================================================================
    History & persistence
@@ -2382,7 +3510,7 @@ function commit() {
   const s = snapshot(); if (hist.stack[hist.i] === s) return;
   hist.stack = hist.stack.slice(0, hist.i + 1); hist.stack.push(s);
   if (hist.stack.length > 100) hist.stack.shift();
-  hist.i = hist.stack.length - 1; updateUndo(); scheduleSave();
+  hist.i = hist.stack.length - 1; updateUndo(); scheduleSave(); ui.lib = true;
 }
 function restore(s) {
   const d = JSON.parse(s);
@@ -2405,17 +3533,25 @@ function usedAssets() {
     if (o.dieline) used.add(o.dieline);
     for (const k in o.faces) for (const l of o.faces[k].layers) if (l.src) used.add(l.src);
     for (const st of o.stickers || []) if (st.src) used.add(st.src);
+    if (o.product?.src) used.add(o.product.src);
   }
   for (const f of state.fonts) used.add(f.asset);
-  const out = {}; for (const id of used) if (assets[id]) out[id] = assets[id]; return out;
+  return used;
 }
-const projectJSON = () => JSON.stringify({ app: 'box-studio-3d', version: 1, objects: state.objects, scene: state.scene, fonts: state.fonts, assets: usedAssets() });
+const assetsOf = ids => { const out = {}; for (const id of ids) { if (assets[id]) out[id] = assets[id]; if (vecOf[id] && assets[vecOf[id]]) out[vecOf[id]] = assets[vecOf[id]]; } return out; };
+/* a project file carries its whole library; the autosave only what the design uses (the library is in the browser) */
+function projectJSON(withLibrary = true) {
+  const ids = usedAssets(); if (withLibrary) for (const it of library) ids.add(it.id);
+  return JSON.stringify({ app: 'box-studio-3d', version: 1, objects: state.objects, scene: state.scene, fonts: state.fonts,
+    library: library.filter(it => withLibrary || ids.has(it.id) || !it.browser).map(({ id, hash, name, aspect, added }) => ({ id, hash, name, aspect, added })), assets: assetsOf(ids),
+    vectors: Object.fromEntries([...ids].filter(id => vecOf[id]).map(id => [id, vecOf[id]])) });
+}
 const LS_KEY = 'box-studio-3d/project';
 let saveTimer, saveWarned = false;
 function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem(LS_KEY, projectJSON()); }
+    try { localStorage.setItem(LS_KEY, projectJSON(false)); }
     catch (e) { if (!saveWarned) { saveWarned = true; toast('Проект слишком большой для автосохранения в браузере. Используйте «Сохранить проект».', 4200); } }
   }, 900);
 }
@@ -2423,6 +3559,10 @@ function loadProject(d, { resetHistory = true } = {}) {
   if (!d || !Array.isArray(d.objects)) throw new Error('bad project');
   for (const id of [...RT.keys()]) disposeObject(id);
   Object.assign(assets, d.assets || {});
+  for (const [id, v] of Object.entries(d.vectors || {})) if (assets[v]) vecOf[id] = v;
+  for (const it of d.library || []) if (assets[it.id] && !library.some(x => x.hash === it.hash)) { library.push({ ...it }); libStore('put', { hash: it.hash, name: it.name, aspect: it.aspect, url: assets[it.id], added: it.added || Date.now(), svg: vecOf[it.id] ? assets[vecOf[it.id]] : null }); }
+  const svgIds = new Set(Object.values(d.vectors || {}));
+  libAdopt(Object.keys(d.assets || {}).filter(id => !svgIds.has(id) && !(d.fonts || []).some(f => f.asset === id)));
   state.objects = d.objects; state.scene = { ...state.scene, ...(d.scene || {}) }; state.fonts = d.fonts || [];
   if ((d.scene?.v || 1) < 2) Object.assign(state.scene, LIGHTS[state.scene.preset] || LIGHTS.studio, { v: 2 });
   state.fonts.forEach(registerFont);
@@ -2490,7 +3630,7 @@ function refreshFields(root, t) { $$('[data-k]', root).forEach(el => { if (el !=
 function renderObjects() {
   $('#objList').innerHTML = state.objects.map(o => `<div class="obj ${o.id === sel.obj ? 'on' : ''}" data-id="${o.id}" tabindex="0" role="button">
     ${ICON[o.type] || ICON.box}<span class="nm">${esc(o.name)}</span>
-    <span class="dm mono">${o.type === 'tube' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'cup' ? `⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)}` : o.type === 'bag' && o.bagStyle !== 'block' ? `${fmt(o.dims.w)}×${fmt(o.dims.h)}` : `${fmt(o.dims.w)}×${fmt(o.dims.d)}×${fmt(o.dims.h)}`}</span></div>`).join('')
+    <span class="dm mono">${o.type === 'torte' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'tube' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'cup' ? `⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)}` : o.type === 'bag' && o.bagStyle !== 'block' ? `${fmt(o.dims.w)}×${fmt(o.dims.h)}` : `${fmt(o.dims.w)}×${fmt(o.dims.d)}×${fmt(o.dims.h)}`}</span></div>`).join('')
     || '<div class="empty">Добавьте коробку, стакан или тубус</div>';
   $$('#objList .obj').forEach(el => {
     const go = () => { select(el.dataset.id, undefined, null); };
@@ -2501,11 +3641,11 @@ function renderObjects() {
 function renderModel() {
   const o = activeObj(), sec = $('#modelSec');
   if (!o) { sec.innerHTML = '<div class="sec-h"><h2>Форма</h2></div><div class="empty">Нет выбранного объекта</div>'; return; }
-  const box = o.type === 'box', cup = o.type === 'cup', bag = o.type === 'bag', film = bagFilm(o);
+  const box = o.type === 'box', cup = o.type === 'cup', bag = o.type === 'bag', dome = o.type === 'dome', torte = o.type === 'torte', film = bagFilm(o);
   sec.innerHTML = `
     <div class="sec-h"><h2>Форма и размеры</h2></div>
     <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="name" aria-label="Название"></div>
-    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="cup">Бумажный стакан</option><option value="bag">Пакет</option><option value="tube">Тубус / банка</option></select></div>
+    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="dome">Лоток с прозрачной крышкой-призмой</option><option value="torte">Тортница (ПЭТ)</option><option value="cup">Бумажный стакан</option><option value="bag">Пакет</option><option value="tube">Тубус / банка</option></select></div>
     <div class="field wide"><span class="fl">Заготовка</span><select id="presetSel"><option value="">— выбрать размер —</option>${PRESETS.filter(p => p.type === o.type).map(p => `<option value="${p.id}">${p.label}</option>`).join('')}</select></div>
     ${box ? rangeField('Ширина, мм', 'dims.w', 20, 800, 1) + rangeField('Глубина, мм', 'dims.d', 20, 800, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)
       : cup ? rangeField('Диаметр верха, мм', 'dims.w', 40, 160, 1) + rangeField('Диаметр дна, мм', 'dims.d', 30, 160, 1) + rangeField('Высота, мм', 'dims.h', 40, 250, 1)
@@ -2515,11 +3655,41 @@ function renderModel() {
               <div class="swatches" id="lidSw">${LID_COLORS.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.lidColor === c}"></button>`).join('')}</div>
               <input type="color" data-k="lidColor" aria-label="Свой цвет крышки"></div></div>` + rangeField('Снять крышку', 'lid', 0, 125, 1) : '')
           + `<p class="hint">Дизайн стенки рисуется на прямоугольнике: середина — лицевая сторона, края сходятся на шве сзади. К верхнему краю элементы на стакане крупнее, к нижнему — мельче (стакан расширяется), пропорции не искажаются. Для типографии — «Шаблон SVG» и «Развёртка PNG» веером.</p>`
+      : dome ? rangeField('Ширина по борту, мм', 'dims.w', 50, 400, 1) + rangeField('Глубина по борту, мм', 'dims.d', 50, 400, 1) + rangeField('Высота с крышкой, мм', 'dims.h', 30, 300, 1)
+          + rangeField('Высота лотка, мм', 'trayH', 10, 250, 1) + rangeField('Дно относительно борта, %', 'botK', 30, 100, 1, 100)
+          + rangeField('Крышка: плоский верх, % борта', 'domeTop', 20, 92, 1, 100) + rangeField('Крышка: фланец, мм', 'flangeW', 0, 30, .5) + rangeField('Крышка: скругление углов, мм', 'cornerR', 0, 60, .5)
+          + rangeField('Поднять крышку', 'lid', 0, 125, 1)
+          + `<p class="hint">Стенки лотка расходятся от дна к борту; печать — на четырёх стенках и на дне, внутри — «Дно изнутри». Крышка — прозрачный ПЭТ: на плоский верх можно нанести печать, остальное остаётся прозрачным. Дизайн стенки — прямоугольник по ширине борта, на дне видна его средняя часть, как на штанцформе.</p>`
+      : torte ? rangeField('Диаметр дна, мм', 'dims.w', 80, 450, 1) + rangeField('Диаметр крышки, мм', 'lidD', 40, 440, 1) + rangeField('Высота с крышкой, мм', 'dims.h', 40, 400, 1)
+          + rangeField('Высота дна, мм', 'baseH', 8, 40, .5) + rangeField('Конусность стенки, %', 'lidDraft', 0, 15, .5, 100) + rangeField('Скругление плеча, мм', 'lidR', 2, 40, .5)
+          + rangeField('Поднять крышку', 'lid', 0, 125, 1)
+          + `<p class="hint">Тортница из двух формованных деталей: дно из непрозрачного ПЭТ, крышка из прозрачного стоит в канавке дна. Печать — на стенке и верхе крышки, незапечатанное остаётся прозрачным. Наклейки огибают стенку, переходят через плечо на верх и спускаются на фланец и бортик дна (пломба).</p>`
       : bag ? bagFields(o)
       : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
     ${box ? `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(LID_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : ''}
-    ${box && o.lidType !== 'none' ? rangeField(o.lidType === 'telescope' ? 'Поднять крышку' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
+    ${box && o.lidType !== 'none' ? rangeField(o.lidType === 'telescope' ? 'Поднять крышку' : o.lidType === 'handle' ? 'Открыть торец' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
     ${box && (o.lidType === 'flap' || o.lidType === 'tuck') ? rangeField('Клапан, мм', 'flapH', 3, 300, 1) : ''}
+    ${box && o.lidType === 'handle' ? `<div class="field wide"><span class="fl">Открывается</span><select data-k="hbSides">${Object.entries(HB_SIDES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+      + rangeField('Выдвинуть подложку, мм', 'tray.out', 0, o.dims.w, 1)
+      + `<div class="field wide"><span class="fl">Подложка</span><select data-k="tray.fin">${Object.entries(TRAY_FIN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+      + `<div class="field wide"><span class="fl">Торт</span><div class="row"><button class="btn sm" id="prodBtn">${o.product?.src ? 'Заменить фото…' : 'Фото торта (PNG)…'}</button>${o.product?.src ? '<button class="btn sm" id="prodOff">Убрать</button>' : ''}</div></div>`
+      + (o.product?.src ? rangeField('Торт: ширина, мм', 'product.w', 5, 800, 1) : `<label class="check"><input type="checkbox" data-k="product.cake"> Торт-заглушка, пока нет фото</label>`)
+      + `<label class="check"><input type="checkbox" data-k="handle.on"> Ручка</label>` : ''}
+    ${box && o.lidType === 'handle' && o.handle?.on ? `<div class="field wide"><span class="fl">Заготовка ручки</span><select data-k="handle.shape">${Object.entries(HANDLE_SHAPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+      + rangeField('Ручка: ширина, мм', 'handle.w', 20, 400, 1) + rangeField('Ручка: высота, мм', 'handle.h', 15, 200, 1)
+      + rangeField('Ручка: скругление верхних углов, мм', 'handle.rTop', 0, 200, .5) + rangeField('Ручка: скругление нижних углов, мм', 'handle.rBot', 0, 200, .5)
+      + rangeField('Пройма: ширина, мм', 'handle.hole.w', 0, 400, 1) + rangeField('Пройма: высота, мм', 'handle.hole.h', 0, 200, 1)
+      + rangeField('Пройма: от перемычки, мм (0 — открыта снизу)', 'handle.hole.y', 0, 200, .5)
+      + rangeField('Пройма: скругление верхних углов, мм', 'handle.hole.rTop', 0, 200, .5) + rangeField('Пройма: скругление нижних углов, мм', 'handle.hole.rBot', 0, 200, .5)
+      + rangeField('Перемычка под ручкой, мм (0 — нет)', 'handle.bridge', 0, 120, 1)
+      + `<label class="check"><input type="checkbox" data-k="handle.up"> Ручка поднята</label>`
+      + `<label class="check"><input type="checkbox" data-k="frontWin.on"> Окно на передней стенке</label>`
+      + (o.frontWin?.on ? rangeField('Окно спереди: ширина, мм', 'frontWin.w', 10, 800, 1) + rangeField('Окно спереди: высота, мм', 'frontWin.h', 10, 800, 1)
+        + rangeField('Окно спереди: центр от низа, мм', 'frontWin.y', 5, 800, 1) + rangeField('Окно спереди: радиус, мм', 'frontWin.r', 0, 200, .5)
+        + `<label class="check"><input type="checkbox" data-k="frontWin.join"> Окно спереди переходит на крышку (одно окно через ребро)</label>`
+        + (o.frontWin.join && !bridgeMM(o) && !winMM(o) ? rangeField('Окно спереди: заход на крышку, мм', 'frontWin.d', 5, 800, 1) : '')
+        + (o.frontWin.join ? `<p class="hint">Окно на передней стенке поднимается до ребра и продолжается на крышке ${bridgeMM(o) ? 'до перемычки' : winMM(o) ? 'до заднего края окна в крышке' : 'на заданную глубину'}, ширина — как у окна спереди.</p>` : '') : '')
+      + `<p class="hint">Коробка открывается с торца: верхний клапан откидывается вверх, нижний — вниз, они сходятся посередине на замке «язычок в прорезь»; за ними внутренние крылышки от передней и задней стенок. Подложка с тортом выдвигается через открытый торец. Ручка — два лепестка: они поднимаются от краёв перемычки поперёк окна и сходятся вверху.</p>` : ''}
     ${box && o.lidType === 'flap' ? `<label class="check"><input type="checkbox" data-k="earsOn"> Боковые ушки клапана</label>` : ''}
     ${box && o.lidType === 'flap' && o.earsOn ? `<label class="check"><input type="checkbox" data-k="earFull"> Ушки на всю глубину коробки</label>` : ''}
     ${box && o.lidType === 'flap' && o.earsOn && !o.earFull ? rangeField('Длина ушек, мм', 'earLen', 5, 800, 1) : ''}
@@ -2527,20 +3697,34 @@ function renderModel() {
     ${box && clearLid(o) ? `<div class="field wide"><span class="fl">Посадка крышки</span><select data-k="lidFit"><option value="inside">Внутри дна (дно обхватывает крышку)</option><option value="over">Поверх дна</option></select></div>` : ''}
     ${box && o.lidType === 'telescope' ? rangeField('Высота крышки, мм', 'lidH', 3, 600, 1) : ''}
     ${box && clearLid(o) ? `<p class="hint">${o.lidFit === 'inside' ? 'Крышка стоит на дне лотка внутри бортов; высота считается от дна.' : 'Если крышка выше дна, она стоит на столе и закрывает лоток целиком.'} На прозрачные грани можно нанести печать: всё, что не закрыто слоями, остаётся прозрачным.</p>` : ''}
-    ${box ? rangeField('Толщина, мм', 'thickness', .3, 6, .1) : ''}
+    ${box || dome ? rangeField('Толщина, мм', 'thickness', .3, 6, .1) : ''}
     ${box ? rangeField('Стенки дна, мм', 'wallT', .3, 30, .1) : ''}
     ${box ? `<p class="hint">Стенки толще картона — двойной борт: стенка загибается внутрь, сверху виден сгиб.</p>` : ''}
+    ${box && o.lidType !== 'handle' ? `<label class="check"><input type="checkbox" data-k="sleeve.on"> Рукав (бумажная бандероль вокруг коробки)</label>` : ''}
+    ${box && sleeveOn(o) ? (() => { const SD = sleeveDims(o); return `<div class="field wide"><span class="fl">Рукав опоясывает</span><select data-k="sleeve.axis">${Object.entries(SLEEVE_AXES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+      + rangeField('Рукав: ширина ленты, мм', 'sleeve.w', 10, Math.ceil(SD.len + 1), 1) + rangeField('Рукав: смещение от центра, мм', 'sleeve.x', -Math.ceil(SD.len / 2), Math.ceil(SD.len / 2), 1)
+      + rangeField('Сдвинуть рукав, мм', 'sleeve.slide', 0, Math.ceil(SD.len + SD.bw), 1)
+      + `<label class="check"><input type="checkbox" data-k="sleeve.handle.on"> Ручка из рукава (лента поднимается над крышкой)</label>`
+      + (o.sleeve.handle?.on ? rangeField('Ручка: высота, мм', 'sleeve.handle.h', 15, 300, 1) + rangeField('Ручка: скругление верхних углов, мм', 'sleeve.handle.r', 0, 100, .5)
+        + rangeField('Ручка: радиус изгиба у основания, мм (0 — острый сгиб)', 'sleeve.handle.rf', 0, 40, .5)
+        + rangeField('Пройма: ширина, мм', 'sleeve.handle.hole.w', 0, 400, 1) + rangeField('Пройма: высота, мм', 'sleeve.handle.hole.h', 0, 200, 1)
+        + rangeField('Пройма: от крышки, мм', 'sleeve.handle.hole.y', 3, 300, .5) + rangeField('Пройма: скругление, мм', 'sleeve.handle.hole.r', 0, 100, .5) : '')
+      + `<div class="field wide"><span class="fl">Бумага рукава</span><select data-k="sleeve.fin">${Object.entries(SLEEVE_FIN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+      + `<p class="hint">Дизайн рукава — грань «Рукав»: одна лента, на ней отмечены сгибы (${SD.names.map(k => SLEEVE_PANEL[k]).join(', ')}). Цвет бумаги — фон этой грани. На развёртке рукав — отдельная деталь с биговками и клеевым клапаном.${o.lidType !== 'none' ? ' Перед открытием крышки сдвиньте рукав.' : ' Лоток в рукаве — коробка-пенал: сдвиньте рукав, чтобы выдвинуть лоток.'}</p>`; })() : ''}
     ${box && windowPlace(o) ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
     ${box && o.window.on && windowPlace(o) ? windowFields(o) : ''}
     <div class="sec-h" style="margin-top:4px"><h2>Материал</h2></div>
-    ${film ? `<p class="hint">Плёнка: всё, что не закрыто печатью, остаётся ${o.bagMat === 'clear' ? 'прозрачным' : 'полупрозрачным'}. Материал меняется в настройках пакета выше.</p>` : `
+    ${torte ? `<div class="field wide"><span class="fl">Дно</span><div class="row">
+      <div class="swatches" id="torteSw">${TORTE_COLORS.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.baseColor === c}"></button>`).join('')}</div>
+      <input type="color" data-k="baseColor" aria-label="Свой цвет дна"></div></div>
+    <div class="field wide"><span class="fl">Материал дна</span><select data-k="baseFin">${Object.entries(TORTE_FIN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : film ? `<p class="hint">Плёнка: всё, что не закрыто печатью, остаётся ${o.bagMat === 'clear' ? 'прозрачным' : 'полупрозрачным'}. Материал меняется в настройках пакета выше.</p>` : `
     <div class="field wide"><span class="fl">${bag ? 'Цвет бумаги' : 'Цвет картона'}</span><div class="row">
       <div class="swatches" id="boardSw">${BOARD.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.board === c}"></button>`).join('')}</div>
       <input type="color" id="boardColor" value="${o.board || '#ffffff'}" aria-label="Свой цвет картона"></div></div>
     <label class="check"><input type="checkbox" data-k="whiteInside"> Белая внутренняя сторона</label>
     <div class="field wide"><span class="fl">Покрытие</span><select data-k="finish">${Object.entries(FINISHES).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('')}</select></div>
     ${rangeField('Фактура бумаги', 'grain', 0, 100, 1, 100)}`}
-    ${box ? `<div class="field wide"><span class="fl">Цвет торца</span><div class="row"><input type="color" data-k="edge" aria-label="Цвет торца"><span class="hint">виден на срезе картона</span></div></div>` : ''}
+    ${box || dome ? `<div class="field wide"><span class="fl">Цвет торца</span><div class="row"><input type="color" data-k="edge" aria-label="Цвет торца"><span class="hint">виден на срезе картона</span></div></div>` : ''}
     <div class="sec-h" style="margin-top:4px"><h2>Положение в сцене</h2></div>
     ${rangeField('Смещение X, мм', 'pos.x', -1000, 1000, 1)}
     ${rangeField('Смещение Z, мм', 'pos.z', -1000, 1000, 1)}
@@ -2552,9 +3736,24 @@ function renderModel() {
     if (k === 'lidType') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'wallT' || k === 'lidFit') { rebuildQueue.add(o.id); applyObjMaterials(o); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lidMat') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'sleeve.slide') { applySleeve(o); return; }
+    if (k.startsWith('sleeve.')) {
+      if (k === 'sleeve.axis') { const SD = sleeveDims(o); o.sleeve.x = 0; o.sleeve.w = Math.round(Math.min(o.sleeve.w, SD.len)); o.sleeve.slide = 0; }
+      ensureFaces(o); rebuildQueue.add(o.id); markFace(o, 'sleeve'); ui.net = ui.editor = true; updateFaceMeta();
+      if (k === 'sleeve.on' || k === 'sleeve.axis' || k === 'sleeve.handle.on') { select(o.id, k === 'sleeve.on' && o.sleeve.on ? 'sleeve' : sel.face); renderModel(); renderFaceTabs(); }
+      return;
+    }
+    if (k === 'handle.shape') applyHandlePreset(o.handle, o.handle.shape);
+    if (k === 'tray.out') { applyLid(o); return; }
+    if (k === 'hbSides' || k === 'tray.fin' || k === 'product.cake') { ensureFaces(o); rebuildQueue.add(o.id); ui.net = true; select(o.id, sel.face); renderModel(); updateFaceMeta(); return; }
+    if (k.startsWith('handle.') || k.startsWith('frontWin.')) {
+      ensureFaces(o); rebuildQueue.add(o.id); ui.net = ui.editor = true; updateFaceMeta();
+      if (['handle.on', 'handle.shape', 'frontWin.on', 'frontWin.join'].includes(k)) { select(o.id, sel.face); renderModel(); }
+      return;
+    }
     if (k === 'earsOn' || k === 'earFull') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
-    if (k.startsWith('dims') || k === 'thickness') { rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
+    if (k.startsWith('dims') || k === 'thickness') { if (sleeveOn(o)) markFace(o, 'sleeve'); rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lid') { applyLid(o); return; }
     if (k === 'bagStyle') { o.dims.d = o.bagStyle === 'block' ? Math.round(o.dims.w * .65) : 12; o.lid = 0; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'bagTop' || k === 'ext.on') { o.lid = 0; if (k === 'bagTop' && o.bagTop === 'fold' && o.bagStyle === 'block' && o.rollTurns < 2) { o.rollTurns = 2; o.flapH = 16; } ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
@@ -2569,6 +3768,9 @@ function renderModel() {
       if (k === 'rollTurns' || k === 'bagWin.on' || k === 'bagWin.corners') renderModel();
       return;
     }
+    if (k === 'baseColor') { applyObjMaterials(o); $$('#torteSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.baseColor)); return; }
+    if (['lidD', 'baseH', 'lidDraft', 'lidR', 'baseFin'].includes(k)) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
+    if (['trayH', 'botK', 'domeTop', 'flangeW', 'cornerR'].includes(k)) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k === 'cupWall' || k === 'cupLid') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'cupLid') renderModel(); return; }
     if (k === 'lidColor') { applyObjMaterials(o); $$('#lidSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.lidColor)); return; }
     if (k.startsWith('pos') || k === 'rotY') { applyTransform(o); return; }
@@ -2591,6 +3793,7 @@ function renderModel() {
   const board = c => { setBoard(o, c); applyObjMaterials(o); markObj(o); renderFacePanel(); $$('#boardSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === c)); $('#boardColor').value = c; };
   $$('#boardSw .sw').forEach(b => b.onclick = () => { board(b.dataset.c); commit(); });
   $$('#lidSw .sw').forEach(b => b.onclick = () => { o.lidColor = b.dataset.c; applyObjMaterials(o); renderModel(); commit(); });
+  $$('#torteSw .sw').forEach(b => b.onclick = () => { o.baseColor = b.dataset.c; applyObjMaterials(o); renderModel(); commit(); });
   $('#boardColor')?.addEventListener('input', e => board(e.target.value));
   $('#boardColor')?.addEventListener('change', () => commit());
   if ($('#prodBtn')) $('#prodBtn').onclick = () => pickImage(async file => {
@@ -2607,11 +3810,21 @@ function renderModel() {
       for (const [k, v] of [['flapH', p.lid?.flapH], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
       o.lidMat = p.lid?.mat ?? 'board'; o.lidFit = p.lid?.fit ?? 'over'; o.wallT = p.wallT ?? o.thickness;
       o.earsOn = true; o.earFull = true;
+      if (p.sleeve) { o.sleeve = { ...defaultSleeve(o.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true }; ensureFaces(o); if (p.sleeve.bg) o.faces.sleeve.bg = p.sleeve.bg; }
+      if (o.lidType === 'handle') {
+        o.handle = applyHandlePreset({ ...defaultHandle(o.dims), ...(p.handle || {}) }, p.handle?.shape || 'arch');
+        o.frontWin = { ...defaultFrontWin(o.dims), ...(p.frontWin || {}) };
+      }
       if (p.whiteInside != null) o.whiteInside = p.whiteInside;
       ensureFaces(o); if (p.board) setBoard(o, p.board);
       applyObjMaterials(o); select(o.id, sel.face);
     }
     if (o.type === 'cup' && p.board) { setBoard(o, p.board); applyObjMaterials(o); }
+    if (o.type === 'torte') { applyTortePreset(o, p); ensureFaces(o); applyObjMaterials(o); select(o.id, sel.face); }
+    if (o.type === 'dome') {
+      applyDomePreset(o, p); if (p.whiteInside != null) o.whiteInside = p.whiteInside;
+      ensureFaces(o); if (p.board) setBoard(o, p.board); applyObjMaterials(o); select(o.id, sel.face);
+    }
     if (o.type === 'bag') { applyBagPreset(o, p); ensureFaces(o); if (p.board) setBoard(o, p.board); applyObjMaterials(o); select(o.id, sel.face); }
     rebuildQueue.add(o.id); renderModel(); renderObjects(); commit(); setTimeout(() => setView(lastView), 50);
   };
@@ -2690,7 +3903,7 @@ function renderFacePanel() {
 function setFaceBg(c, doCommit) {
   const o = activeObj(), f = activeFaceData(); if (!f) return;
   f.bg = c; $('#faceBg').value = c; markFace(o, sel.face);
-  if (sel.face === 'inside' || sel.face === 'flap') applyObjMaterials(o);
+  if (sel.face === 'inside' || sel.face === 'flap' || sel.face === 'sleeve') applyObjMaterials(o);
   if (doCommit) commit();
 }
 function layerName(L) {
@@ -2756,6 +3969,7 @@ function renderLayerProps() {
     const dpi = imageDpi(o, L);
     html += `<div class="row"><button class="btn sm" id="imgReplace">Заменить…</button><button class="btn sm" id="imgCover">Залить грань</button><button class="btn sm" id="imgFit">Вписать</button></div>
       <div class="row"><label class="check"><input type="checkbox" data-k="flipX"> Отразить ↔</label><label class="check"><input type="checkbox" data-k="flipY"> Отразить ↕</label></div>
+      ${vecColorsHTML(L.src, L.recolor)}
       <label class="check"><input type="checkbox" data-k="tile"> Повторять узором</label>
       ${rangeField(L.tile ? 'Размер плитки, %' : 'Ширина, %', 'w', 1, 400, .1, 100)}
       ${dpi != null ? `<p class="hint">При печати этого размера: <b class="mono">${dpi} dpi</b>${dpi < 150 ? ' — мало для офсета, нужно от 300 dpi' : dpi < 300 ? ' — допустимо, для офсета лучше 300 dpi' : ' — подходит для печати'}.</p>` : ''}`;
@@ -2781,7 +3995,8 @@ function renderLayerProps() {
   $('#centerBtn').onclick = () => { const L = activeLayer(); L.x = .5; L.y = .5; markFace(o, sel.face); refreshFields(sec, L); commit(); };
   $('#delLayerBtn').onclick = () => deleteLayer(L.id);
   if (L.type === 'image') {
-    $('#imgReplace').onclick = () => pickImage(async file => { const r = await importImageFile(file); const L = activeLayer(); L.src = r.id; L.aspect = r.aspect; markFace(o, sel.face); renderLayers(); renderLayerProps(); commit(); });
+    $('#imgReplace').onclick = () => pickImage(async file => { const r = await importImageFile(file); const L = activeLayer(); L.src = r.id; L.aspect = r.aspect; L.recolor = {}; markFace(o, sel.face); renderLayers(); renderLayerProps(); commit(); });
+    bindVecColors(sec, activeLayer, () => { markFace(o, sel.face); ui.layers = true; });
     $('#imgCover').onclick = () => fitImage(true);
     $('#imgFit').onclick = () => fitImage(false);
   }
@@ -2799,8 +4014,11 @@ function fitImage(cover) {
 function sealSpot(o) {
   const lt = o.lidType || 'flat';
   if (o.type === 'bag') return o.bagTop === 'open' ? { face: 'front', x: .5, y: .15 } : o.ext?.on ? { face: 'extFront', x: .5, y: 1 } : o.bagTop === 'seal' ? { face: 'front', x: .5, y: .03 } : { face: o.bagTop, x: .5, y: 1 };
+  if (o.type === 'dome') return { face: 'lidFront', x: .5, y: .97 };
+  if (o.type === 'torte') return { face: 'lidWrap', x: .5, y: .97 };
   if (o.type !== 'box') return { face: faceKeys(o)[0], x: .5, y: .5 };
   if (lt === 'flap') return { face: 'flap', x: .5, y: 1 };
+  if (lt === 'handle') { const op = hbOpen(o); return op.right || op.left ? { face: op.right ? 'rightTop' : 'leftTop', x: .5, y: 1, rot: 0 } : { face: 'front', x: .5, y: .5 }; }
   if (lt === 'telescope') return clearLid(o) && o.lidFit === 'inside' ? { face: 'top', x: .5, y: .5 } : { face: 'lidFront', x: .5, y: 1 };
   if (lt === 'none') return { face: 'front', x: .5, y: .5 };
   return { face: 'front', x: .5, y: 0 };
@@ -2819,6 +4037,7 @@ function deleteSticker(id) {
   renderStickers(); commit();
 }
 function renderStickers() {
+  ui.lib = true;
   const sec = $('#stickerSec'), o = activeObj();
   if (!o) { sec.innerHTML = ''; return; }
   const list = o.stickers || [], st = activeSticker();
@@ -2843,11 +4062,11 @@ function renderStickers() {
       ${rangeField(st.kind === 'circle' ? 'Ширина (Ø), мм' : 'Ширина, мм', 'w', 5, 400, .5)}
       ${custom ? '' : rangeField('Высота, мм', 'h', 5, 400, .5)}
       ${st.kind === 'rect' ? rangeField('Скругление, мм', 'radius', 0, 60, .5) : ''}
-      ${custom ? `<div class="row"><button class="btn sm" id="stShape">${st.src ? 'Заменить форму…' : 'Загрузить форму…'}</button></div>${rangeField('Белая окантовка, мм', 'outline', 0, 10, .1)}`
+      ${custom ? `<div class="row"><button class="btn sm" id="stShape">${st.src ? 'Заменить форму…' : 'Загрузить форму…'}</button></div>${vecColorsHTML(st.src, st.recolor)}${rangeField('Белая окантовка, мм', 'outline', 0, 10, .1)}`
         : `<div class="row"><span class="hint">Фон</span><input type="color" data-k="fill" aria-label="Цвет наклейки"><label class="check"><input type="checkbox" data-k="clear"> Без фона</label></div>
            <div class="row"><span class="hint">Обводка</span><input type="color" data-k="stroke" aria-label="Цвет обводки"><span class="grow"></span></div>${rangeField('Обводка, мм', 'strokeW', 0, 10, .1)}
            <div class="row"><button class="btn sm" id="stImg">${st.src ? 'Заменить логотип…' : 'Логотип…'}</button>${st.src ? '<button class="btn sm" id="stImgOff">Убрать</button>' : ''}</div>
-           ${st.src ? rangeField('Логотип, %', 'imgScale', 10, 100, 1, 100) : ''}`}
+           ${st.src ? rangeField('Логотип, %', 'imgScale', 10, 100, 1, 100) + vecColorsHTML(st.src, st.recolor) : ''}`}
       <textarea data-k="text" rows="1" aria-label="Текст наклейки" placeholder="Текст на наклейке"></textarea>
       <div class="grid2"><select data-k="font" aria-label="Шрифт">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
         <div class="row"><input type="color" data-k="textColor" aria-label="Цвет текста"><span class="hint">цвет текста</span></div></div>
@@ -2863,7 +4082,7 @@ function renderStickers() {
   sec.innerHTML = html;
   $('#stCircle').onclick = () => addSticker(newSticker('circle', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]));
   $('#stRect').onclick = () => addSticker(newSticker('rect', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]));
-  $('#stSeal').onclick = () => addSticker(newSticker('rect', 'front', { ...sealSpot(o), w: 22, h: 50, radius: 2, text: '', fill: '#f3ead6', stroke: '#b8461b', strokeW: .8, finish: 'gloss' }));
+  $('#stSeal').onclick = () => addSticker(newSticker('rect', 'front', { ...sealSpot(o), w: 22, h: o.type === 'dome' || o.type === 'torte' ? 80 : 50, radius: 2, text: '', fill: '#f3ead6', stroke: '#b8461b', strokeW: .8, finish: 'gloss' }));
   $('#stCustom').onclick = () => pickImage(async file => {
     const r = await importImageFile(file);
     addSticker(newSticker('custom', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0], { src: r.id, aspect: r.aspect, w: 50, outline: 1.5 }));
@@ -2888,6 +4107,7 @@ function renderStickers() {
   $('#stShape') && ($('#stShape').onclick = () => pickInto('src', r => { st.aspect = r.aspect; }));
   $('#stImg') && ($('#stImg').onclick = () => pickInto('src'));
   $('#stImgOff') && ($('#stImgOff').onclick = () => { st.src = null; touchSticker(o, st); renderStickers(); commit(); });
+  bindVecColors(sec, activeSticker, t => { const look = RT.get(o.id)?.stickerLook?.get(t.id); if (look) look.key = ''; touchSticker(o, t); });
 }
 
 /* ---------- layer ops ---------- */
@@ -2925,6 +4145,69 @@ let pickCb = null;
 function pickImage(cb) { pickCb = cb; $('#imgInput').value = ''; $('#imgInput').click(); }
 $('#imgInput').onchange = e => { const f = e.target.files[0]; if (f && pickCb) pickCb(f); };
 
+/* ---------- vector colours: one row per colour of the SVG, swapped per layer / sticker ---------- */
+function vecColorsHTML(srcId, rc) {
+  const cols = vecColors(srcId); if (!cols.length) return '';
+  const shown = cols.slice(0, 16);
+  return `<div class="field wide"><span class="fl">Цвета вектора</span><div class="vcols">${shown.map(c => `<label class="vc" title="${c}"><span class="sw" style="background:${c}"></span>→<input type="color" data-vc="${c}" value="${rc?.[c] || c}" aria-label="Заменить ${c}"></label>`).join('')}</div></div>
+    <div class="row"><span class="hint">Всё одним цветом</span><input type="color" id="vcAll" value="${rc?.[cols[0]] || cols[0]}" aria-label="Перекрасить всё"><button class="btn sm" id="vcReset" ${hasRecolor(rc) ? '' : 'disabled'}>Исходные цвета</button></div>
+    ${cols.length > shown.length ? `<p class="hint">Показаны 16 главных цветов из ${cols.length}; «Всё одним цветом» перекрашивает все.</p>` : ''}`;
+}
+function bindVecColors(root, getT, onChange) {
+  const cols = () => vecColors(getT()?.src), set = (rc, done) => { const t = getT(); if (!t) return; t.recolor = rc; onChange(t); if (done) commit(); };
+  $$('[data-vc]', root).forEach(inp => {
+    const go = done => { const t = getT(); const rc = { ...(t.recolor || {}) }; if (inp.value.toLowerCase() === inp.dataset.vc) delete rc[inp.dataset.vc]; else rc[inp.dataset.vc] = inp.value.toLowerCase(); set(rc, done); };
+    inp.addEventListener('input', () => go(false)); inp.addEventListener('change', () => go(true));
+  });
+  const all = $('#vcAll', root);
+  if (all) {
+    const go = done => { const rc = Object.fromEntries(cols().map(c => [c, all.value.toLowerCase()])); set(rc, done); $$('[data-vc]', root).forEach(i => { i.value = all.value; }); };
+    all.addEventListener('input', () => go(false)); all.addEventListener('change', () => { go(true); });
+  }
+  const rs = $('#vcReset', root); if (rs) rs.onclick = () => { set({}, true); $$('[data-vc]', root).forEach(i => { i.value = i.dataset.vc; }); rs.disabled = true; };
+}
+
+/* ---------- library panel ---------- */
+function renderLibrary() {
+  const sec = $('#libSec'), o = activeObj(), used = usedAssets(), L = activeLayer(), st = activeSticker();
+  const canSwap = (L?.type === 'image') || (st && st.kind !== 'custom') || (st?.kind === 'custom');
+  const prod = o && (o.type === 'bag' || (o.type === 'box' && o.lidType === 'handle'));
+  sec.innerHTML = `<div class="sec-h"><h2>Библиотека</h2><span class="hint">${library.length || ''}</span></div>
+    ${library.length ? `<div class="lib">${library.map(it => `<div class="it ${used.has(it.id) ? 'used' : ''}" tabindex="0" role="button" draggable="true" data-h="${it.hash}" title="${esc(it.name)} — клик: на грань, можно перетащить на модель или в окно грани" aria-label="${esc(it.name)}">
+      <span class="acts"><button data-a="st" title="Наклейка из картинки" aria-label="Наклейка из картинки">★</button>${prod ? `<button data-a="prod" title="Фото продукта / торта" aria-label="Фото продукта">◉</button>` : ''}<button data-a="swap" title="${L?.type === 'image' ? 'Заменить картинку в выбранном слое' : 'Поставить в выбранную наклейку'}" aria-label="Заменить" ${canSwap ? '' : 'disabled'}>⇄</button><button data-a="del" title="Убрать из библиотеки" aria-label="Убрать из библиотеки">×</button></span></div>`).join('')}</div>
+      <p class="hint">Сюда попадает всё, что вы загружаете: картинки слоёв, наклеек, фото продукта. Клик — на текущую грань; ★ — наклейка; ⇄ — заменить в выбранном слое или наклейке. Библиотека сохраняется в файле проекта и в браузере, она доступна и в других проектах. Точка — картинка уже есть в дизайне.</p>`
+      : `<p class="hint">Здесь будут все картинки, которые вы загружаете (логотипы, паттерны, фото). Их можно снова ставить на любую грань, наклейку или носитель.</p>`}
+    <button class="btn sm" id="libAddBtn">Добавить в библиотеку…</button>`;
+  $$('#libSec .it').forEach(el => {
+    const it = library.find(x => x.hash === el.dataset.h); if (!it) return;
+    el.style.backgroundImage = `url("${assets[it.id]}")`; getImg(it.id);
+    if (vecOf[it.id]) el.insertAdjacentHTML('afterbegin', '<span class="vbadge">SVG</span>');
+    el.onclick = e => {
+      const a = e.target.closest('button')?.dataset.a, o = activeObj(); if (!o) return toast('Сначала добавьте объект');
+      if (a === 'del') { libRemove(it.hash); return toast(used.has(it.id) ? 'Убрано из библиотеки (в дизайне картинка остаётся)' : 'Убрано из библиотеки'); }
+      if (a === 'st') return addSticker(newSticker('custom', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0], { src: it.id, aspect: it.aspect, w: 50, outline: 1.5, text: '' }));
+      if (a === 'prod') { o.product.src = it.id; o.product.aspect = it.aspect; rebuildQueue.add(o.id); renderModel(); return commit(); }
+      if (a === 'swap') {
+        const L = activeLayer(), st = activeSticker();
+        if (L?.type === 'image') { L.src = it.id; L.aspect = it.aspect; L.recolor = {}; markFace(o, sel.face); renderLayers(); renderLayerProps(); return commit(); }
+        if (st) { st.src = it.id; st.recolor = {}; if (st.kind === 'custom') st.aspect = it.aspect; touchSticker(o, st); renderStickers(); return commit(); }
+        return;
+      }
+      placeLibImage(it, o, sel.face);
+    };
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } if (e.key === 'Delete') libRemove(it.hash); };
+    el.ondragstart = e => { e.dataTransfer.setData('application/x-bs-asset', it.hash); e.dataTransfer.effectAllowed = 'copy'; };
+  });
+  $('#libAddBtn').onclick = () => pickImage(async file => { if (!file.type.startsWith('image/')) return toast('Нужен файл изображения'); await importImageFile(file); renderLibrary(); scheduleSave(); });
+}
+function placeLibImage(it, obj = activeObj(), face = sel.face, at = null) {
+  if (!obj || !face || !faceKeys(obj).includes(face)) return;
+  const L = newImage(it.id, it.aspect), [W, H] = facePx(obj, face);
+  L.w = Math.min(.6, (H * .6 * it.aspect) / W);
+  if (at) { L.x = at[0]; L.y = at[1]; }
+  addLayer(L, face, obj);
+}
+
 /* ================================================================
    2D face editor
    ================================================================ */
@@ -2948,6 +4231,22 @@ function drawEditor() {
   c.restore();
   const accentCss = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
   if (circle) { c.strokeStyle = 'rgba(0,0,0,.25)'; c.setLineDash([4, 4]); c.beginPath(); c.arc(dw / 2, dh / 2, dw / 2 - .5, 0, Math.PI * 2); c.stroke(); c.setLineDash([]); }
+  if (sel.face === 'sleeve' && sleeveOn(o)) {
+    // where the band folds round the box, and which side each part ends up on
+    const SD = sleeveDims(o);
+    c.save(); c.strokeStyle = 'rgba(230,0,126,.75)'; c.setLineDash([5, 4]); c.lineWidth = 1;
+    c.fillStyle = 'rgba(120,110,95,.85)'; c.font = '600 11px Onest, system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
+    SD.names.forEach((nm, i) => {
+      const y = SD.stops[i] / SD.P * dh, flip = SD.hh ? i === 2 || i >= 5 : i >= 2;
+      if (i) { c.beginPath(); c.moveTo(0, y); c.lineTo(dw, y); c.stroke(); }
+      c.fillText(sleevePanelLabel(SD, nm) + (flip ? ' (вверх ногами)' : ''), 6, y + 5);
+    });
+    // the handle's cut: rounded corners and the hand holes
+    const sh = sleeveSheet(SD), kx = dw / SD.bw, ky = dh / SD.P;
+    c.setLineDash([]); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1.2;
+    for (const q of [...(sh.outline ? [sh.outline.filter(([, y]) => y <= SD.P)] : []), ...sh.holes]) { c.beginPath(); q.forEach(([x, y], i) => c[i ? 'lineTo' : 'moveTo'](x * kx, y * ky)); if (q !== sh.outline) c.closePath(); c.stroke(); }
+    c.restore();
+  }
   const fw = faceWindow(o, sel.face);
   if (fw) {
     c.save(); windowPath(c, fw, 0, 0, dw, dh); c.globalCompositeOperation = 'destination-out'; c.fill(); c.restore();
@@ -3065,6 +4364,23 @@ new ResizeObserver(() => { ui.editor = true; ui.net = true; }).observe($('#edito
    ================================================================ */
 const netC = $('#net'), nctx = netC.getContext('2d');
 let netGeom = null;
+/* outline of a panel on the sheet (px at scale k, offset ox/oy): circle, slanted wall, rounded part or plain rectangle */
+function panelPath(c, p, ox, oy, k) {
+  const x = ox + p.x * k, y = oy + p.y * k, w = p.w * k, h = p.h * k;
+  if (p.circle) c.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2);
+  else if (p.poly) { p.poly.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.closePath(); }
+  else if (p.r) c.roundRect(x, y, w, h, p.r * k);
+  else c.rect(x, y, w, h);
+}
+function inPanel(p, X, Y) {
+  if (!p.poly) return X >= p.x && X <= p.x + p.w && Y >= p.y && Y <= p.y + p.h;
+  let ins = false;
+  for (let i = 0, j = p.poly.length - 1; i < p.poly.length; j = i++) {
+    const [xi, yi] = p.poly[i], [xj, yj] = p.poly[j];
+    if ((yi > Y) !== (yj > Y) && X < (xj - xi) * (Y - yi) / (yj - yi) + xi) ins = !ins;
+  }
+  return ins;
+}
 function drawNet() {
   const o = activeObj(); const dpr = Math.min(devicePixelRatio || 1, 2);
   const cw = netC.clientWidth || 300;
@@ -3076,7 +4392,7 @@ function drawNet() {
   const accentCss = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
   for (const p of n.panels) {
     const x = pad + p.x * k, y = pad + p.y * k, w = p.w * k, h = p.h * k, fc = rt?.faces[p.key]?.canvas;
-    c.save(); c.beginPath(); if (p.circle) c.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2); else c.rect(x, y, w, h); c.clip();
+    c.save(); c.beginPath(); panelPath(c, p, pad, pad, k); c.clip();
     if (fc) drawNetPanel(c, fc, p, x, y, w, h); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
     else if (p.blank) { c.fillStyle = 'rgba(120,110,95,.14)'; c.fillRect(x, y, w, h); }
     c.restore();
@@ -3085,16 +4401,24 @@ function drawNet() {
       fanOutline(p.fan).forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](x + X * k, y + Y * k)); c.closePath();
       const [ax, ay] = fanXY(p.fan, 0, 0), [bx, by] = fanXY(p.fan, 0, 1);   // seam: glue overlap to the left
       c.save(); c.setLineDash([2, 2]); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; const q = new Path2D(); q.moveTo(x + ax * k, y + ay * k); q.lineTo(x + bx * k, y + by * k); c.stroke(q); c.restore();
-    } else if (p.circle) c.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2); else c.rect(x + .5, y + .5, w - 1, h - 1);
+    } else if (p.poly || p.r || p.circle) panelPath(c, p, pad, pad, k); else c.rect(x + .5, y + .5, w - 1, h - 1);
     c.setLineDash(p.key === sel.face ? [] : [3, 3]); c.lineWidth = p.key === sel.face ? 2.5 : 1; c.strokeStyle = p.key === sel.face ? accentCss : 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]);
   }
   cutNetWindow(c, o, pad, k);
-  for (const q of netWindows(o, n)) { c.beginPath(); c.roundRect(pad + q.x * k, pad + q.y * k, q.w * k, q.h * k, q.radii.map(v => v * k)); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1; c.stroke(); }
+  for (const p of n.panels) for (const l of p.creases || []) { c.beginPath(); c.moveTo(pad + l[0] * k, pad + l[1] * k); c.lineTo(pad + l[2] * k, pad + l[3] * k); c.setLineDash([4, 3]); c.strokeStyle = 'rgba(230,0,126,.7)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]); }
+  for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.fillStyle = o.board || '#ffffff'; c.fill(); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke(); }
+  for (const l of n.slots || []) { c.beginPath(); c.moveTo(pad + l[0] * k, pad + l[1] * k); c.lineTo(pad + l[2] * k, pad + l[3] * k); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1.2; c.stroke(); }
+  for (const p of n.panels) for (const hl of p.holes || []) {
+    c.save(); c.beginPath(); hl.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.closePath();
+    c.globalCompositeOperation = 'destination-out'; c.fill(); c.restore();
+    c.beginPath(); hl.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.closePath(); c.setLineDash([3, 3]); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]);
+  }
+  for (const q of netWindows(o, n)) { netWindowPath(c, q, pad, k); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1; c.stroke(); }
   netGeom = { n, k, pad };
 }
 netC.addEventListener('click', e => {
   if (!netGeom) return; const r = netC.getBoundingClientRect(); const x = (e.clientX - r.left - netGeom.pad) / netGeom.k, y = (e.clientY - r.top - netGeom.pad) / netGeom.k;
-  const p = netGeom.n.panels.find(p => x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h);
+  const p = netGeom.n.panels.find(p => inPanel(p, x, y));
   if (p && faceKeys(activeObj()).includes(p.key)) select(sel.obj, p.key, null, { flash: true });
 });
 
@@ -3221,6 +4545,17 @@ cvs.addEventListener('pointercancel', () => { if (drag3) { drag3 = null; control
 /* drag & drop images onto the model, the editor, or anywhere */
 let dragDepth = 0;
 const isFileDrag = e => [...(e.dataTransfer?.types || [])].includes('Files');
+const isLibDrag = e => [...(e.dataTransfer?.types || [])].includes('application/x-bs-asset');
+window.addEventListener('dragover', e => { if (isLibDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+window.addEventListener('drop', e => {
+  if (!isLibDrag(e)) return; e.preventDefault();
+  const it = library.find(x => x.hash === e.dataTransfer.getData('application/x-bs-asset')); if (!it) return;
+  if (e.target === cvs) {
+    const h = pick(e.clientX, e.clientY);
+    if (h?.face && !h.wall) { const o = state.objects.find(x => x.id === h.objId); select(o.id, h.face); return placeLibImage(it, o, h.face, h.uv ? [h.uv.x, 1 - h.uv.y] : null); }
+  }
+  if (e.target === ed && activeObj()) { const [mx, my] = edPoint(e); return placeLibImage(it, activeObj(), sel.face, [mx / edState.dw, my / edState.dh]); }
+});
 window.addEventListener('dragenter', e => { if (!isFileDrag(e)) return; e.preventDefault(); dragDepth++; $('#dropHint').hidden = false; });
 window.addEventListener('dragleave', e => { if (!isFileDrag(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $('#dropHint').hidden = true; });
 window.addEventListener('dragover', e => { if (isFileDrag(e)) e.preventDefault(); });
@@ -3332,10 +4667,22 @@ function exportVideo() {
 function templateSVG(o) {
   const n = netLayout(o), f = v => +v.toFixed(2);
   let body = '';
-  const label = (p) => { const [mw, mh] = p.fold ? [p.w, p.h] : faceMM(o, p.key), pet = isClearFace(o, p.key) ? (o.type === 'bag' ? ` · ${BAG_MATS[o.bagMat].toLowerCase()}` : ' · ПЭТ') : '';
+  const label = (p) => { const [mw, mh] = p.fold ? [p.w, p.h] : faceMM(o, p.key), ang = (p.q ?? (p.rot ? 2 : 0)) * 90, pet = isClearFace(o, p.key) ? (o.type === 'bag' ? ` · ${BAG_MATS[o.bagMat].toLowerCase()}` : ' · ПЭТ') : '';
     const txt = `${faceLabel(o, p.key).toUpperCase()} · ${fmt(mw, 1)}×${fmt(mh, 1)} мм${pet}`, fs = Math.min(Math.max(3, Math.min(p.w, p.h) * .07), p.w * .92 / (txt.length * .56));
-    return `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}"${p.rot ? ` transform="rotate(180 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''} font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(txt)}</text>`; };
+    return `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}"${ang ? ` transform="rotate(${ang} ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''} font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(txt)}</text>`; };
   if (o.type === 'bag') body = bagSVG(o, n, f, label);
+  else if (o.type === 'dome') {
+    // each wall is cut on three sides and folded up from the floor along its narrow edge
+    for (const p of n.panels) {
+      if (p.part && p.poly) body += `<polygon points="${p.poly.map(v => v.map(f).join(',')).join(' ')}" fill="none" stroke="#00a0e3" stroke-width="0.3" stroke-dasharray="1.2 1.2"/>`;
+      else if (p.poly) {
+        const [a, b, c, e] = p.poly, pts = q => q.map(v => v.map(f).join(',')).join(' ');
+        body += `<polyline points="${pts([b, c, e, a])}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+        body += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"/>`;
+      } else if (p.part) body += `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" rx="${f(p.r)}" fill="none" stroke="#00a0e3" stroke-width="0.3" stroke-dasharray="1.2 1.2"/>`;
+      body += label(p);
+    }
+  }
   else if (o.type === 'cup') {
     const F = n.fan, G = F.G, P = pts => pts.map(([X, Y], i) => `${i ? 'L' : 'M'}${f(X)},${f(Y)}`).join(' ');
     body += `<path d="${P(fanOutline(F, -F.gU, 1, 240))} Z" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
@@ -3345,13 +4692,14 @@ function templateSVG(o) {
     body += `<text x="${f(cx)}" y="${f(cy)}" font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">СТЕНКА СТАКАНА · ⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)} мм${G.dbl ? ' · ВНЕШНИЙ СЛОЙ' : ''}</text>`;
     body += `<text x="${f(gx)}" y="${f(gy)}" transform="rotate(${f(ga - 90)} ${f(gx)} ${f(gy)})" font-family="Arial, sans-serif" font-size="${f(Math.min(fs, CUP_GLUE * .45))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">НАХЛЁСТ ${CUP_GLUE} мм</text>`;
     if (F.cone) body += `<text x="${f(cx)}" y="${f(cy + fs * 1.6)}" font-family="Arial, sans-serif" font-size="${f(fs * .7)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">R ${fmt(G.s1, 1)} / ${fmt(G.s0, 1)} мм · угол ${fmt(G.Phi / DEG, 2)}° + нахлёст · высота по образующей ${fmt(G.L, 1)} мм</text>`;
-  } else if (o.type === 'tube') {
+  } else if (o.type === 'tube' || o.type === 'torte') {
     for (const p of n.panels) {
       body += p.circle ? `<circle cx="${f(p.x + p.w / 2)}" cy="${f(p.y + p.h / 2)}" r="${f(p.w / 2)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`
         : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
       body += label(p);
     }
-  } else {
+  } else if (n.hb) body = handleBoxSVG(o, n, f, label);
+  else {
     const { w, h, d } = o.dims, oy = n.oy;
     // base cut outline (the lid row is cut as separate parts)
     const L = n.lid, ly = L ? L.fh : 0, fx0 = L ? L.fx - L.el : 0, fx1 = L ? L.fx + L.fw + L.el : 0;
@@ -3370,6 +4718,7 @@ function templateSVG(o) {
       for (const x of [d, d + w, 2 * d + w]) body += `<line x1="${f(x)}" y1="0" x2="${f(x)}" y2="${f(oy)}" stroke="#00a0e3" stroke-width="0.3"/>`;
     }
     for (const q of wins) {
+      if (q.polys) { for (const pl of q.polys) body += `<path d="${pl.map((v, i) => `${i ? 'L' : 'M'}${f(v.x)},${f(v.y)}`).join(' ')} Z" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`; continue; }
       const [tl, tr, br, bl] = q.radii, x = q.x, y = q.y, X = q.x + q.w, Y = q.y + q.h, arc = (r, ex, ey) => r ? `A${f(r)},${f(r)} 0 0 1 ${f(ex)},${f(ey)}` : '';
       body += `<path d="M${f(x + tl)},${f(y)} H${f(X - tr)} ${arc(tr, X, y + tr)} V${f(Y - br)} ${arc(br, X - br, Y)} H${f(x + bl)} ${arc(bl, x, Y - bl)} V${f(y + tl)} ${arc(tl, x + tl, y)} Z" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
     }
@@ -3389,13 +4738,16 @@ function templateSVG(o) {
       }
       return segs.map(([u, v]) => hor ? [u, y1, v, y1] : [x1, u, x1, v]);
     });
-    for (const p of n.panels) if (p.part) body += `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+    const poly = q => `<polygon points="${q.map(v => v.map(f).join(',')).join(' ')}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+    // a sleeve and its glue flap are cut as one outline (the flap's edge is a crease)
+    for (const p of n.panels) if (p.part && !p.crease) body += p.poly ? poly(p.poly) + (p.holes || []).map(poly).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h + (p.key === 'sleeve' ? SLEEVE_GLUE : 0))}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+    for (const p of n.panels) { folds.push(...(p.creases || [])); if (p.crease) folds.push([p.x, p.y, p.x + p.w, p.y]); }
     body += folds.map(l => `<line x1="${f(l[0])}" y1="${f(l[1])}" x2="${f(l[2])}" y2="${f(l[3])}" stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"/>`).join('');
-    for (const p of n.panels) body += label(p);
+    for (const p of n.panels) body += p.blank ? `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.max(2.5, Math.min(p.w, p.h) * .3))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(p.blank.toUpperCase())}</text>` : label(p);
   }
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${f(n.W)}mm" height="${f(n.H)}mm" viewBox="0 0 ${f(n.W)} ${f(n.H)}">
-<!-- Box Studio 3D — ${esc(o.name)}. ${o.type === 'bag' ? 'Голубой: рез, пурпурный пунктир: сгиб, зелёный пунктир: запайка (шов), оранжевый: клеевая лента клапана. Клапан, отворот и задняя половина экстендера лежат на развёртке вверх ногами — подписи повёрнуты так же.' + (o.bagStyle === 'block' ? ' Дно показано упрощённо, одной панелью: схему складывания дна сверьте с типографией.' : ' Пакет сложен по дну: перед повёрнут на 180°.') + ' Вылеты добавьте в типографском макете.' : o.type === 'cup' ? 'Голубой: линия реза стенки стакана (веер), пурпурный пунктир: край нахлёста на шве. Верхняя дуга — край у бортика, нижняя — у дна. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете.' : 'Голубой: линия реза, пурпурный пунктир: биговка. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете. Крышка с клапаном и ушками крепится к задней стенке и лежит на развёртке вверх ногами — подписи повёрнуты так же.'} -->
+<!-- Box Studio 3D — ${esc(o.name)}. ${o.type === 'bag' ? 'Голубой: рез, пурпурный пунктир: сгиб, зелёный пунктир: запайка (шов), оранжевый: клеевая лента клапана. Клапан, отворот и задняя половина экстендера лежат на развёртке вверх ногами — подписи повёрнуты так же.' + (o.bagStyle === 'block' ? ' Дно показано упрощённо, одной панелью: схему складывания дна сверьте с типографией.' : ' Пакет сложен по дну: перед повёрнут на 180°.') + ' Вылеты добавьте в типографском макете.' : o.type === 'torte' ? 'Зоны печати на прозрачной крышке тортницы (ПЭТ, формованная деталь, не вырубается): стенка в развёртке по средней окружности и круглый верх. Крышка почти цилиндрическая (небольшой конус), поэтому развёртка стенки — прямоугольник. Сверьте с технологом формовки.' : o.type === 'dome' ? 'Голубой: линия реза, пурпурный пунктир: биговка (дно / стенка). Дно в центре, стенки отогнуты от его краёв; стенки расходятся к борту, поэтому углы остаются открытыми — складки и клапаны в углах решаются конструкцией штанцформы. Пунктир голубого: зона печати на прозрачной крышке (ПЭТ, не вырубается). Вылеты 3 мм добавьте в типографском макете.' : o.type === 'cup' ? 'Голубой: линия реза стенки стакана (веер), пурпурный пунктир: край нахлёста на шве. Верхняя дуга — край у бортика, нижняя — у дна. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете.' : 'Голубой: линия реза, пурпурный пунктир: биговка. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете. Крышка с клапаном и ушками крепится к задней стенке и лежит на развёртке вверх ногами — подписи повёрнуты так же.'} -->
 <g id="dieline">${body}</g>
 </svg>`;
 }
@@ -3456,7 +4808,7 @@ function exportFlat() {
   skipStickers = true; for (const key of faceKeys(o)) renderFace(o, key); skipStickers = false;
   for (const p of n.panels) {
     const fc = rt.faces[p.key]?.canvas, x = p.x * k, y = p.y * k, w = p.w * k, h = p.h * k;
-    c.save(); c.beginPath(); if (p.circle) c.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2); else c.rect(x, y, w, h); c.clip();
+    c.save(); c.beginPath(); panelPath(c, p, 0, 0, k); c.clip();
     if (fc) drawNetPanel(c, fc, p, x, y, w, h); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
     else if (p.blank && !bagFilm(o)) { c.fillStyle = o.board; c.fillRect(x, y, w, h); }
     c.restore();
@@ -3573,7 +4925,7 @@ function sampleProject() {
 /* ================================================================
    Wiring
    ================================================================ */
-function renderAll() { renderObjects(); renderModel(); renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); renderStickers(); renderFonts(); refreshFields($('#sceneSec'), state.scene); $('#lightPreset').value = state.scene.preset; ui.editor = ui.net = true; }
+function renderAll() { renderLibrary(); renderObjects(); renderModel(); renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); renderStickers(); renderFonts(); refreshFields($('#sceneSec'), state.scene); $('#lightPreset').value = state.scene.preset; ui.editor = ui.net = true; }
 
 $('#addPreset').innerHTML = PRESETS.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
 $('#addObjBtn').onclick = () => {
@@ -3720,5 +5072,6 @@ let booted = false;
 try { const saved = localStorage.getItem(LS_KEY); if (saved) { loadProject(JSON.parse(saved)); booted = true; } } catch {}
 if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
-window.__boxStudio = { state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target, placementsFor, __bsf: o => buildStickerFilms(o) };
+libLoadBrowser();
+window.__boxStudio = { library, state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target, placementsFor, __bsf: o => buildStickerFilms(o) };
 </script>
