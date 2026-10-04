@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { $ } from '../core/util.js';
 import { activeLayer, activeObj, sel, state } from '../core/state.js';
 import { faceKeys, faceMM, facePx } from '../core/model.js';
+import { apply, faceMaps, inv, layerReach, moveLayerOnto } from '../faces/wrap.js';
 import { library } from '../core/library.js';
 import { RT, camera, controls, cvs, markFace, renderer, ui, world } from './renderer.js';
 import { activeSticker, stickerAt, stickerDirty, touchSticker } from '../stickers/placement.js';
@@ -44,6 +45,44 @@ const isFileDrag = e => [...(e.dataTransfer?.types || [])].includes('Files');
 const isLibDrag = e => [...(e.dataTransfer?.types || [])].includes('application/x-bs-asset');
 let nudgeT;
 
+/* is the selected layer L under the 3D hit h, on its face or where it runs over an edge? its point there, face mm */
+function layerUnder(h, L) {
+  const o = activeObj(), A = sel.face;
+  if (!h || !o || h.objId !== o.id || !h.face || !h.uv || h.wall) return null;
+  const [fw, fh] = faceMM(o, h.face), p = [h.uv.x * fw, (1 - h.uv.y) * fh];
+  const q = h.face === A ? p : (() => { const r = layerReach(o, A, L).find(r => r.key === h.face); return r && apply(inv(r.G), p); })();
+  if (!q) return null;
+  const [W, H] = facePx(o, A), ppm = W / faceMM(o, A)[0];
+  return hitLayer(o.faces[A], W, H, q[0] * ppm, q[1] * ppm)?.id === L.id ? q : null;
+}
+/* drags a layer over the model: across an edge it goes on printing over it (wrap), and once its centre has left
+   the face it belongs to the face the centre is on, at the same size in mm */
+function dragLayer(e) {
+  const { o, L } = drag3, h = pick(e.clientX, e.clientY, RT.get(o.id).group);
+  if (!h || !h.face || !h.uv || h.wall || !faceKeys(o).includes(h.face)) return;
+  const A = drag3.face, [aw, ah] = faceMM(o, A), [fw, fh] = faceMM(o, h.face), cur = [h.uv.x * fw, (1 - h.uv.y) * fh];
+  let pA = cur;
+  if (h.face !== A) {
+    const G = faceMaps(o, A, L.x * aw, L.y * ah).get(h.face); if (!G) return;
+    pA = apply(inv(G), cur);
+    if (!L.wrap) { L.wrap = true; renderLayerProps(); }
+  }
+  const cx = pA[0] + drag3.grab[0], cy = pA[1] + drag3.grab[1];
+  L.x = cx / aw; L.y = cy / ah;
+  if (cx < 0 || cy < 0 || cx > aw || cy > ah) {
+    for (const [T, G] of faceMaps(o, A, cx, cy)) {
+      if (T === A) continue;
+      const [tx, ty] = apply(G, [cx, cy]), [tw, th] = faceMM(o, T);
+      if (tx < 0 || ty < 0 || tx > tw || ty > th) continue;
+      markFace(o, A); moveLayerOnto(o, A, T, L, G);
+      const [gx, gy] = drag3.grab; drag3.grab = [G[0] * gx + G[2] * gy, G[1] * gx + G[3] * gy]; drag3.face = T;
+      select(o.id, T, L.id);
+      break;
+    }
+  }
+  markFace(o, drag3.face); refreshFields($('#layerSec'), L);
+}
+
 /* hooks up the mouse, touch, drag-and-drop and keyboard */
 function initInteraction() {
   cvs.addEventListener('pointerdown', e => {
@@ -80,13 +119,11 @@ function initInteraction() {
       dragSt = { st: hs, o: activeObj() }; controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'grabbing';
       return;
     }
-    if (h && L && h.objId === sel.obj && h.face === sel.face && h.uv && !h.wall) {
-      const o = activeObj(), [W, H] = facePx(o, sel.face);
-      const hit = hitLayer(o.faces[sel.face], W, H, h.uv.x * W, (1 - h.uv.y) * H);
-      if (hit && hit.id === L.id) {
-        drag3 = { L, u: h.uv.x, v: h.uv.y, x: L.x, y: L.y, mesh: h.mesh, mi: h.mi };
-        controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'grabbing';
-      }
+    const at = L && layerUnder(h, L);
+    if (at) {
+      const o = activeObj(), [aw, ah] = faceMM(o, sel.face);
+      drag3 = { L, o, face: sel.face, grab: [L.x * aw - at[0], L.y * ah - at[1]] };
+      controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'grabbing';
     }
   });
   cvs.addEventListener('pointermove', e => {
@@ -99,23 +136,13 @@ function initInteraction() {
       }
       return;
     }
-    if (drag3) {
-      const h = pick(e.clientX, e.clientY, drag3.mesh);
-      if (h && h.uv && h.mi === drag3.mi) {
-        drag3.L.x = drag3.x + (h.uv.x - drag3.u); drag3.L.y = drag3.y - (h.uv.y - drag3.v);
-        markFace(activeObj(), sel.face); refreshFields($('#layerSec'), drag3.L);
-      }
-      return;
-    }
+    if (drag3) { dragLayer(e); return; }
     if (e.buttons || e.timeStamp - hoverT < 50) return; hoverT = e.timeStamp;
     const h = pick(e.clientX, e.clientY); let cur = 'grab';
     if (h?.face) {
       cur = 'pointer';
       const L = activeLayer();
-      if (L && h.objId === sel.obj && h.face === sel.face && h.uv && !h.wall) {
-        const o = activeObj(), [W, H] = facePx(o, sel.face);
-        if (hitLayer(o.faces[sel.face], W, H, h.uv.x * W, (1 - h.uv.y) * H)?.id === L.id) cur = 'move';
-      }
+      if (L && layerUnder(h, L)) cur = 'move';
       if (sel.sticker && h.objId === sel.obj && stickerHit(h)?.id === sel.sticker) cur = 'move';
     }
     cvs.style.cursor = cur;

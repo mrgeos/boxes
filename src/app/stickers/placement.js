@@ -56,7 +56,9 @@ function computeFrames(o, rt) {
    corner is clipped off, so the film turns the corner instead of running through it. */
 const SUPPORTS = ['rimFront', 'rimBack', 'rimRight', 'rimLeft'];
 const extent = (F, d) => Math.abs(F.u.dot(d)) * F.w / 2 + Math.abs(F.v.dot(d)) * F.h / 2;
-function mapAcross(A, F, cur, tol) {
+/* edge: print, not film: across a fold the picture runs on from A's edge to F's edge, whatever gap the board's
+   thickness leaves between the two faces (a film bridges it, folding where the faces' planes meet) */
+function mapAcross(A, F, cur, tol, edge = false) {
   const V = () => new THREE.Vector3(), dot = A.n.dot(F.n);
   if (dot > .99) {
     const dist = V().subVectors(cur.c, F.c).dot(F.n);
@@ -76,34 +78,40 @@ function mapAcross(A, F, cur, tol) {
   else return null;
   const e = V().crossVectors(A.n, F.n).normalize(), ae = A.c.dot(e), fe = F.c.dot(e), ea = extent(A, e), ef = extent(F, e);
   if (Math.min(ae + ea, fe + ef) - Math.max(ae - ea, fe - ef) < 1) return null;   // they must share some of the edge
-  const s = V().subVectors(cur.c, F.c).dot(F.n);
+  const s = V().subVectors(cur.c, F.c).dot(F.n), gap = edge && onA && onF ? Math.abs(dA) - hA + Math.abs(dF) - hF : 0;
   const fold = x => { const t = x.dot(F.n); return x.clone().addScaledVector(F.n, -t).addScaledVector(A.n, -t); };
   return {
-    c: cur.c.clone().addScaledVector(F.n, -s).addScaledVector(A.n, -s), su: fold(cur.su), sv: fold(cur.sv),
+    c: cur.c.clone().addScaledVector(F.n, -s).addScaledVector(A.n, -s - gap), su: fold(cur.su), sv: fold(cur.sv),
     // at an inner corner the face carrying the corner line keeps only the side the other face looks at
     clipA: onA ? null : { n: F.n, d: F.c.dot(F.n), sign: 1 },
     clipF: onF ? null : { n: A.n, d: A.c.dot(A.n), sign: 1 },
   };
 }
 function placementsFor(o, st) {
-  const [aw, ah] = faceMM(o, st.face), r = st.rot * DEG, cs = Math.cos(r), sn = Math.sin(r);
-  const fr = RT.get(o.id)?.frames, A = fr?.[st.face];
-  if (!A) return [{ key: st.face, M: [cs, sn, -sn, cs, st.x * aw, st.y * ah], clips: [] }];
+  const [sw, sh] = stickerSize(st);
+  return placementsAt(o, st.face, st.x, st.y, st.rot, Math.hypot(sw, sh) / 2 + stickerMargin(st) + 1);
+}
+/* the same for anything centred at (x, y) of a face (fractions of its size), turned by rot degrees and
+   reaching R mm from its centre: print layers that run over edges use it too */
+function placementsAt(o, face, x, y, rot, R, edge = false) {
+  const [aw, ah] = faceMM(o, face), r = rot * DEG, cs = Math.cos(r), sn = Math.sin(r);
+  const fr = RT.get(o.id)?.frames, A = fr?.[face];
+  if (!A) return [{ key: face, M: [cs, sn, -sn, cs, x * aw, y * ah], clips: [] }];
   const V = () => new THREE.Vector3();
   const su = V().addScaledVector(A.u, cs).addScaledVector(A.v, -sn), sv = V().addScaledVector(A.u, sn).addScaledVector(A.v, cs);
-  const c = A.c.clone().addScaledVector(A.u, st.x * aw - aw / 2).addScaledVector(A.v, ah / 2 - st.y * ah);
-  const [sw, sh] = stickerSize(st), R = Math.hypot(sw, sh) / 2 + stickerMargin(st) + 1, tol = Math.max(3, 2 * o.thickness + 2);
-  const inner = st.face === 'inside' || st.face === 'insideBottom';
+  const c = A.c.clone().addScaledVector(A.u, x * aw - aw / 2).addScaledVector(A.v, ah / 2 - y * ah);
+  const tol = Math.max(3, 2 * o.thickness + 2);
+  const inner = face === 'inside' || face === 'insideBottom';
   const keys = inner ? [] : fr.walk || [...outerKeys(o), ...SUPPORTS].filter(k => fr[k]);
   const toM = (e, F) => { const d = V().subVectors(e.c, F.c); return [e.su.dot(F.u), -e.su.dot(F.v), -e.sv.dot(F.u), e.sv.dot(F.v), d.dot(F.u) + F.w / 2, F.h / 2 - d.dot(F.v)]; };
-  const start = { key: st.face, c, su, sv, depth: 0, clips: [...(A.clip || [])] };
-  const seen = new Map([[st.face, start]]), queue = [start];
+  const start = { key: face, c, su, sv, depth: 0, clips: [...(A.clip || [])] };
+  const seen = new Map([[face, start]]), queue = [start];
   while (queue.length) {
     const cur = queue.shift(), Af = fr[cur.key];
     if (cur.depth >= (fr.maxDepth || 4)) continue;
     for (const k of keys) {
       if (seen.has(k)) continue;
-      const F = fr[k], m = Af.links ? domeAcross(Af, F, cur) : mapAcross(Af, F, cur, tol); if (!m) continue;
+      const F = fr[k], m = Af.links ? domeAcross(Af, F, cur) : mapAcross(Af, F, cur, tol, edge); if (!m) continue;
       const ent = { key: k, c: m.c, su: m.su, sv: m.sv, depth: cur.depth + 1, clips: [...(m.clipF ? [m.clipF] : []), ...(F.clip || [])] };
       const M = toM(ent, F);
       if (M[4] < -R || M[4] > F.w + R || M[5] < -R || M[5] > F.h + R) continue;
@@ -139,4 +147,4 @@ function stickerAt(o, key, px, py) {
   return null;
 }
 
-export { STICKER_FINISH, STICKER_FX, STICKER_KIND, activeSticker, computeFrames, newSticker, placementsFor, stickerAt, stickerDirty, stickerKeys, stickerSize, touchSticker };
+export { placementsAt, STICKER_FINISH, STICKER_FX, STICKER_KIND, activeSticker, computeFrames, newSticker, placementsFor, stickerAt, stickerDirty, stickerKeys, stickerSize, touchSticker };

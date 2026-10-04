@@ -11,6 +11,7 @@ import { BAG_FILM, bagSeals, bagWindows } from '../carriers/bag.js';
 import { faceGrain } from '../carriers/sleeve.js';
 import { STICKER_FX, placementsFor } from '../stickers/placement.js';
 import { drawSticker, stickerMask, stickerShadow } from '../stickers/film.js';
+import { drawWrapped, wrapsOnto } from './wrap.js';
 
 /* draw a face canvas into its dieline rectangle, turned if the panel lies upside down on the die */
 function drawNetPanel(c, src, p, x, y, w, h, crop = null, inv = false) {
@@ -120,12 +121,13 @@ function renderFace(o, k) {
     if (im && p?.fan) ctx.drawImage(fanToRect(p.fan, im, W, H, o.dieline), 0, 0);
     else if (im && p) drawNetPanel(ctx, im, p, 0, 0, W, H, [p.x / net.W * im.naturalWidth, p.y / net.H * im.naturalHeight, p.w / net.W * im.naturalWidth, p.h / net.H * im.naturalHeight], true);
   }
-  const fxl = [];
-  for (const L of face.layers) {
-    if (!L.visible) continue;
+  // the face's own layers, then the parts of neighbours' layers that run over an edge onto it
+  const fxl = [], draw = (c, it, cw, ch, paint, alpha) => it.from ? drawWrapped(c, o, k, it, cw, (x, L, sw, sh) => drawLayer(x, L, sw, sh, paint, alpha)) : drawLayer(c, it.L, cw, ch, paint, alpha);
+  for (const it of [...face.layers.map(L => ({ L })), ...wrapsOnto(o, k)]) {
+    const L = it.L; if (!L.visible) continue;
     if (L.type === 'text') ensureFont(L);
-    if (isFoil(L.effect)) fxl.push(L);
-    else { drawLayer(ctx, L, W, H); if (L.effect !== 'none') fxl.push(L); }
+    if (isFoil(L.effect)) fxl.push(it);
+    else { draw(ctx, it, W, H); if (L.effect !== 'none') fxl.push(it); }
   }
   if (fin.kraft && !clear) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = fin.kraft; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   if (grain > 0 && !clear) {
@@ -135,7 +137,7 @@ function renderFace(o, k) {
     ctx.fillStyle = grainPat; ctx.fillRect(0, 0, W, H);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
-  for (const L of fxl) if (isFoil(L.effect)) drawLayer(ctx, L, W, H, foilPaint(ctx, L.effect, W, H), 1);
+  for (const it of fxl) if (isFoil(it.L.effect)) draw(ctx, it, W, H, foilPaint(ctx, it.L.effect, W, H), 1);
   if (bf && o.bagStyle !== 'block' && (k === 'front' || k === 'back')) bagSeals(ctx, o, W, H);
   const bw = o.type === 'bag' ? bagWindows(o)[k] : null;
   f.win = !!bw;
@@ -166,20 +168,22 @@ function renderFace(o, k) {
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   f.tex.needsUpdate = true;
-  updateFaceMaterial(o, k, f, fxl, fin, film ? [] : ops);
+  updateFaceMaterial(o, k, f, fxl, fin, film ? [] : ops, draw);
 }
 let skipStickers = false;
-function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
+/* fxl: layers with a finish, as { L } or a part of a neighbour's layer; draw(ctx, item, W, H, paint, alpha) paints one */
+function updateFaceMaterial(o, k, f, fxl, fin, ops, draw) {
   const m = f.mat;
-  const needFx = ops.length > 0 || fxl.some(L => isFoil(L.effect) || L.effect === 'spot-uv');
-  const needBump = ops.length > 0 || fxl.some(L => isFoil(L.effect) || L.effect === 'emboss' || L.effect === 'deboss');
+  const needFx = ops.length > 0 || fxl.some(({ L }) => isFoil(L.effect) || L.effect === 'spot-uv');
+  const needBump = ops.length > 0 || fxl.some(({ L }) => isFoil(L.effect) || L.effect === 'emboss' || L.effect === 'deboss');
   const opsDraw = (x, ppx, color) => { for (const { st, M } of ops) { x.setTransform(M[0] * ppx, M[1] * ppx, M[2] * ppx, M[3] * ppx, M[4] * ppx, M[5] * ppx); stickerMask(x, st, color(st)); } x.setTransform(1, 0, 0, 1, 0, 0); };
   if (needFx) {
     const c = aux(f, 'fx'), x = f.fxCtx, W = c.width, H = c.height;
     x.globalAlpha = 1; x.fillStyle = `rgb(0,${Math.round(fin.r * 255)},${Math.round(fin.m * 255)})`; x.fillRect(0, 0, W, H);
-    for (const L of fxl) {
-      if (isFoil(L.effect)) drawLayer(x, L, W, H, `rgb(0,${L.effect === 'foil-holo' ? 30 : 58},255)`, 1);
-      else if (L.effect === 'spot-uv') drawLayer(x, L, W, H, `rgb(0,10,${Math.round(fin.m * 255)})`, 1);
+    for (const it of fxl) {
+      const e = it.L.effect;
+      if (isFoil(e)) draw(x, it, W, H, `rgb(0,${e === 'foil-holo' ? 30 : 58},255)`, 1);
+      else if (e === 'spot-uv') draw(x, it, W, H, `rgb(0,10,${Math.round(fin.m * 255)})`, 1);
     }
     opsDraw(x, W / faceMM(o, k)[0], st => { const [r, mt] = STICKER_FX[st.finish] || STICKER_FX.gloss; return `rgb(0,${Math.round(r * 255)},${Math.round(mt * 255)})`; });
     f.fxTex.needsUpdate = true;
@@ -195,10 +199,11 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
       x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1;
     }
     x.filter = `blur(${Math.max(.6, f.ppm / 2 * .35)}px)`;
-    for (const L of fxl) {
-      if (L.effect === 'emboss') drawLayer(x, L, W, H, '#ffffff', 1);
-      else if (L.effect === 'deboss') drawLayer(x, L, W, H, '#000000', 1);
-      else if (isFoil(L.effect)) drawLayer(x, L, W, H, '#5c5c5c', 1);
+    for (const it of fxl) {
+      const e = it.L.effect;
+      if (e === 'emboss') draw(x, it, W, H, '#ffffff', 1);
+      else if (e === 'deboss') draw(x, it, W, H, '#000000', 1);
+      else if (isFoil(e)) draw(x, it, W, H, '#5c5c5c', 1);
     }
     opsDraw(x, W / faceMM(o, k)[0], () => '#a6a6a6');   // a sticker stands a little proud of the board
     x.filter = 'none';
