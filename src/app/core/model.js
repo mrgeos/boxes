@@ -155,10 +155,13 @@ function faceMM(o, k) {
   if (tele && (k === 'top' || k === 'inside')) return [lw, ld];
   return [w, d];
 }
-const TEX_MAX = 1536;
+/* face texture size: every face gets as many pixels as a TEX_MAX square, so long narrow parts (a sleeve,
+   a cup wrap, a tall bag) keep the detail per mm of square ones instead of being limited by their long side;
+   at most TEX_SIDE on a side (works on every GPU) and 10 px/mm */
+const TEX_MAX = 1536, TEX_SIDE = 4096;
 function facePx(o, k) {
   const [mw, mh] = faceMM(o, k);
-  const s = Math.min(TEX_MAX / Math.max(mw, mh), 10);
+  const s = Math.min(TEX_MAX / Math.sqrt(mw * mh), TEX_SIDE / Math.max(mw, mh), 10);
   return [Math.max(16, Math.round(mw * s)), Math.max(16, Math.round(mh * s)), s];
 }
 function netLayout(o) {
