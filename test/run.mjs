@@ -178,6 +178,28 @@ await test('слой через ребро: печать на соседней �
   await ctx.close();
 });
 
+await test('рукав и обечайка — кольцо: слой через шов продолжается с другого конца', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  // blue pixels in a row of a face's canvas (fraction of its height or width)
+  const blue = (k, along, at) => page.evaluate(([k, along, at]) => { const S = window.__boxStudio, c = S.RT.get(S.state.objects[0].id).faces[k].canvas, x = c.getContext('2d');
+    const d = along === 'y' ? x.getImageData(0, Math.round(at * (c.height - 1)), c.width, 1).data : x.getImageData(Math.round(at * (c.width - 1)), 0, 1, c.height).data;
+    let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 60 && d[i + 2] > 120) n++; return n; }, [k, along, at]);
+  const ellipse = async (face, x, y) => {
+    await page.click(`#faceTabs .chip[data-f="${face}"]`); await page.click('#addEllBtn');
+    await page.evaluate(([face, x, y]) => { const S = window.__boxStudio, o = S.state.objects[0], L = o.faces[face].layers.at(-1); Object.assign(L, { fill: '#0a7aa1', w: .3, h: .12, x, y }); S.select(o.id, face, L.id); }, [face, x, y]);
+    await page.locator('#layerSec [data-k="opacity"]').last().dispatchEvent('input'); await page.waitForTimeout(800);
+  };
+  await addPreset(page, 'cakeSleeveHandle');
+  await ellipse('sleeve', .5, .98);
+  assert.ok(await blue('sleeve', 'y', .995) > 50 && await blue('sleeve', 'y', .005) > 50, 'на рукаве круг у шва печатается у обоих концов ленты');
+  assert.equal(await blue('sleeve', 'y', .5), 0);
+  await addPreset(page, 'tube');
+  await ellipse('wrap', .01, .5);
+  assert.ok(await blue('wrap', 'x', .002) > 20 && await blue('wrap', 'x', .998) > 20, 'на тубусе круг у шва продолжается с другого края');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 const presets = only && !'все заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return ids; })();
 if (presets.length) await test(`все заготовки (${presets.length}): построение, пломба, открывание, шаблон SVG`, async () => {
   const { ctx, page, errors } = await openEditor(browser);

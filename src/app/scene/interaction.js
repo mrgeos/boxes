@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { $ } from '../core/util.js';
 import { activeLayer, activeObj, sel, state } from '../core/state.js';
-import { faceKeys, faceMM, facePx } from '../core/model.js';
+import { faceKeys, faceMM, facePx, loopAxis } from '../core/model.js';
 import { apply, faceMaps, inv, layerReach, moveLayerOnto } from '../faces/wrap.js';
 import { library } from '../core/library.js';
 import { RT, camera, controls, cvs, markFace, renderer, ui, world } from './renderer.js';
@@ -52,9 +52,11 @@ function layerUnder(h, L) {
   const [fw, fh] = faceMM(o, h.face), p = [h.uv.x * fw, (1 - h.uv.y) * fh];
   const q = h.face === A ? p : (() => { const r = layerReach(o, A, L).find(r => r.key === h.face); return r && apply(inv(r.G), p); })();
   if (!q) return null;
-  const [W, H] = facePx(o, A), ppm = W / faceMM(o, A)[0];
-  // the selected layer is grabbed anywhere inside it, even where another layer lies over it
-  return hitLayer({ layers: [L] }, W, H, q[0] * ppm, q[1] * ppm) ? q : null;
+  const [W, H] = facePx(o, A), [aw, ah] = faceMM(o, A), ppm = W / aw, ax = h.face === A && loopAxis(o, A);
+  // the selected layer is grabbed anywhere inside it, even where another layer lies over it; on a ring also
+  // by its part drawn past the other end
+  const tries = ax ? [q, ...[1, -1].map(s => ax === 'x' ? [q[0] + s * aw, q[1]] : [q[0], q[1] + s * ah])] : [q];
+  return tries.find(t => hitLayer({ layers: [L] }, W, H, t[0] * ppm, t[1] * ppm)) || null;
 }
 /* drags a layer over the model: across an edge it goes on printing over it (wrap), and once its centre has left
    the face it belongs to the face the centre is on, at the same size in mm */
@@ -68,8 +70,10 @@ function dragLayer(e) {
     pA = apply(inv(G), cur);
     if (!L.wrap) { L.wrap = true; renderLayerProps(); }
   }
-  const cx = pA[0] + drag3.grab[0], cy = pA[1] + drag3.grab[1];
+  const cx = pA[0] + drag3.grab[0], cy = pA[1] + drag3.grab[1], ring = loopAxis(o, A), wrap1 = v => v - Math.floor(v);
   L.x = cx / aw; L.y = cy / ah;
+  // a ring has no ends: past one end the layer goes on from the other
+  if (ring) { if (ring === 'x') L.x = wrap1(L.x); else L.y = wrap1(L.y); markFace(o, A); refreshFields($('#layerSec'), L); return; }
   if (cx < 0 || cy < 0 || cx > aw || cy > ah) {
     for (const [T, G] of faceMaps(o, A, cx, cy)) {
       if (T === A) continue;

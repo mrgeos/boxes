@@ -1,7 +1,7 @@
 // Печать на гранях: слои, текст, отделка, карты материалов
 import { DEG, clamp } from '../core/util.js';
 import { FINISHES, FOILS, PET_PRINT, isFoil } from '../core/constants.js';
-import { faceKeys, faceMM, isClearFace, netLayout, outerKeys } from '../core/model.js';
+import { faceKeys, faceMM, isClearFace, loopAxis, netLayout, outerKeys } from '../core/model.js';
 import { getImg } from '../core/assets.js';
 import { artImg } from '../core/vector.js';
 import { ensureFont, fontStr } from '../core/fonts.js';
@@ -13,6 +13,13 @@ import { STICKER_FX, placementsFor } from '../stickers/placement.js';
 import { drawSticker, stickerMask, stickerShadow } from '../stickers/film.js';
 import { drawWrapped, wrapsOnto } from './wrap.js';
 
+/* the copies of a layer a ring face needs: +1 when it runs over the start of the face, -1 over its end */
+function loopShifts(L, W, H, ax) {
+  if (L.type === 'image' && L.tile) return [];
+  const [w, h] = layerBox(L, W, H), r = L.rot * DEG, c = ax === 'x' ? L.x * W : L.y * H, len = ax === 'x' ? W : H;
+  const ext = ax === 'x' ? (Math.abs(w * Math.cos(r)) + Math.abs(h * Math.sin(r))) / 2 : (Math.abs(w * Math.sin(r)) + Math.abs(h * Math.cos(r))) / 2;
+  return [...(c - ext < 0 ? [1] : []), ...(c + ext > len ? [-1] : [])];
+}
 /* draw a face canvas into its dieline rectangle, turned if the panel lies upside down on the die */
 function drawNetPanel(c, src, p, x, y, w, h, crop = null, inv = false) {
   if (p.fan) {
@@ -122,8 +129,15 @@ function renderFace(o, k) {
     else if (im && p) drawNetPanel(ctx, im, p, 0, 0, W, H, [p.x / net.W * im.naturalWidth, p.y / net.H * im.naturalHeight, p.w / net.W * im.naturalWidth, p.h / net.H * im.naturalHeight], true);
   }
   // the face's own layers, then the parts of neighbours' layers that run over an edge onto it
-  const fxl = [], draw = (c, it, cw, ch, paint, alpha) => it.from ? drawWrapped(c, o, k, it, cw, (x, L, sw, sh) => drawLayer(x, L, sw, sh, paint, alpha)) : drawLayer(c, it.L, cw, ch, paint, alpha);
-  for (const it of [...face.layers.map(L => ({ L })), ...wrapsOnto(o, k)]) {
+  const fxl = [], ax = loopAxis(o, k);
+  const draw = (c, it, cw, ch, paint, alpha) => {
+    if (it.from) return drawWrapped(c, o, k, it, cw, (x, L, sw, sh) => drawLayer(x, L, sw, sh, paint, alpha));
+    if (!it.shift) return drawLayer(c, it.L, cw, ch, paint, alpha);
+    c.save(); c.translate(ax === 'x' ? it.shift * cw : 0, ax === 'y' ? it.shift * ch : 0); drawLayer(c, it.L, cw, ch, paint, alpha); c.restore();
+  };
+  // on a ring a layer over one end is drawn again past the other end (shift: whole lengths of the face)
+  const own = face.layers.flatMap(L => [{ L }, ...(ax ? loopShifts(L, W, H, ax).map(shift => ({ L, shift })) : [])]);
+  for (const it of [...own, ...wrapsOnto(o, k)]) {
     const L = it.L; if (!L.visible) continue;
     if (L.type === 'text') ensureFont(L);
     if (isFoil(L.effect)) fxl.push(it);
