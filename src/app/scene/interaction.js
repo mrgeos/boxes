@@ -53,7 +53,8 @@ function layerUnder(h, L) {
   const q = h.face === A ? p : (() => { const r = layerReach(o, A, L).find(r => r.key === h.face); return r && apply(inv(r.G), p); })();
   if (!q) return null;
   const [W, H] = facePx(o, A), ppm = W / faceMM(o, A)[0];
-  return hitLayer(o.faces[A], W, H, q[0] * ppm, q[1] * ppm)?.id === L.id ? q : null;
+  // the selected layer is grabbed anywhere inside it, even where another layer lies over it
+  return hitLayer({ layers: [L] }, W, H, q[0] * ppm, q[1] * ppm) ? q : null;
 }
 /* drags a layer over the model: across an edge it goes on printing over it (wrap), and once its centre has left
    the face it belongs to the face the centre is on, at the same size in mm */
@@ -149,7 +150,11 @@ function initInteraction() {
   });
   cvs.addEventListener('pointerup', e => {
     if (dragSt) { stickerDirty.add(dragSt.o.id); dragSt = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.stickers = true; commit(); down = null; return; }
-    if (drag3) { drag3 = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.layers = true; commit(); down = null; return; }
+    if (drag3) {
+      drag3 = null; controls.enabled = true; cvs.style.cursor = 'move';
+      // a click without moving falls through: it picks the top layer there, as before
+      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) { ui.layers = true; commit(); down = null; return; }
+    }
     if (e.button !== 0 || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) { down = null; return; }
     down = null;
     const h = pick(e.clientX, e.clientY);

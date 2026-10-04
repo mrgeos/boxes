@@ -125,7 +125,8 @@ function initFaceEditor() {
     }
     let target = L;
     if (!mode) {
-      target = hitLayer(f, W, H, px, py);
+      // the selected layer first, even under others; else the top layer under the cursor
+      target = L && hitLayer({ layers: [L] }, W, H, px, py) ? L : hitLayer(f, W, H, px, py);
       if (!target) { if (sel.layer) selectLayer(null); return; }
       if (target.id !== sel.layer) selectLayer(target.id);
       mode = 'move';

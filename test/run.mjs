@@ -149,13 +149,16 @@ await test('слой через ребро: печать на соседней �
   const pt = (k, fx, fy) => page.evaluate(([k, fx, fy]) => { const S = window.__boxStudio, rt = S.RT.get(S.state.objects[0].id), F = rt.frames[k];
     const p = F.c.clone().addScaledVector(F.u, (fx - .5) * F.w).addScaledVector(F.v, (.5 - fy) * F.h).multiplyScalar(.01); rt.group.localToWorld(p).project(S.camera);
     const r = S.renderer.domElement.getBoundingClientRect(); return [r.left + (p.x + 1) / 2 * r.width, r.top + (1 - p.y) / 2 * r.height]; }, [k, fx, fy]);
-  const shape = () => page.evaluate(() => { const o = window.__boxStudio.state.objects[0]; for (const k in o.faces) { const L = o.faces[k].layers.find(l => l.type === 'shape'); if (L) return { face: k, y: L.y, hmm: L.h * window.__boxStudio.faceMM(o, k)[1], wrap: !!L.wrap }; } });
+  const shape = () => page.evaluate(() => { const o = window.__boxStudio.state.objects[0]; for (const k in o.faces) { const L = o.faces[k].layers.find(l => l.type === 'shape' && l.id !== 'cover'); if (L) return { face: k, y: L.y, hmm: L.h * window.__boxStudio.faceMM(o, k)[1], wrap: !!L.wrap }; } });
 
   await addPreset(page, 'mailer');
   await page.click('#faceTabs .chip[data-f="front"]'); await page.click('#addRectBtn');
   await page.evaluate(() => window.__boxStudio.setView('q', true)); await page.waitForTimeout(700);
   assert.deepEqual(Object.keys(await plate()), ['front'], 'плашка только на переде');
   const h0 = (await shape()).hmm;
+  // a layer over it (an invisible one, as big as the face): the selected plate is still grabbed under it
+  await page.evaluate(() => { const S = window.__boxStudio, o = S.state.objects[0], f = o.faces.front, L = f.layers.find(l => l.type === 'shape');
+    f.layers.push({ ...structuredClone(L), id: 'cover', w: 1, h: 1, x: .5, y: .5, opacity: 0 }); S.select(o.id, 'front', L.id); });
   // drag it up to the lid's front edge: it runs over the edge, then belongs to the lid
   await page.mouse.move(...await pt('front', .5, .5)); await page.waitForTimeout(200); await page.mouse.down();
   await page.mouse.move(...await pt('top', .5, .97), { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(700);
