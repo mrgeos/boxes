@@ -128,6 +128,16 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .layer .ln{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px}
 .layer .th{width:24px;height:24px;border-radius:4px;flex:none;background:var(--checker-b) center/contain no-repeat;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;font-weight:700;overflow:hidden}
 .layer .th svg{width:14px;height:14px}
+/* asset library */
+.lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.lib .it{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:6px;background:var(--checker-b) center/contain no-repeat;background-origin:content-box;padding:4px;cursor:pointer}
+.lib .it:hover,.lib .it:focus-visible{border-color:var(--accent);outline:none}
+.lib .it.used::after{content:'';position:absolute;left:4px;bottom:4px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.lib .acts{position:absolute;inset:auto 2px 2px auto;display:none;gap:2px}
+.lib .it:hover .acts,.lib .it:focus-within .acts{display:flex}
+.lib .acts button{width:20px;height:20px;border:1px solid var(--line-2);border-radius:4px;background:var(--panel);color:var(--fg);font-size:11px;line-height:1;cursor:pointer;padding:0}
+.lib .acts button:hover{border-color:var(--accent);color:var(--accent)}
+.lib .acts button:disabled{opacity:.35;cursor:default}
 .layer .acts{display:flex;gap:0}
 .layer .acts button{width:24px;height:24px;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;padding:0}
 .layer .acts button:hover{background:var(--panel);color:var(--fg)}
@@ -290,6 +300,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
         <button class="btn sm" id="copyFaceBtn">Копировать</button>
       </div>
     </section>
+    <section class="sec" id="libSec"></section>
     <section class="sec" id="layerSec"></section>
     <section class="sec" id="stickerSec"></section>
     <section class="sec">
@@ -1252,6 +1263,69 @@ function drawNetPanel(c, src, p, x, y, w, h, crop = null, inv = false) {
    Assets & fonts
    ================================================================ */
 function addAsset(url) { const id = 'a' + uid(); assets[id] = url; return id; }
+/* ---------- asset library ----------
+   Every image added while working (layers, stickers, product photos, dielines) is kept here, once per
+   content, so it can be placed again on any face, sticker or object. It is saved with the project and,
+   when the browser allows, in the browser too, so it is at hand in other projects. */
+const library = [];   // { id: asset id, hash, name, aspect, added }
+async function contentHash(url) {
+  try { const b = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(url)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); }
+  catch { let h = 0; for (let i = 0; i < url.length; i += 7) h = (h * 31 + url.charCodeAt(i)) | 0; return 'h' + (h >>> 0).toString(16) + url.length; }
+}
+const LIB_DB = { name: 'box-studio-3d', store: 'library' };
+function libDB() {
+  return new Promise((res, rej) => {
+    try {
+      const r = indexedDB.open(LIB_DB.name, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(LIB_DB.store, { keyPath: 'hash' });
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    } catch (e) { rej(e); }
+  });
+}
+async function libStore(op, val) {
+  try {
+    const db = await libDB();
+    return await new Promise((res, rej) => {
+      const tx = db.transaction(LIB_DB.store, op === 'all' ? 'readonly' : 'readwrite'), st = tx.objectStore(LIB_DB.store);
+      const r = op === 'all' ? st.getAll() : op === 'put' ? st.put(val) : st.delete(val);
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+  } catch { return op === 'all' ? [] : null; }
+}
+/* add an image (data URL) to the library, or find it there; returns its asset id */
+async function libAdd(url, name, aspect) {
+  const hash = await contentHash(url);
+  let it = library.find(x => x.hash === hash);
+  if (!it) {
+    it = { id: addAsset(url), hash, name: name || 'Изображение', aspect, added: Date.now() };
+    library.unshift(it); libStore('put', { hash, name: it.name, aspect, url, added: it.added });
+    ui.lib = true;
+  }
+  return it.id;
+}
+function libRemove(hash) {
+  const i = library.findIndex(x => x.hash === hash); if (i < 0) return;
+  library.splice(i, 1); libStore('delete', hash); ui.lib = true; scheduleSave();
+}
+/* images already in a project (older ones had no library) and the browser's library join the panel */
+async function libAdopt(ids) {
+  for (const id of ids) {
+    const url = assets[id]; if (!url || !/^data:image\//.test(url) || library.some(x => x.id === id)) continue;
+    const hash = await contentHash(url);
+    if (library.some(x => x.hash === hash)) continue;
+    const im = await loadImage(url).catch(() => null);
+    library.push({ id, hash, name: 'Изображение', aspect: im ? im.naturalWidth / im.naturalHeight : 1, added: Date.now() });
+  }
+  ui.lib = true;
+}
+async function libLoadBrowser() {
+  const rows = await libStore('all') || [];
+  for (const r of rows.sort((a, b) => b.added - a.added)) {
+    if (library.some(x => x.hash === r.hash)) continue;
+    library.push({ id: addAsset(r.url), hash: r.hash, name: r.name, aspect: r.aspect, added: r.added, browser: true });
+  }
+  ui.lib = true;
+}
 function getImg(id) {
   if (!id || !assets[id]) return null;
   let im = imgCache[id];
@@ -1288,7 +1362,7 @@ async function importImageFile(file) {
     url = file.type === 'image/jpeg' ? c.toDataURL('image/jpeg', .92) : c.toDataURL('image/png');
     w = c.width; h = c.height;
   }
-  const id = addAsset(url); getImg(id);
+  const id = await libAdd(url, (file.name || '').replace(/\.[^.]+$/, '').slice(0, 40), w / h); getImg(id);
   return { id, aspect: w / h };
 }
 
@@ -1376,7 +1450,7 @@ grainTex.wrapS = grainTex.wrapT = THREE.RepeatWrapping;
 const RT = new Map();
 const dirtyFaces = new Set();
 const rebuildQueue = new Set();
-const ui = { editor: true, net: true, layers: false, stickers: false };
+const ui = { editor: true, net: true, layers: false, stickers: false, lib: true };
 function markFace(o, k) { dirtyFaces.add(o.id + '|' + k); if (o.id === sel.obj) { ui.editor = true; ui.net = true; } }
 function markObj(o) { for (const k of faceKeys(o)) markFace(o, k); }
 
@@ -3331,6 +3405,7 @@ renderer.setAnimationLoop(now => {
   if (ui.net) { ui.net = false; drawNet(); }
   if (ui.layers) { ui.layers = false; renderLayers(); }
   if (ui.stickers) { ui.stickers = false; renderStickers(); }
+  if (ui.lib) { ui.lib = false; renderLibrary(); }
 });
 
 /* ================================================================
@@ -3349,9 +3424,9 @@ function select(objId, face = undefined, layerId = null, { flash = false } = {})
   if (flash && o) { const f = RT.get(o.id)?.faces[sel.face]; if (f) { f.flash = 1; accent.set(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0a7aa1'); } }
   if (changedObj) { renderObjects(); renderModel(); renderStickers(); if (orbitLock) focusSelected(); }
   renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps();
-  ui.editor = ui.net = true;
+  ui.editor = ui.net = ui.lib = true;
 }
-function selectLayer(id) { sel.layer = id; if (id && sel.sticker) { sel.sticker = null; ui.stickers = true; } renderLayers(); renderLayerProps(); ui.editor = true; }
+function selectLayer(id) { ui.lib = true; sel.layer = id; if (id && sel.sticker) { sel.sticker = null; ui.stickers = true; } renderLayers(); renderLayerProps(); ui.editor = true; }
 
 /* ================================================================
    History & persistence
@@ -3362,7 +3437,7 @@ function commit() {
   const s = snapshot(); if (hist.stack[hist.i] === s) return;
   hist.stack = hist.stack.slice(0, hist.i + 1); hist.stack.push(s);
   if (hist.stack.length > 100) hist.stack.shift();
-  hist.i = hist.stack.length - 1; updateUndo(); scheduleSave();
+  hist.i = hist.stack.length - 1; updateUndo(); scheduleSave(); ui.lib = true;
 }
 function restore(s) {
   const d = JSON.parse(s);
@@ -3385,17 +3460,24 @@ function usedAssets() {
     if (o.dieline) used.add(o.dieline);
     for (const k in o.faces) for (const l of o.faces[k].layers) if (l.src) used.add(l.src);
     for (const st of o.stickers || []) if (st.src) used.add(st.src);
+    if (o.product?.src) used.add(o.product.src);
   }
   for (const f of state.fonts) used.add(f.asset);
-  const out = {}; for (const id of used) if (assets[id]) out[id] = assets[id]; return out;
+  return used;
 }
-const projectJSON = () => JSON.stringify({ app: 'box-studio-3d', version: 1, objects: state.objects, scene: state.scene, fonts: state.fonts, assets: usedAssets() });
+const assetsOf = ids => { const out = {}; for (const id of ids) if (assets[id]) out[id] = assets[id]; return out; };
+/* a project file carries its whole library; the autosave only what the design uses (the library is in the browser) */
+function projectJSON(withLibrary = true) {
+  const ids = usedAssets(); if (withLibrary) for (const it of library) ids.add(it.id);
+  return JSON.stringify({ app: 'box-studio-3d', version: 1, objects: state.objects, scene: state.scene, fonts: state.fonts,
+    library: library.filter(it => withLibrary || ids.has(it.id) || !it.browser).map(({ id, hash, name, aspect, added }) => ({ id, hash, name, aspect, added })), assets: assetsOf(ids) });
+}
 const LS_KEY = 'box-studio-3d/project';
 let saveTimer, saveWarned = false;
 function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem(LS_KEY, projectJSON()); }
+    try { localStorage.setItem(LS_KEY, projectJSON(false)); }
     catch (e) { if (!saveWarned) { saveWarned = true; toast('Проект слишком большой для автосохранения в браузере. Используйте «Сохранить проект».', 4200); } }
   }, 900);
 }
@@ -3403,6 +3485,8 @@ function loadProject(d, { resetHistory = true } = {}) {
   if (!d || !Array.isArray(d.objects)) throw new Error('bad project');
   for (const id of [...RT.keys()]) disposeObject(id);
   Object.assign(assets, d.assets || {});
+  for (const it of d.library || []) if (assets[it.id] && !library.some(x => x.hash === it.hash)) { library.push({ ...it }); libStore('put', { hash: it.hash, name: it.name, aspect: it.aspect, url: assets[it.id], added: it.added || Date.now() }); }
+  libAdopt(Object.keys(d.assets || {}).filter(id => !state.fonts?.some?.(f => f.asset === id) && !(d.fonts || []).some(f => f.asset === id)));
   state.objects = d.objects; state.scene = { ...state.scene, ...(d.scene || {}) }; state.fonts = d.fonts || [];
   if ((d.scene?.v || 1) < 2) Object.assign(state.scene, LIGHTS[state.scene.preset] || LIGHTS.studio, { v: 2 });
   state.fonts.forEach(registerFont);
@@ -3875,6 +3959,7 @@ function deleteSticker(id) {
   renderStickers(); commit();
 }
 function renderStickers() {
+  ui.lib = true;
   const sec = $('#stickerSec'), o = activeObj();
   if (!o) { sec.innerHTML = ''; return; }
   const list = o.stickers || [], st = activeSticker();
@@ -3980,6 +4065,46 @@ async function addImageToFace(file, obj = activeObj(), face = sel.face, at = nul
 let pickCb = null;
 function pickImage(cb) { pickCb = cb; $('#imgInput').value = ''; $('#imgInput').click(); }
 $('#imgInput').onchange = e => { const f = e.target.files[0]; if (f && pickCb) pickCb(f); };
+
+/* ---------- library panel ---------- */
+function renderLibrary() {
+  const sec = $('#libSec'), o = activeObj(), used = usedAssets(), L = activeLayer(), st = activeSticker();
+  const canSwap = (L?.type === 'image') || (st && st.kind !== 'custom') || (st?.kind === 'custom');
+  const prod = o && (o.type === 'bag' || (o.type === 'box' && o.lidType === 'handle'));
+  sec.innerHTML = `<div class="sec-h"><h2>Библиотека</h2><span class="hint">${library.length || ''}</span></div>
+    ${library.length ? `<div class="lib">${library.map(it => `<div class="it ${used.has(it.id) ? 'used' : ''}" tabindex="0" role="button" draggable="true" data-h="${it.hash}" title="${esc(it.name)} — клик: на грань, можно перетащить на модель или в окно грани" aria-label="${esc(it.name)}">
+      <span class="acts"><button data-a="st" title="Наклейка из картинки" aria-label="Наклейка из картинки">★</button>${prod ? `<button data-a="prod" title="Фото продукта / торта" aria-label="Фото продукта">◉</button>` : ''}<button data-a="swap" title="${L?.type === 'image' ? 'Заменить картинку в выбранном слое' : 'Поставить в выбранную наклейку'}" aria-label="Заменить" ${canSwap ? '' : 'disabled'}>⇄</button><button data-a="del" title="Убрать из библиотеки" aria-label="Убрать из библиотеки">×</button></span></div>`).join('')}</div>
+      <p class="hint">Сюда попадает всё, что вы загружаете: картинки слоёв, наклеек, фото продукта. Клик — на текущую грань; ★ — наклейка; ⇄ — заменить в выбранном слое или наклейке. Библиотека сохраняется в файле проекта и в браузере, она доступна и в других проектах. Точка — картинка уже есть в дизайне.</p>`
+      : `<p class="hint">Здесь будут все картинки, которые вы загружаете (логотипы, паттерны, фото). Их можно снова ставить на любую грань, наклейку или носитель.</p>`}
+    <button class="btn sm" id="libAddBtn">Добавить в библиотеку…</button>`;
+  $$('#libSec .it').forEach(el => {
+    const it = library.find(x => x.hash === el.dataset.h); if (!it) return;
+    const im = getImg(it.id); el.style.backgroundImage = `url("${assets[it.id]}")`; if (!im) getImg(it.id);
+    el.onclick = e => {
+      const a = e.target.closest('button')?.dataset.a, o = activeObj(); if (!o) return toast('Сначала добавьте объект');
+      if (a === 'del') { libRemove(it.hash); return toast(used.has(it.id) ? 'Убрано из библиотеки (в дизайне картинка остаётся)' : 'Убрано из библиотеки'); }
+      if (a === 'st') return addSticker(newSticker('custom', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0], { src: it.id, aspect: it.aspect, w: 50, outline: 1.5, text: '' }));
+      if (a === 'prod') { o.product.src = it.id; o.product.aspect = it.aspect; rebuildQueue.add(o.id); renderModel(); return commit(); }
+      if (a === 'swap') {
+        const L = activeLayer(), st = activeSticker();
+        if (L?.type === 'image') { L.src = it.id; L.aspect = it.aspect; markFace(o, sel.face); renderLayers(); renderLayerProps(); return commit(); }
+        if (st) { st.src = it.id; if (st.kind === 'custom') st.aspect = it.aspect; touchSticker(o, st); renderStickers(); return commit(); }
+        return;
+      }
+      placeLibImage(it, o, sel.face);
+    };
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } if (e.key === 'Delete') libRemove(it.hash); };
+    el.ondragstart = e => { e.dataTransfer.setData('application/x-bs-asset', it.hash); e.dataTransfer.effectAllowed = 'copy'; };
+  });
+  $('#libAddBtn').onclick = () => pickImage(async file => { if (!file.type.startsWith('image/')) return toast('Нужен файл изображения'); await importImageFile(file); renderLibrary(); scheduleSave(); });
+}
+function placeLibImage(it, obj = activeObj(), face = sel.face, at = null) {
+  if (!obj || !face || !faceKeys(obj).includes(face)) return;
+  const L = newImage(it.id, it.aspect), [W, H] = facePx(obj, face);
+  L.w = Math.min(.6, (H * .6 * it.aspect) / W);
+  if (at) { L.x = at[0]; L.y = at[1]; }
+  addLayer(L, face, obj);
+}
 
 /* ================================================================
    2D face editor
@@ -4318,6 +4443,17 @@ cvs.addEventListener('pointercancel', () => { if (drag3) { drag3 = null; control
 /* drag & drop images onto the model, the editor, or anywhere */
 let dragDepth = 0;
 const isFileDrag = e => [...(e.dataTransfer?.types || [])].includes('Files');
+const isLibDrag = e => [...(e.dataTransfer?.types || [])].includes('application/x-bs-asset');
+window.addEventListener('dragover', e => { if (isLibDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+window.addEventListener('drop', e => {
+  if (!isLibDrag(e)) return; e.preventDefault();
+  const it = library.find(x => x.hash === e.dataTransfer.getData('application/x-bs-asset')); if (!it) return;
+  if (e.target === cvs) {
+    const h = pick(e.clientX, e.clientY);
+    if (h?.face && !h.wall) { const o = state.objects.find(x => x.id === h.objId); select(o.id, h.face); return placeLibImage(it, o, h.face, h.uv ? [h.uv.x, 1 - h.uv.y] : null); }
+  }
+  if (e.target === ed && activeObj()) { const [mx, my] = edPoint(e); return placeLibImage(it, activeObj(), sel.face, [mx / edState.dw, my / edState.dh]); }
+});
 window.addEventListener('dragenter', e => { if (!isFileDrag(e)) return; e.preventDefault(); dragDepth++; $('#dropHint').hidden = false; });
 window.addEventListener('dragleave', e => { if (!isFileDrag(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $('#dropHint').hidden = true; });
 window.addEventListener('dragover', e => { if (isFileDrag(e)) e.preventDefault(); });
@@ -4687,7 +4823,7 @@ function sampleProject() {
 /* ================================================================
    Wiring
    ================================================================ */
-function renderAll() { renderObjects(); renderModel(); renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); renderStickers(); renderFonts(); refreshFields($('#sceneSec'), state.scene); $('#lightPreset').value = state.scene.preset; ui.editor = ui.net = true; }
+function renderAll() { renderLibrary(); renderObjects(); renderModel(); renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); renderStickers(); renderFonts(); refreshFields($('#sceneSec'), state.scene); $('#lightPreset').value = state.scene.preset; ui.editor = ui.net = true; }
 
 $('#addPreset').innerHTML = PRESETS.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
 $('#addObjBtn').onclick = () => {
@@ -4834,5 +4970,6 @@ let booted = false;
 try { const saved = localStorage.getItem(LS_KEY); if (saved) { loadProject(JSON.parse(saved)); booted = true; } } catch {}
 if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
-window.__boxStudio = { state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target, placementsFor, __bsf: o => buildStickerFilms(o) };
+libLoadBrowser();
+window.__boxStudio = { library, state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target, placementsFor, __bsf: o => buildStickerFilms(o) };
 </script>
