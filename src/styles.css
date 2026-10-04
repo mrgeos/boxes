@@ -86,6 +86,13 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .obj .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .obj .dm{color:var(--muted);font-size:11px}
 .obj svg{width:16px;height:16px;flex:none;color:var(--muted)}
+.obj{padding-left:calc(8px + var(--d, 0) * 16px);position:relative}
+.obj.grp .nm{font-weight:600}
+.obj .caret{all:unset;cursor:pointer;width:14px;margin-right:-4px;text-align:center;color:var(--muted);font-size:11px;flex:none}
+.obj.drop-before::before,.obj.drop-after::after,.objlist.drop-end::after{content:"";position:absolute;left:calc(8px + var(--d, 0) * 16px);right:4px;height:2px;border-radius:1px;background:var(--accent)}
+.obj.drop-before::before{top:-3px}.obj.drop-after::after{bottom:-3px}
+.objlist{position:relative}.objlist.drop-end::after{bottom:-4px;left:8px}
+.obj.drop-into{border-color:var(--accent);border-style:dashed}
 
 /* stage */
 .stage{position:relative;min-width:0;min-height:0;overflow:hidden}

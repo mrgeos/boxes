@@ -14,8 +14,10 @@ import { initFacePanel } from './ui/face-panel.js';
 import { initFaceEditor } from './ui/face-editor.js';
 import { initNetView } from './net/net-view.js';
 import { initInteraction } from './scene/interaction.js';
+import { initMove } from './scene/move.js';
 import { sampleProject } from './core/sample.js';
 import { initWiring } from './ui/wiring.js';
+import { initObjectList } from './ui/object-list.js';
 import { initColorPicker } from './ui/color-picker.js';
 
 /* boot: hook up the parts in the order they were built, then load the project */
@@ -24,6 +26,8 @@ initFacePanel();
 initFaceEditor();
 initNetView();
 initInteraction();
+initMove();
+initObjectList();
 initWiring();
 initColorPicker();
 resize();

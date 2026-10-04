@@ -38,6 +38,55 @@ await test('сцена рисуется только при изменениях
   await ctx.close();
 });
 
+await test('группы: ряд с отступом, порядок, перетаскивание, разгруппировать, сохранение', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  const B = fn => page.evaluate(fn);
+  // footprints of the objects on the floor in the scene, mm, in list order of the group
+  const feet = () => B(() => {
+    const S = window.__boxStudio, ids = S.state.groups[0]?.items ?? S.state.tree;
+    return ids.map(id => { const rt = S.RT.get(id), f = rt.foot, b = { x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9 };
+      for (const [x, z] of [[f.x0, f.z0], [f.x1, f.z0], [f.x0, f.z1], [f.x1, f.z1]]) { const v = rt.group.localToWorld(new S.THREE.Vector3(x * .01, 0, z * .01)); b.x0 = Math.min(b.x0, v.x * 100); b.x1 = Math.max(b.x1, v.x * 100); b.z0 = Math.min(b.z0, v.z * 100); b.z1 = Math.max(b.z1, v.z * 100); }
+      return b; });
+  });
+  const gaps = f => f.slice(1).map((b, i) => +(b.x0 - f[i].x1).toFixed(1));
+  const places = () => B(() => window.__boxStudio.state.objects.map(o => { const p = window.__boxStudio.RT.get(o.id).group.position; return [+(p.x * 100).toFixed(1), +(p.z * 100).toFixed(1)]; }));
+
+  // the tube alone: dragged by its floor ring
+  await page.click('#orbitLockBtn'); await page.evaluate(() => window.__boxStudio.setView('top', true)); await page.waitForTimeout(600);
+  await page.click('#objList .obj >> nth=2'); await page.waitForTimeout(600);
+  const ring = await B(() => { const S = window.__boxStudio, o = S.state.objects[2], rt = S.RT.get(o.id), v = new S.THREE.Vector3((rt.foot.x1 + 12) * .01, 0, 0); rt.group.localToWorld(v).project(S.camera); const r = S.renderer.domElement.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; });
+  const before = (await places())[2];
+  await page.mouse.move(...ring); await page.waitForTimeout(300); await page.mouse.down(); await page.mouse.move(ring[0] + 60, ring[1], { steps: 4 }); await page.mouse.up();
+  assert.ok((await places())[2][0] > before[0] + 10, 'объект сдвинут за кольцо на полу');
+
+  await page.click('#objList .obj >> nth=0'); await page.click('#objList .obj >> nth=2', { modifiers: ['Shift'] }); await page.click('#groupBtn');
+  assert.deepEqual(await B(() => [window.__boxStudio.state.tree.length, window.__boxStudio.state.groups[0].items.length]), [1, 3], 'три объекта в одной группе');
+  for (const g of gaps(await feet())) assert.ok(Math.abs(g - 20) < .5, `отступ 20 мм, а не ${g}`);
+  const setField = async (k, v) => { const el = page.locator(`#modelSec [data-k="${k}"]`).last(); await el.fill(String(v)); await el.dispatchEvent('input'); await el.dispatchEvent('change'); };
+  await setField('gap', 50);
+  for (const g of gaps(await feet())) assert.ok(Math.abs(g - 50) < .5, `отступ 50 мм, а не ${g}`);
+  await page.selectOption('#modelSec [data-k="align"]', 'start');
+  const z0 = (await feet()).map(b => b.z0); assert.ok(Math.max(...z0) - Math.min(...z0) < .5, 'выровнены по заднему краю');
+
+  // drag the first row onto the bottom half of the last one: the order of the row follows the list
+  const first = await B(() => window.__boxStudio.state.groups[0].items[0]);
+  const last = page.locator('#objList .obj >> nth=3'), lb = await last.boundingBox();
+  await page.locator('#objList .obj >> nth=1').dragTo(last, { targetPosition: { x: 20, y: lb.height - 3 } });
+  assert.equal(await B(() => window.__boxStudio.state.groups[0].items.at(-1)), first, 'перетащенный объект встал в конец ряда');
+  for (const g of gaps(await feet())) assert.ok(Math.abs(g - 50) < .5, `после перестановки отступ 50 мм, а не ${g}`);
+
+  const grouped = await places();
+  await page.click('#objList .obj >> nth=0'); await page.click('#ungroupBtn');
+  assert.deepEqual(await B(() => [window.__boxStudio.state.groups.length, window.__boxStudio.state.tree.length]), [0, 3]);
+  assert.deepEqual(await places(), grouped, 'после разгруппировки объекты стоят на местах');
+  await page.click('#undoBtn');
+  assert.equal(await B(() => window.__boxStudio.state.groups.length), 1, 'Ctrl+Z возвращает группу');
+  const d = JSON.parse(readFileSync(await (await (async () => { const [x] = await Promise.all([page.waitForEvent('download'), page.click('#saveBtn')]); return x; })()).path(), 'utf8'));
+  assert.equal(d.groups.length, 1); assert.equal(d.groups[0].gap, 50); assert.equal(d.tree.length, 1);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 const presets = only && !'все заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return ids; })();
 if (presets.length) await test(`все заготовки (${presets.length}): построение, пломба, открывание, шаблон SVG`, async () => {
   const { ctx, page, errors } = await openEditor(browser);

@@ -10,12 +10,14 @@ import { registerFont } from './fonts.js';
 import { RT, buildObject, disposeObject, ui } from '../scene/renderer.js';
 import { activeSticker } from '../stickers/placement.js';
 import { applyScene, setLastView, setView } from '../scene/camera.js';
+import { layoutAll, normalizeTree } from './groups.js';
 import { renderFonts, renderLayerProps } from '../ui/face-panel.js';
 import { renderAll } from '../ui/wiring.js';
 
 const hist = { stack: [], i: -1 };
-const snapshot = () => JSON.stringify({ objects: state.objects, scene: state.scene, fonts: state.fonts });
+const snapshot = () => JSON.stringify({ objects: state.objects, scene: state.scene, fonts: state.fonts, groups: state.groups, tree: state.tree });
 function commit() {
+  normalizeTree();
   const s = snapshot(); if (hist.stack[hist.i] === s) return;
   hist.stack = hist.stack.slice(0, hist.i + 1); hist.stack.push(s);
   if (hist.stack.length > 100) hist.stack.shift();
@@ -25,9 +27,12 @@ function restore(s) {
   const d = JSON.parse(s);
   const ids = new Set(d.objects.map(o => o.id));
   for (const id of [...RT.keys()]) if (!ids.has(id)) disposeObject(id);
-  state.objects = d.objects; state.scene = d.scene; state.fonts = d.fonts || [];
+  state.objects = d.objects; state.scene = d.scene; state.fonts = d.fonts || []; state.groups = d.groups || []; state.tree = d.tree || [];
   for (const o of state.objects) buildObject(o);
+  layoutAll();
   if (!activeObj()) sel.obj = state.objects[0]?.id ?? null;
+  if (sel.group && !state.groups.some(g => g.id === sel.group)) sel.group = null;
+  sel.multi = sel.multi.filter(id => state.groups.some(g => g.id === id) || state.objects.some(o => o.id === id));
   const f = activeFaceData(); if (!f || !f.layers.some(l => l.id === sel.layer)) sel.layer = null;
   if (!activeSticker()) sel.sticker = null;
   applyScene(); renderAll(); updateUndo(); scheduleSave();
@@ -50,7 +55,7 @@ const assetsOf = ids => { const out = {}; for (const id of ids) { if (assets[id]
 /* a project file carries its whole library; the autosave only what the design uses (the library is in the browser) */
 function projectJSON(withLibrary = true) {
   const ids = usedAssets(); if (withLibrary) for (const it of library) ids.add(it.id);
-  return JSON.stringify({ app: 'box-studio-3d', version: 1, objects: state.objects, scene: state.scene, fonts: state.fonts,
+  return JSON.stringify({ app: 'box-studio-3d', version: 1, objects: state.objects, groups: state.groups, tree: state.tree, scene: state.scene, fonts: state.fonts,
     library: library.filter(it => withLibrary || ids.has(it.id) || !it.browser).map(({ id, hash, name, aspect, added }) => ({ id, hash, name, aspect, added })), assets: assetsOf(ids),
     vectors: Object.fromEntries([...ids].filter(id => vecOf[id]).map(id => [id, vecOf[id]])) });
 }
@@ -71,11 +76,12 @@ function loadProject(d, { resetHistory = true } = {}) {
   for (const it of d.library || []) if (assets[it.id] && !library.some(x => x.hash === it.hash)) { library.push({ ...it }); libStore('put', { hash: it.hash, name: it.name, aspect: it.aspect, url: assets[it.id], added: it.added || Date.now(), svg: vecOf[it.id] ? assets[vecOf[it.id]] : null }); }
   const svgIds = new Set(Object.values(d.vectors || {}));
   libAdopt(Object.keys(d.assets || {}).filter(id => !svgIds.has(id) && !(d.fonts || []).some(f => f.asset === id)));
-  state.objects = d.objects; state.scene = { ...state.scene, ...(d.scene || {}) }; state.fonts = d.fonts || [];
+  state.objects = d.objects; state.groups = d.groups || []; state.tree = d.tree || []; state.scene = { ...state.scene, ...(d.scene || {}) }; state.fonts = d.fonts || [];
   if ((d.scene?.v || 1) < 2) Object.assign(state.scene, LIGHTS[state.scene.preset] || LIGHTS.studio, { v: 2 });
   state.fonts.forEach(registerFont);
   for (const o of state.objects) { ensureFaces(o); buildObject(o); }
-  sel.obj = state.objects[0]?.id ?? null; sel.face = null; sel.layer = null;
+  layoutAll();
+  sel.obj = state.objects[0]?.id ?? null; sel.face = null; sel.layer = null; sel.group = null; sel.multi = sel.obj ? [sel.obj] : [];
   if (sel.obj) sel.face = faceKeys(activeObj())[0];
   applyScene(); renderAll();
   if (resetHistory) { hist.stack = []; hist.i = -1; }

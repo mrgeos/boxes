@@ -16,6 +16,8 @@ import { buildSleeve, sleeveColors } from '../carriers/sleeve.js';
 import { computeFrames } from '../stickers/placement.js';
 import { buildStickerFilms } from '../stickers/film.js';
 import { camTween, invalidate, orbitLock, updateShadowCam } from './camera.js';
+import { layoutSoon, parentOf, placeOf } from '../core/groups.js';
+import { moving } from './move.js';
 
 const viewport = $('#viewport');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -135,8 +137,20 @@ function buildObject(o) {
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'bag') buildBag(o, rt); else buildTube(o, rt);
-  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); applyLid(o); applyObjMaterials(o); markObj(o);
+  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); applyObjMaterials(o); markObj(o);
   rt.stickerMeshes = []; buildStickerFilms(o);
+  if (parentOf(o.id) && JSON.stringify(foot) !== JSON.stringify(rt.foot)) layoutSoon();   // the row makes room for its new size
+}
+/* the object's footprint on the floor with the lid closed, in its own frame (mm): groups lay objects out by it */
+function measureFoot(rt) {
+  rt.group.updateMatrixWorld(true);
+  const inv = rt.group.matrixWorld.clone().invert(), b = new THREE.Box3(), t = new THREE.Box3(), m = new THREE.Matrix4();
+  rt.group.traverse(x => {
+    if (!x.isMesh || !x.visible || x.material === contactMat) return;
+    if (!x.geometry.boundingBox) x.geometry.computeBoundingBox();
+    b.union(t.copy(x.geometry.boundingBox).applyMatrix4(m.multiplyMatrices(inv, x.matrixWorld)));
+  });
+  return b.isEmpty() ? null : { x0: b.min.x / S, x1: b.max.x / S, z0: b.min.z / S, z1: b.max.z / S };
 }
 function disposeObject(id) {
   invalidate();
@@ -171,15 +185,15 @@ const contactMat = (() => {
   x.fillStyle = gr; x.fillRect(0, 0, 4, 64);
   return new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false });
 })();
-function applyTransform(o) {
+function applyTransform(o, shadow = true) {
   invalidate();
   const rt = RT.get(o.id); if (!rt) return;
-  const before = rt.group.position.clone();
-  rt.group.position.set(o.pos.x * S, 0, o.pos.z * S); rt.group.rotation.y = o.rotY * DEG;
+  const before = rt.group.position.clone(), p = placeOf(o);
+  rt.group.position.set(p.x * S, 0, p.z * S); rt.group.rotation.y = p.rot * DEG;
   // keep orbiting the selected object while it is being moved
-  if (rt.placed && orbitLock && o.id === sel.obj && !camTween) { const d = rt.group.position.clone().sub(before); camera.position.add(d); controls.target.add(d); }
+  if (rt.placed && orbitLock && o.id === sel.obj && !camTween && !moving()) { const d = rt.group.position.clone().sub(before); camera.position.add(d); controls.target.add(d); }
   rt.placed = true;
-  updateShadowCam();
+  if (shadow) updateShadowCam();
 }
 function applyLid(o) {
   invalidate();

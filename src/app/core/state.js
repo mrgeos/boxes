@@ -2,8 +2,9 @@
 import { LIGHTS } from './constants.js';
 
 // scene.v 2: lighting calibrated so a lit matte face renders close to its printed colour
-const state = { objects: [], scene: { v: 2, preset: 'studio', ...LIGHTS.studio, bg: 'gradient', bg1: '#f4f1eb', bg2: '#cec6b8', autoRotate: false }, fonts: [] };
-const sel = { obj: null, face: null, layer: null, sticker: null };
+const state = { objects: [], scene: { v: 2, preset: 'studio', ...LIGHTS.studio, bg: 'gradient', bg1: '#f4f1eb', bg2: '#cec6b8', autoRotate: false }, fonts: [], groups: [], tree: [] };
+// group: the group whose settings are shown; multi: items picked in the object list (Shift / Ctrl-click)
+const sel = { obj: null, face: null, layer: null, sticker: null, group: null, multi: [] };
 const assets = {};
    // id -> dataURL
 const imgCache = {};

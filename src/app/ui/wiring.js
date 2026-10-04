@@ -4,12 +4,13 @@ import { PRESETS } from '../core/constants.js';
 import { activeFaceData, activeObj, sel, state } from '../core/state.js';
 import { faceKeys, faceLabel, netLayout, newObject, newShape, newText, outerKeys } from '../core/model.js';
 import { importImageFile } from '../core/assets.js';
-import { buildObject, disposeObject, markFace, markObj, ui } from '../scene/renderer.js';
+import { buildObject, markFace, markObj, ui } from '../scene/renderer.js';
 import { orbitLock, sceneBounds, setOrbitLock, setView } from '../scene/camera.js';
 import { select } from '../core/selection.js';
 import { addFontFile, commit, loadProject, openProjectFile, projectJSON, redo, saveFile, undo } from '../core/project.js';
 import { refreshFields } from './fields.js';
-import { renderModel, renderObjects } from './model-panel.js';
+import { renderModel } from './model-panel.js';
+import { renderObjects } from './object-list.js';
 import { addImageToFace, addLayer, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers, setFaceBg } from './face-panel.js';
 import { renderStickers } from './stickers-panel.js';
 import { renderLibrary } from './library-panel.js';
@@ -27,17 +28,6 @@ function initWiring() {
     const o = newObject($('#addPreset').value);
     const b = sceneBounds(); o.pos.x = state.objects.length ? Math.round(b.max.x / S + o.dims.w / 2 + 40) : 0;
     state.objects.push(o); buildObject(o); select(o.id, faceKeys(o)[0], null); renderObjects(); commit(); setTimeout(() => setView('fit'), 60);
-  };
-  $('#dupObjBtn').onclick = () => {
-    const o = activeObj(); if (!o) return;
-    const c = structuredClone(o); c.id = uid(); c.name = o.name + ' (копия)'; c.pos.x += (o.type === 'tube' ? o.dims.w : o.dims.w) + 40;
-    state.objects.push(c); buildObject(c); select(c.id, sel.face, null); renderObjects(); commit(); setTimeout(() => setView('fit'), 60);
-  };
-  $('#delObjBtn').onclick = () => {
-    const o = activeObj(); if (!o) return;
-    state.objects = state.objects.filter(x => x.id !== o.id); disposeObject(o.id);
-    sel.obj = null; select(state.objects[0]?.id ?? null, undefined, null); renderObjects(); renderModel(); commit();
-    toast(`Удалено: ${o.name}. Вернуть — Ctrl+Z`);
   };
   $('#faceBg').addEventListener('input', e => setFaceBg(e.target.value, false));
   $('#faceBg').addEventListener('change', () => commit());
