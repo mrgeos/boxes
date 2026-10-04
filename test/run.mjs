@@ -87,6 +87,58 @@ await test('группы: ряд с отступом, порядок, перет
   await ctx.close();
 });
 
+await test('контекстное меню: объект, слой, пустое место, список, группа', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  const B = fn => page.evaluate(fn);
+  // a point of object i on screen: local (x, y, z) in mm, or the centre of its box
+  const at = (i, p = null) => page.evaluate(([i, p]) => {
+    const S = window.__boxStudio, rt = S.RT.get(S.state.objects[i].id), v = new S.THREE.Vector3();
+    if (p) rt.group.localToWorld(v.set(p[0] * .01, p[1] * .01, p[2] * .01)); else new S.THREE.Box3().setFromObject(rt.group).getCenter(v);
+    v.project(S.camera); const r = S.renderer.domElement.getBoundingClientRect();
+    return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height];
+  }, [i, p]);
+  const menu = async () => (await page.locator('.ctx').allInnerTexts()).join(' | ');
+  await page.waitForTimeout(600);
+
+  const rot = await B(() => window.__boxStudio.state.objects[1].rotY);
+  await page.mouse.click(...await at(1), { button: 'right' });
+  assert.match(await menu(), /Повернуть на 90° влево/);
+  await page.click('.ctx-it:has-text("Повернуть на 90° влево")');
+  assert.equal(await B(() => window.__boxStudio.state.objects[1].rotY), rot + 90, 'поворот из меню');
+  assert.equal(await page.locator('.ctx').count(), 0, 'меню закрылось');
+
+  // the box's front: its text layer is in the menu as a submenu
+  const box = await B(() => { const o = window.__boxStudio.state.objects[0], f = window.__boxStudio.RT.get(o.id).foot; return [o.faces.front.layers.length, f.z1, o.dims.h]; });
+  const [fx, fy] = await at(0, [0, box[2] * .3, box[1] - .5]);
+  await page.mouse.click(fx, fy, { button: 'right' });
+  await page.hover('.ctx-it:has-text("Слой:")'); await page.click('.ctx >> nth=1 >> .ctx-it:has-text("Удалить")');
+  assert.equal(await B(() => window.__boxStudio.state.objects[0].faces.front.layers.length), box[0] - 1, 'слой удалён из меню');
+
+  // empty floor: a new object stands where the menu was opened
+  const n = await B(() => window.__boxStudio.state.objects.length);
+  await page.mouse.click(320, 160, { button: 'right' });
+  assert.match(await menu(), /Добавить объект/);
+  await page.hover('.ctx-it:has-text("Добавить объект")'); await page.hover('.ctx-it:has-text("Тубусы и банки")'); await page.click('.ctx-it:has-text("Низкая банка")');
+  assert.equal(await B(() => window.__boxStudio.state.objects.length), n + 1);
+  // dragging with the right button moves the view and opens nothing
+  await page.mouse.move(700, 500); await page.mouse.down({ button: 'right' }); await page.mouse.move(790, 520, { steps: 5 }); await page.mouse.up({ button: 'right' });
+  assert.equal(await page.locator('.ctx').count(), 0, 'протягивание правой кнопкой не открывает меню');
+
+  // the list: two rows picked → group them, then the group's direction from its own menu, by keyboard
+  await page.click('#objList .obj >> nth=0'); await page.click('#objList .obj >> nth=1', { modifiers: ['Shift'] });
+  await page.click('#objList .obj >> nth=1', { button: 'right' });
+  assert.match(await menu(), /Выделено: 2/);
+  await page.click('.ctx-it:has-text("Сгруппировать")');
+  assert.equal(await B(() => window.__boxStudio.state.groups.length), 1);
+  await page.click('#objList .obj >> nth=0', { button: 'right' });
+  await page.hover('.ctx-it:has-text("Направление ряда")'); await page.click('.ctx-it:has-text("Сзади вперёд")');
+  assert.equal(await B(() => window.__boxStudio.state.groups[0].dir), 'z');
+  await page.click('#objList .obj >> nth=0', { button: 'right' }); await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.ctx').count(), 0, 'Esc закрывает меню');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 const presets = only && !'все заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return ids; })();
 if (presets.length) await test(`все заготовки (${presets.length}): построение, пломба, открывание, шаблон SVG`, async () => {
   const { ctx, page, errors } = await openEditor(browser);

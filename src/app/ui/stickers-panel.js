@@ -31,6 +31,10 @@ function addSticker(st) {
   o.stickers.push(st); sel.sticker = st.id; sel.layer = null;
   touchSticker(o, st); renderLayers(); renderLayerProps(); renderStickers(); commit();
 }
+function duplicateSticker(id) {
+  const t = activeObj()?.stickers.find(x => x.id === id); if (!t) return;
+  addSticker({ ...structuredClone(t), id: uid(), x: t.x + .05, y: t.y + .05 });
+}
 function deleteSticker(id) {
   const o = activeObj(); if (!o) return;
   const st = o.stickers.find(t => t.id === id); if (!st) return;
@@ -94,7 +98,7 @@ function renderStickers() {
     const a = e.target.closest('button')?.dataset.a, t = o.stickers.find(x => x.id === el.dataset.id); if (!t) return;
     if (a === 'del') return deleteSticker(t.id);
     if (a === 'vis') { t.visible = !t.visible; touchSticker(o, t); renderStickers(); return commit(); }
-    if (a === 'dup') { const c = { ...structuredClone(t), id: uid(), x: t.x + .05, y: t.y + .05 }; return addSticker(c); }
+    if (a === 'dup') return duplicateSticker(t.id);
     sel.sticker = t.id; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers();
   });
   if (!st) return;
@@ -113,4 +117,4 @@ function renderStickers() {
   bindVecColors(sec, activeSticker, t => { const look = RT.get(o.id)?.stickerLook?.get(t.id); if (look) look.key = ''; touchSticker(o, t); });
 }
 
-export { addSticker, deleteSticker, renderStickers };
+export { addSticker, deleteSticker, duplicateSticker, renderStickers };

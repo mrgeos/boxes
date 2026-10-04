@@ -208,4 +208,4 @@ function initInteraction() {
   });
 }
 
-export { down, dragSt, initInteraction };
+export { down, dragSt, initInteraction, pick, stickerHit };
