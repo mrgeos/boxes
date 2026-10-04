@@ -138,6 +138,10 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .lib .acts button{width:20px;height:20px;border:1px solid var(--line-2);border-radius:4px;background:var(--panel);color:var(--fg);font-size:11px;line-height:1;cursor:pointer;padding:0}
 .lib .acts button:hover{border-color:var(--accent);color:var(--accent)}
 .lib .acts button:disabled{opacity:.35;cursor:default}
+.lib .vbadge{position:absolute;left:3px;top:3px;font:600 9px/1 var(--mono);padding:2px 3px;border-radius:3px;background:var(--panel);color:var(--muted);border:1px solid var(--line)}
+.vcols{display:flex;flex-wrap:wrap;gap:6px}
+.vc{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--muted)}
+.vc input[type=color]{width:26px;height:22px;padding:0}
 .layer .acts{display:flex;gap:0}
 .layer .acts button{width:24px;height:24px;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;padding:0}
 .layer .acts button:hover{background:var(--panel);color:var(--fg)}
@@ -1268,6 +1272,64 @@ function addAsset(url) { const id = 'a' + uid(); assets[id] = url; return id; }
    content, so it can be placed again on any face, sticker or object. It is saved with the project and,
    when the browser allows, in the browser too, so it is at hand in other projects. */
 const library = [];   // { id: asset id, hash, name, aspect, added }
+/* ---------- vector images ----------
+   An SVG is kept as source next to its raster: vecOf[raster asset id] = svg asset id. Its colours are
+   written out as #rrggbb, so a layer or sticker can swap them (recolor: { '#old': '#new' }). */
+const vecOf = {};
+const VCOL = /((?:fill|stroke|stop-color|flood-color|lighting-color|color)\s*(?:=\s*["']|:\s*))(#[0-9a-f]{6})/gi;
+const cssColor = (() => { const x = document.createElement('canvas').getContext('2d'); return v => { x.fillStyle = '#010203'; x.fillStyle = v; const r = x.fillStyle; return /^#[0-9a-f]{6}$/i.test(r) && (r !== '#010203' || /#010203/i.test(v)) ? r.toLowerCase() : null; }; })();
+/* SVG text with every paint colour as lowercase #rrggbb (shapes without a fill get black, as browsers draw them) */
+function normSvg(text) {
+  try {
+    const doc = new DOMParser().parseFromString(text, 'image/svg+xml'), root = doc.documentElement;
+    if (root.nodeName !== 'svg' || doc.querySelector('parsererror')) return null;
+    // shapes with no fill of their own (or from a parent) are drawn black: make that a colour you can swap
+    const hasFill = el => el.hasAttribute('fill') || /(^|;)\s*fill\s*:/.test(el.getAttribute('style') || '');
+    const bare = [...doc.querySelectorAll('path,rect,circle,ellipse,polygon,polyline,text,use')].some(el => { for (let e = el; e && e !== root; e = e.parentElement) if (hasFill(e)) return false; return true; });
+    if ((bare || doc.querySelector('style')) && !hasFill(root)) root.setAttribute('fill', '#000000');
+    const PROPS = ['fill', 'stroke', 'stop-color', 'flood-color', 'lighting-color', 'color'], fix = v => { const t = (v || '').trim(); if (!t || /^(none|currentcolor|inherit|transparent)$/i.test(t) || /^url\(/i.test(t)) return v; return cssColor(t) || v; };
+    for (const el of doc.querySelectorAll('*')) {
+      for (const a of PROPS) if (el.hasAttribute(a)) el.setAttribute(a, fix(el.getAttribute(a)));
+      const st = el.getAttribute('style'); if (st) el.setAttribute('style', st.replace(/([\w-]+)\s*:\s*([^;]+)/g, (m, k, v) => PROPS.includes(k.toLowerCase()) ? `${k}:${fix(v)}` : m));
+      if (el.nodeName === 'style') el.textContent = el.textContent.replace(/(fill|stroke|stop-color|color)\s*:\s*([^;}]+)/gi, (m, k, v) => `${k}:${fix(v)}`);
+    }
+    return new XMLSerializer().serializeToString(root);
+  } catch { return null; }
+}
+const svgText = id => { const u = assets[id] || ''; const i = u.indexOf(','); if (i < 0) return ''; const body = u.slice(i + 1); return u.slice(0, i).includes('base64') ? decodeURIComponent(escape(atob(body))) : decodeURIComponent(body); };
+const svgURL = t => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(t);
+const vecColorCache = new Map();
+/* the colours of a vector, most used first */
+function vecColors(srcId) {
+  const v = vecOf[srcId]; if (!v) return [];
+  if (!vecColorCache.has(v)) {
+    const n = new Map(); for (const m of svgText(v).matchAll(VCOL)) { const c = m[2].toLowerCase(); n.set(c, (n.get(c) || 0) + 1); }
+    vecColorCache.set(v, [...n.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]));
+  }
+  return vecColorCache.get(v);
+}
+const recolorCache = new Map(), recolorBusy = new Set();
+const hasRecolor = rc => rc && Object.entries(rc).some(([a, b]) => a !== b);
+/* the image to draw for src with its colours swapped; the original until the recoloured raster is ready */
+function artImg(srcId, rc) {
+  const base = getImg(srcId);
+  if (!srcId || !vecOf[srcId] || !hasRecolor(rc) || !base) return base;
+  const key = srcId + '|' + JSON.stringify(Object.entries(rc).filter(([a, b]) => a !== b).sort());
+  if (recolorCache.has(key)) return recolorCache.get(key);
+  if (!recolorBusy.has(key)) {
+    recolorBusy.add(key);
+    const t = svgText(vecOf[srcId]).replace(VCOL, (m, pre, c) => pre + (rc[c.toLowerCase()] || c)), im = new Image();
+    im.onload = () => {
+      const c = document.createElement('canvas'); c.width = base.naturalWidth; c.height = base.naturalHeight; c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      c.naturalWidth = c.width; c.naturalHeight = c.height;
+      if (recolorCache.size > 48) recolorCache.delete(recolorCache.keys().next().value);
+      recolorCache.set(key, c); recolorBusy.delete(key); onAssetLoaded(srcId);
+    };
+    im.onerror = () => recolorBusy.delete(key);
+    im.src = svgURL(t);
+  }
+  return base;
+}
 async function contentHash(url) {
   try { const b = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(url)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); }
   catch { let h = 0; for (let i = 0; i < url.length; i += 7) h = (h * 31 + url.charCodeAt(i)) | 0; return 'h' + (h >>> 0).toString(16) + url.length; }
@@ -1293,13 +1355,14 @@ async function libStore(op, val) {
   } catch { return op === 'all' ? [] : null; }
 }
 /* add an image (data URL) to the library, or find it there; returns its asset id */
-async function libAdd(url, name, aspect) {
+async function libAdd(url, name, aspect, svg = null) {
   const hash = await contentHash(url);
   let it = library.find(x => x.hash === hash);
   if (!it) {
     it = { id: addAsset(url), hash, name: name || 'Изображение', aspect, added: Date.now() };
-    library.unshift(it); libStore('put', { hash, name: it.name, aspect, url, added: it.added });
-    ui.lib = true;
+    library.unshift(it); ui.lib = true;
+    if (svg) vecOf[it.id] = addAsset(svgURL(svg));
+    libStore('put', { hash, name: it.name, aspect, url, added: it.added, svg: svg ? assets[vecOf[it.id]] : null });
   }
   return it.id;
 }
@@ -1322,7 +1385,8 @@ async function libLoadBrowser() {
   const rows = await libStore('all') || [];
   for (const r of rows.sort((a, b) => b.added - a.added)) {
     if (library.some(x => x.hash === r.hash)) continue;
-    library.push({ id: addAsset(r.url), hash: r.hash, name: r.name, aspect: r.aspect, added: r.added, browser: true });
+    const id = addAsset(r.url); library.push({ id, hash: r.hash, name: r.name, aspect: r.aspect, added: r.added, browser: true });
+    if (r.svg) vecOf[id] = addAsset(r.svg);
   }
   ui.lib = true;
 }
@@ -1341,7 +1405,11 @@ function onAssetLoaded(id) {
     if (o.dieline === id) markObj(o);
     for (const k in o.faces) if (o.faces[k].layers.some(l => l.src === id)) markFace(o, k);
     if (o.product?.src === id) rebuildQueue.add(o.id);
-    for (const st of o.stickers || []) if (st.src === id) { tintCache.forEach((_, key) => key.startsWith(id + '|') && tintCache.delete(key)); touchSticker(o, st); }
+    for (const st of o.stickers || []) if (st.src === id) {
+      tintCache.forEach((_, key) => key.startsWith(id + '|') && tintCache.delete(key));
+      const look = RT.get(o.id)?.stickerLook?.get(st.id); if (look) look.key = '';
+      touchSticker(o, st);
+    }
     if ((o.stickers || []).some(st => st.text)) stickerDirty.add(o.id);
   }
   ui.layers = true; ui.stickers = true;
@@ -1351,6 +1419,9 @@ const loadImage = url => new Promise((res, rej) => { const i = new Image(); i.on
 
 async function importImageFile(file) {
   let url = await readURL(file);
+  // a vector: normalise its colours (so they can be swapped later) and rasterise that version
+  const isSvgFile = file.type.includes('svg') || /\.svg$/i.test(file.name || ''), svgSrc = isSvgFile ? normSvg(await file.text()) : null;
+  if (svgSrc) url = svgURL(svgSrc);
   const im = await loadImage(url);
   let w = im.naturalWidth || 2048, h = im.naturalHeight || 2048;
   const isSvg = file.type.includes('svg');
@@ -1362,7 +1433,7 @@ async function importImageFile(file) {
     url = file.type === 'image/jpeg' ? c.toDataURL('image/jpeg', .92) : c.toDataURL('image/png');
     w = c.width; h = c.height;
   }
-  const id = await libAdd(url, (file.name || '').replace(/\.[^.]+$/, '').slice(0, 40), w / h); getImg(id);
+  const id = await libAdd(url, (file.name || '').replace(/\.[^.]+$/, '').slice(0, 40), w / h, svgSrc); getImg(id);
   return { id, aspect: w / h };
 }
 
@@ -2699,7 +2770,7 @@ function drawLayer(ctx, L, W, H, paint = null, alpha = null) {
   ctx.globalCompositeOperation = paint ? 'source-over' : (L.blend || 'source-over');
   ctx.translate(L.x * W, L.y * H); ctx.rotate(L.rot * DEG);
   if (L.type === 'image') {
-    const im = getImg(L.src);
+    const im = artImg(L.src, L.recolor);
     if (im) {
       ctx.scale(L.flipX ? -1 : 1, L.flipY ? -1 : 1);
       let src = im;
@@ -3091,14 +3162,14 @@ function drawSticker(c, st, ppm, withShadow = true) {
     stickerMask(c, st, '#ffffff'); c.restore();
   }
   if (st.kind === 'custom') {
-    const ol = st.outline || 0, im = getImg(st.src);
+    const ol = st.outline || 0, im = artImg(st.src, st.recolor);
     if (ol > 0) { const t = tinted(st.src, '#ffffff'); if (t) for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.drawImage(t, -w / 2 + Math.cos(a) * ol, -h / 2 + Math.sin(a) * ol, w, h); } }
     if (im && foil) { const t = tinted(st.src, '#000000'); c.save(); c.drawImage(t, -w / 2, -h / 2, w, h); c.globalCompositeOperation = 'source-atop'; c.fillStyle = stickerFoil(c, st.finish, w, h); c.fillRect(-w / 2, -h / 2, w, h); c.restore(); }
     else if (im) c.drawImage(im, -w / 2, -h / 2, w, h);
   } else {
     c.save(); stickerPath(c, st, w, h); c.clip();
     if (!st.clear) { c.fillStyle = foil ? stickerFoil(c, st.finish, w, h) : st.fill; c.fillRect(-w / 2, -h / 2, w, h); }
-    const im = st.src && getImg(st.src);
+    const im = st.src && artImg(st.src, st.recolor);
     if (im) {
       const a = im.naturalWidth / im.naturalHeight, k = st.imgScale || .7;
       let iw = w * k, ih = iw / a; if (ih > h * k) { ih = h * k; iw = ih * a; }
@@ -3465,12 +3536,13 @@ function usedAssets() {
   for (const f of state.fonts) used.add(f.asset);
   return used;
 }
-const assetsOf = ids => { const out = {}; for (const id of ids) if (assets[id]) out[id] = assets[id]; return out; };
+const assetsOf = ids => { const out = {}; for (const id of ids) { if (assets[id]) out[id] = assets[id]; if (vecOf[id] && assets[vecOf[id]]) out[vecOf[id]] = assets[vecOf[id]]; } return out; };
 /* a project file carries its whole library; the autosave only what the design uses (the library is in the browser) */
 function projectJSON(withLibrary = true) {
   const ids = usedAssets(); if (withLibrary) for (const it of library) ids.add(it.id);
   return JSON.stringify({ app: 'box-studio-3d', version: 1, objects: state.objects, scene: state.scene, fonts: state.fonts,
-    library: library.filter(it => withLibrary || ids.has(it.id) || !it.browser).map(({ id, hash, name, aspect, added }) => ({ id, hash, name, aspect, added })), assets: assetsOf(ids) });
+    library: library.filter(it => withLibrary || ids.has(it.id) || !it.browser).map(({ id, hash, name, aspect, added }) => ({ id, hash, name, aspect, added })), assets: assetsOf(ids),
+    vectors: Object.fromEntries([...ids].filter(id => vecOf[id]).map(id => [id, vecOf[id]])) });
 }
 const LS_KEY = 'box-studio-3d/project';
 let saveTimer, saveWarned = false;
@@ -3485,8 +3557,10 @@ function loadProject(d, { resetHistory = true } = {}) {
   if (!d || !Array.isArray(d.objects)) throw new Error('bad project');
   for (const id of [...RT.keys()]) disposeObject(id);
   Object.assign(assets, d.assets || {});
-  for (const it of d.library || []) if (assets[it.id] && !library.some(x => x.hash === it.hash)) { library.push({ ...it }); libStore('put', { hash: it.hash, name: it.name, aspect: it.aspect, url: assets[it.id], added: it.added || Date.now() }); }
-  libAdopt(Object.keys(d.assets || {}).filter(id => !state.fonts?.some?.(f => f.asset === id) && !(d.fonts || []).some(f => f.asset === id)));
+  for (const [id, v] of Object.entries(d.vectors || {})) if (assets[v]) vecOf[id] = v;
+  for (const it of d.library || []) if (assets[it.id] && !library.some(x => x.hash === it.hash)) { library.push({ ...it }); libStore('put', { hash: it.hash, name: it.name, aspect: it.aspect, url: assets[it.id], added: it.added || Date.now(), svg: vecOf[it.id] ? assets[vecOf[it.id]] : null }); }
+  const svgIds = new Set(Object.values(d.vectors || {}));
+  libAdopt(Object.keys(d.assets || {}).filter(id => !svgIds.has(id) && !(d.fonts || []).some(f => f.asset === id)));
   state.objects = d.objects; state.scene = { ...state.scene, ...(d.scene || {}) }; state.fonts = d.fonts || [];
   if ((d.scene?.v || 1) < 2) Object.assign(state.scene, LIGHTS[state.scene.preset] || LIGHTS.studio, { v: 2 });
   state.fonts.forEach(registerFont);
@@ -3893,6 +3967,7 @@ function renderLayerProps() {
     const dpi = imageDpi(o, L);
     html += `<div class="row"><button class="btn sm" id="imgReplace">Заменить…</button><button class="btn sm" id="imgCover">Залить грань</button><button class="btn sm" id="imgFit">Вписать</button></div>
       <div class="row"><label class="check"><input type="checkbox" data-k="flipX"> Отразить ↔</label><label class="check"><input type="checkbox" data-k="flipY"> Отразить ↕</label></div>
+      ${vecColorsHTML(L.src, L.recolor)}
       <label class="check"><input type="checkbox" data-k="tile"> Повторять узором</label>
       ${rangeField(L.tile ? 'Размер плитки, %' : 'Ширина, %', 'w', 1, 400, .1, 100)}
       ${dpi != null ? `<p class="hint">При печати этого размера: <b class="mono">${dpi} dpi</b>${dpi < 150 ? ' — мало для офсета, нужно от 300 dpi' : dpi < 300 ? ' — допустимо, для офсета лучше 300 dpi' : ' — подходит для печати'}.</p>` : ''}`;
@@ -3918,7 +3993,8 @@ function renderLayerProps() {
   $('#centerBtn').onclick = () => { const L = activeLayer(); L.x = .5; L.y = .5; markFace(o, sel.face); refreshFields(sec, L); commit(); };
   $('#delLayerBtn').onclick = () => deleteLayer(L.id);
   if (L.type === 'image') {
-    $('#imgReplace').onclick = () => pickImage(async file => { const r = await importImageFile(file); const L = activeLayer(); L.src = r.id; L.aspect = r.aspect; markFace(o, sel.face); renderLayers(); renderLayerProps(); commit(); });
+    $('#imgReplace').onclick = () => pickImage(async file => { const r = await importImageFile(file); const L = activeLayer(); L.src = r.id; L.aspect = r.aspect; L.recolor = {}; markFace(o, sel.face); renderLayers(); renderLayerProps(); commit(); });
+    bindVecColors(sec, activeLayer, () => { markFace(o, sel.face); ui.layers = true; });
     $('#imgCover').onclick = () => fitImage(true);
     $('#imgFit').onclick = () => fitImage(false);
   }
@@ -3984,11 +4060,11 @@ function renderStickers() {
       ${rangeField(st.kind === 'circle' ? 'Ширина (Ø), мм' : 'Ширина, мм', 'w', 5, 400, .5)}
       ${custom ? '' : rangeField('Высота, мм', 'h', 5, 400, .5)}
       ${st.kind === 'rect' ? rangeField('Скругление, мм', 'radius', 0, 60, .5) : ''}
-      ${custom ? `<div class="row"><button class="btn sm" id="stShape">${st.src ? 'Заменить форму…' : 'Загрузить форму…'}</button></div>${rangeField('Белая окантовка, мм', 'outline', 0, 10, .1)}`
+      ${custom ? `<div class="row"><button class="btn sm" id="stShape">${st.src ? 'Заменить форму…' : 'Загрузить форму…'}</button></div>${vecColorsHTML(st.src, st.recolor)}${rangeField('Белая окантовка, мм', 'outline', 0, 10, .1)}`
         : `<div class="row"><span class="hint">Фон</span><input type="color" data-k="fill" aria-label="Цвет наклейки"><label class="check"><input type="checkbox" data-k="clear"> Без фона</label></div>
            <div class="row"><span class="hint">Обводка</span><input type="color" data-k="stroke" aria-label="Цвет обводки"><span class="grow"></span></div>${rangeField('Обводка, мм', 'strokeW', 0, 10, .1)}
            <div class="row"><button class="btn sm" id="stImg">${st.src ? 'Заменить логотип…' : 'Логотип…'}</button>${st.src ? '<button class="btn sm" id="stImgOff">Убрать</button>' : ''}</div>
-           ${st.src ? rangeField('Логотип, %', 'imgScale', 10, 100, 1, 100) : ''}`}
+           ${st.src ? rangeField('Логотип, %', 'imgScale', 10, 100, 1, 100) + vecColorsHTML(st.src, st.recolor) : ''}`}
       <textarea data-k="text" rows="1" aria-label="Текст наклейки" placeholder="Текст на наклейке"></textarea>
       <div class="grid2"><select data-k="font" aria-label="Шрифт">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
         <div class="row"><input type="color" data-k="textColor" aria-label="Цвет текста"><span class="hint">цвет текста</span></div></div>
@@ -4029,6 +4105,7 @@ function renderStickers() {
   $('#stShape') && ($('#stShape').onclick = () => pickInto('src', r => { st.aspect = r.aspect; }));
   $('#stImg') && ($('#stImg').onclick = () => pickInto('src'));
   $('#stImgOff') && ($('#stImgOff').onclick = () => { st.src = null; touchSticker(o, st); renderStickers(); commit(); });
+  bindVecColors(sec, activeSticker, t => { const look = RT.get(o.id)?.stickerLook?.get(t.id); if (look) look.key = ''; touchSticker(o, t); });
 }
 
 /* ---------- layer ops ---------- */
@@ -4066,6 +4143,28 @@ let pickCb = null;
 function pickImage(cb) { pickCb = cb; $('#imgInput').value = ''; $('#imgInput').click(); }
 $('#imgInput').onchange = e => { const f = e.target.files[0]; if (f && pickCb) pickCb(f); };
 
+/* ---------- vector colours: one row per colour of the SVG, swapped per layer / sticker ---------- */
+function vecColorsHTML(srcId, rc) {
+  const cols = vecColors(srcId); if (!cols.length) return '';
+  const shown = cols.slice(0, 16);
+  return `<div class="field wide"><span class="fl">Цвета вектора</span><div class="vcols">${shown.map(c => `<label class="vc" title="${c}"><span class="sw" style="background:${c}"></span>→<input type="color" data-vc="${c}" value="${rc?.[c] || c}" aria-label="Заменить ${c}"></label>`).join('')}</div></div>
+    <div class="row"><span class="hint">Всё одним цветом</span><input type="color" id="vcAll" value="${rc?.[cols[0]] || cols[0]}" aria-label="Перекрасить всё"><button class="btn sm" id="vcReset" ${hasRecolor(rc) ? '' : 'disabled'}>Исходные цвета</button></div>
+    ${cols.length > shown.length ? `<p class="hint">Показаны 16 главных цветов из ${cols.length}; «Всё одним цветом» перекрашивает все.</p>` : ''}`;
+}
+function bindVecColors(root, getT, onChange) {
+  const cols = () => vecColors(getT()?.src), set = (rc, done) => { const t = getT(); if (!t) return; t.recolor = rc; onChange(t); if (done) commit(); };
+  $$('[data-vc]', root).forEach(inp => {
+    const go = done => { const t = getT(); const rc = { ...(t.recolor || {}) }; if (inp.value.toLowerCase() === inp.dataset.vc) delete rc[inp.dataset.vc]; else rc[inp.dataset.vc] = inp.value.toLowerCase(); set(rc, done); };
+    inp.addEventListener('input', () => go(false)); inp.addEventListener('change', () => go(true));
+  });
+  const all = $('#vcAll', root);
+  if (all) {
+    const go = done => { const rc = Object.fromEntries(cols().map(c => [c, all.value.toLowerCase()])); set(rc, done); $$('[data-vc]', root).forEach(i => { i.value = all.value; }); };
+    all.addEventListener('input', () => go(false)); all.addEventListener('change', () => { go(true); });
+  }
+  const rs = $('#vcReset', root); if (rs) rs.onclick = () => { set({}, true); $$('[data-vc]', root).forEach(i => { i.value = i.dataset.vc; }); rs.disabled = true; };
+}
+
 /* ---------- library panel ---------- */
 function renderLibrary() {
   const sec = $('#libSec'), o = activeObj(), used = usedAssets(), L = activeLayer(), st = activeSticker();
@@ -4079,7 +4178,8 @@ function renderLibrary() {
     <button class="btn sm" id="libAddBtn">Добавить в библиотеку…</button>`;
   $$('#libSec .it').forEach(el => {
     const it = library.find(x => x.hash === el.dataset.h); if (!it) return;
-    const im = getImg(it.id); el.style.backgroundImage = `url("${assets[it.id]}")`; if (!im) getImg(it.id);
+    el.style.backgroundImage = `url("${assets[it.id]}")`; getImg(it.id);
+    if (vecOf[it.id]) el.insertAdjacentHTML('afterbegin', '<span class="vbadge">SVG</span>');
     el.onclick = e => {
       const a = e.target.closest('button')?.dataset.a, o = activeObj(); if (!o) return toast('Сначала добавьте объект');
       if (a === 'del') { libRemove(it.hash); return toast(used.has(it.id) ? 'Убрано из библиотеки (в дизайне картинка остаётся)' : 'Убрано из библиотеки'); }
@@ -4087,8 +4187,8 @@ function renderLibrary() {
       if (a === 'prod') { o.product.src = it.id; o.product.aspect = it.aspect; rebuildQueue.add(o.id); renderModel(); return commit(); }
       if (a === 'swap') {
         const L = activeLayer(), st = activeSticker();
-        if (L?.type === 'image') { L.src = it.id; L.aspect = it.aspect; markFace(o, sel.face); renderLayers(); renderLayerProps(); return commit(); }
-        if (st) { st.src = it.id; if (st.kind === 'custom') st.aspect = it.aspect; touchSticker(o, st); renderStickers(); return commit(); }
+        if (L?.type === 'image') { L.src = it.id; L.aspect = it.aspect; L.recolor = {}; markFace(o, sel.face); renderLayers(); renderLayerProps(); return commit(); }
+        if (st) { st.src = it.id; st.recolor = {}; if (st.kind === 'custom') st.aspect = it.aspect; touchSticker(o, st); renderStickers(); return commit(); }
         return;
       }
       placeLibImage(it, o, sel.face);
