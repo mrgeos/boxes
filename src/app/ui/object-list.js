@@ -76,16 +76,37 @@ function dropItems(ids, el, zone) {
   return moved;
 }
 
-/* ---------- buttons ---------- */
-function groupPicked() {
-  const g = groupItems(picked()); if (!g) return;
+/* ---------- actions (the buttons and the context menu) ---------- */
+function groupIds(ids) {
+  const g = groupItems(ids); if (!g) return;
   selectGroup(g.id); commit(); toast(`${g.name}: ${count(objectsIn(g.id).length)} в ряд. Порядок — как в списке`);
 }
-function ungroupPicked() {
-  const gs = picked().filter(isGroup); if (!gs.length) return;
+function ungroupIds(ids) {
+  const gs = ids.filter(isGroup); if (!gs.length) return;
   const items = gs.flatMap(ungroup);
   const first = items.find(id => !isGroup(id)) ?? objectsIn(items[0])[0];
   select(first ?? state.objects[0]?.id ?? null, undefined, null); sel.multi = items; renderObjects(); commit();
+}
+function duplicateIds(ids) {
+  if (!ids.length) return;
+  const copies = ids.map(duplicateItem), c = copies[0];
+  isGroup(c) ? selectGroup(c) : select(c, sel.face, null);
+  sel.multi = copies; renderObjects(); commit(); setTimeout(() => setView('fit'), 60);
+}
+function deleteIds(ids) {
+  if (!ids.length) return;
+  const names = deleteItems(ids);
+  sel.obj = null; sel.group = null; sel.multi = [];
+  const next = state.objects[0];
+  select(next?.id ?? null, next ? faceKeys(next)[0] : undefined, null); renderObjects(); commit();
+  toast(`Удалено: ${names.join(', ')}. Вернуть — Ctrl+Z`);
+}
+/* takes an item out of its group: it stands right after the group, one level up */
+function leaveGroup(id) {
+  const g = parentOf(id); if (!g) return;
+  const list = siblingsOf(g.id);
+  moveItem(id, parentOf(g.id)?.id ?? null, list[list.indexOf(g.id) + 1] ?? null);
+  renderObjects(); commit();
 }
 
 /* hooks up the object list and its buttons */
@@ -104,27 +125,15 @@ function initObjectList() {
     const el = e.target.closest('.obj'), ids = JSON.parse(e.dataTransfer.getData('application/x-bs-item') || '[]');
     if (dropItems(ids, el, el && dropZone(el, e))) { renderObjects(); commit(); }
   });
-  $('#groupBtn').onclick = groupPicked;
-  $('#ungroupBtn').onclick = ungroupPicked;
-  $('#dupObjBtn').onclick = () => {
-    const ids = picked(); if (!ids.length) return;
-    const copies = ids.map(duplicateItem), c = copies[0];
-    isGroup(c) ? selectGroup(c) : select(c, sel.face, null);
-    sel.multi = copies; renderObjects(); commit(); setTimeout(() => setView('fit'), 60);
-  };
-  $('#delObjBtn').onclick = () => {
-    const ids = picked(); if (!ids.length) return;
-    const names = deleteItems(ids);
-    sel.obj = null; sel.group = null; sel.multi = [];
-    const next = state.objects[0];
-    select(next?.id ?? null, next ? faceKeys(next)[0] : undefined, null); renderObjects(); commit();
-    toast(`Удалено: ${names.join(', ')}. Вернуть — Ctrl+Z`);
-  };
+  $('#groupBtn').onclick = () => groupIds(picked());
+  $('#ungroupBtn').onclick = () => ungroupIds(picked());
+  $('#dupObjBtn').onclick = () => duplicateIds(picked());
+  $('#delObjBtn').onclick = () => deleteIds(picked());
   // Ctrl+G groups, Ctrl+Shift+G ungroups (by key position, so it works in any keyboard layout)
   document.addEventListener('keydown', e => {
     if (!(e.ctrlKey || e.metaKey) || e.code !== 'KeyG' || e.target.closest?.('input,textarea,select')) return;
-    e.preventDefault(); e.shiftKey ? ungroupPicked() : groupPicked();
+    e.preventDefault(); e.shiftKey ? ungroupIds(picked()) : groupIds(picked());
   });
 }
 
-export { initObjectList, renderObjects };
+export { deleteIds, duplicateIds, groupIds, initObjectList, leaveGroup, picked, renderObjects, ungroupIds };

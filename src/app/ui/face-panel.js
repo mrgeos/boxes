@@ -78,8 +78,7 @@ function renderLayers() {
       if (!a) return selectLayer(id);
       const i = f.layers.findIndex(l => l.id === id), L = f.layers[i];
       if (a === 'vis') L.visible = !L.visible;
-      if (a === 'up' && i < f.layers.length - 1) [f.layers[i], f.layers[i + 1]] = [f.layers[i + 1], f.layers[i]];
-      if (a === 'down' && i > 0) [f.layers[i], f.layers[i - 1]] = [f.layers[i - 1], f.layers[i]];
+      if (a === 'up' || a === 'down') return moveLayer(id, a === 'up' ? 1 : -1);
       if (a === 'dup') return duplicateLayer(id);
       if (a === 'del') return deleteLayer(id);
       markFace(o, sel.face); renderLayers(); commit();
@@ -155,6 +154,13 @@ function deleteLayer(id) {
   if (sel.layer === id) sel.layer = null;
   markFace(o, sel.face); renderLayers(); renderLayerProps(); renderFaceTabs(); commit();
 }
+/* one step up (1) or down (-1) in the face's layers: up is drawn over the others */
+function moveLayer(id, step) {
+  const o = activeObj(), f = activeFaceData(), i = f?.layers.findIndex(l => l.id === id) ?? -1, j = i + step;
+  if (i < 0 || j < 0 || j >= f.layers.length) return;
+  [f.layers[i], f.layers[j]] = [f.layers[j], f.layers[i]];
+  markFace(o, sel.face); renderLayers(); commit();
+}
 function duplicateLayer(id) {
   const o = activeObj(), f = activeFaceData(); const L = f?.layers.find(l => l.id === id); if (!L) return;
   const c = { ...structuredClone(L), id: uid(), x: L.x + .03, y: L.y + .03 };
@@ -204,4 +210,4 @@ function initFacePanel() {
   $('#imgInput').onchange = e => { const f = e.target.files[0]; if (f && pickCb) pickCb(f); };
 }
 
-export { addImageToFace, addLayer, bindVecColors, deleteLayer, duplicateLayer, initFacePanel, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers, setFaceBg, updateFaceMeta, vecColorsHTML };
+export { addImageToFace, addLayer, bindVecColors, deleteLayer, duplicateLayer, initFacePanel, moveLayer, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers, setFaceBg, updateFaceMeta, vecColorsHTML };

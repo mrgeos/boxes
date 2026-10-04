@@ -19,16 +19,25 @@ import { exportFlat, exportTemplate } from '../net/template.js';
 import { sampleProject } from '../core/sample.js';
 
 function renderAll() { renderLibrary(); renderObjects(); renderModel(); renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); renderStickers(); renderFonts(); refreshFields($('#sceneSec'), state.scene); $('#lightPreset').value = state.scene.preset; ui.editor = ui.net = true; }
+/* a new object from a preset: at a point of the floor (mm), or to the right of the scene */
+function addObject(presetId, at = null) {
+  const o = newObject(presetId);
+  if (at) o.pos = { x: Math.round(at.x), z: Math.round(at.z) };
+  else { const b = sceneBounds(); o.pos.x = state.objects.length ? Math.round(b.max.x / S + o.dims.w / 2 + 40) : 0; }
+  state.objects.push(o); buildObject(o); select(o.id, faceKeys(o)[0], null); renderObjects(); commit(); setTimeout(() => setView('fit'), 60);
+}
+/* copies a face's background and layers onto other faces of the object */
+function copyFaceDesign(o, from, targets) {
+  const f = o.faces[from]; if (!f || !targets.length) return;
+  for (const k of targets) { o.faces[k] = { bg: f.bg, layers: f.layers.map(l => ({ ...structuredClone(l), id: uid() })) }; markFace(o, k); }
+  renderFaceTabs(); commit(); toast(`Дизайн скопирован: ${targets.map(k => faceLabel(o, k)).join(', ')}`);
+}
 function closeMenu() { $('#exportMenu').hidden = true; $('#exportBtn').setAttribute('aria-expanded', 'false'); }
 
 /* hooks up the toolbar and panel buttons */
 function initWiring() {
   $('#addPreset').innerHTML = PRESETS.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
-  $('#addObjBtn').onclick = () => {
-    const o = newObject($('#addPreset').value);
-    const b = sceneBounds(); o.pos.x = state.objects.length ? Math.round(b.max.x / S + o.dims.w / 2 + 40) : 0;
-    state.objects.push(o); buildObject(o); select(o.id, faceKeys(o)[0], null); renderObjects(); commit(); setTimeout(() => setView('fit'), 60);
-  };
+  $('#addObjBtn').onclick = () => addObject($('#addPreset').value);
   $('#faceBg').addEventListener('input', e => setFaceBg(e.target.value, false));
   $('#faceBg').addEventListener('change', () => commit());
   $('#bgAllBtn').onclick = () => {
@@ -41,9 +50,7 @@ function initWiring() {
   };
   $('#copyFaceBtn').onclick = () => {
     const o = activeObj(), f = activeFaceData(), t = $('#copyTarget').value; if (!f || !t) return toast('Выберите, куда копировать');
-    const targets = t === '*' ? outerKeys(o).filter(k => k !== sel.face) : [t];
-    for (const k of targets) { o.faces[k] = { bg: f.bg, layers: f.layers.map(l => ({ ...structuredClone(l), id: uid() })) }; markFace(o, k); }
-    renderFaceTabs(); commit(); toast(`Дизайн скопирован: ${targets.map(k => faceLabel(o, k)).join(', ')}`);
+    copyFaceDesign(o, sel.face, t === '*' ? outerKeys(o).filter(k => k !== sel.face) : [t]);
   };
   $('#addImgBtn').onclick = () => { if (!activeObj()) return; pickImage(f => addImageToFace(f)); };
   $('#addTextBtn').onclick = () => { const L = newText('Ваш текст'); const f = activeFaceData(); if (!f) return; L.color = luminance(f.bg) < .5 ? '#ffffff' : '#1c1b19'; addLayer(L); };
@@ -87,4 +94,4 @@ function initWiring() {
   try { if (localStorage.getItem('box-studio-3d/hint')) $('#stageHint').hidden = true; } catch {}
 }
 
-export { initWiring, renderAll };
+export { addObject, copyFaceDesign, initWiring, renderAll };

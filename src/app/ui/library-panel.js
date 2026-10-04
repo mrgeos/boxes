@@ -32,18 +32,19 @@ function renderLibrary() {
       if (a === 'del') { libRemove(it.hash); return toast(used.has(it.id) ? 'Убрано из библиотеки (в дизайне картинка остаётся)' : 'Убрано из библиотеки'); }
       if (a === 'st') return addSticker(newSticker('custom', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0], { src: it.id, aspect: it.aspect, w: 50, outline: 1.5, text: '' }));
       if (a === 'prod') { o.product.src = it.id; o.product.aspect = it.aspect; rebuildQueue.add(o.id); renderModel(); return commit(); }
-      if (a === 'swap') {
-        const L = activeLayer(), st = activeSticker();
-        if (L?.type === 'image') { L.src = it.id; L.aspect = it.aspect; L.recolor = {}; markFace(o, sel.face); renderLayers(); renderLayerProps(); return commit(); }
-        if (st) { st.src = it.id; st.recolor = {}; if (st.kind === 'custom') st.aspect = it.aspect; touchSticker(o, st); renderStickers(); return commit(); }
-        return;
-      }
+      if (a === 'swap') return swapImage(it);
       placeLibImage(it, o, sel.face);
     };
     el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } if (e.key === 'Delete') libRemove(it.hash); };
     el.ondragstart = e => { e.dataTransfer.setData('application/x-bs-asset', it.hash); e.dataTransfer.effectAllowed = 'copy'; };
   });
   $('#libAddBtn').onclick = () => pickImage(async file => { if (!file.type.startsWith('image/')) return toast('Нужен файл изображения'); await importImageFile(file); renderLibrary(); scheduleSave(); });
+}
+/* puts a library picture into the selected image layer or sticker */
+function swapImage(it) {
+  const o = activeObj(), L = activeLayer(), st = activeSticker(); if (!o) return;
+  if (L?.type === 'image') { L.src = it.id; L.aspect = it.aspect; L.recolor = {}; markFace(o, sel.face); renderLayers(); renderLayerProps(); return commit(); }
+  if (st) { st.src = it.id; st.recolor = {}; if (st.kind === 'custom') st.aspect = it.aspect; touchSticker(o, st); renderStickers(); return commit(); }
 }
 function placeLibImage(it, obj = activeObj(), face = sel.face, at = null) {
   if (!obj || !face || !faceKeys(obj).includes(face)) return;
@@ -53,4 +54,4 @@ function placeLibImage(it, obj = activeObj(), face = sel.face, at = null) {
   addLayer(L, face, obj);
 }
 
-export { placeLibImage, renderLibrary };
+export { placeLibImage, renderLibrary, swapImage };
