@@ -1,0 +1,154 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Box Studio 3D</title>
+<meta name="description" content="Редактор 3D-мокапов упаковки: размещение дизайнов на коробках и тубусах.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@400;700;900&family=Montserrat:ital,wght@0,400;0,500;0,700;0,900;1,400;1,700&family=Rubik:wght@400;500;700;900&family=Oswald:wght@400;700&family=Russo+One&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Roboto+Slab:wght@400;700;900&family=Lobster&family=Caveat:wght@400;700&family=Comfortaa:wght@400;700&family=Pacifico&display=swap">
+<link rel="stylesheet" href="styles.css">
+
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="reg" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <b>Box Studio 3D</b>
+      <small>мокапы упаковки · размеры в мм</small>
+    </div>
+    <div class="tb-group">
+      <button class="btn icon ghost" id="undoBtn" title="Отменить (Ctrl+Z)" aria-label="Отменить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
+      <button class="btn icon ghost" id="redoBtn" title="Повторить (Ctrl+Shift+Z)" aria-label="Повторить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg></button>
+    </div>
+    <span class="tb-sep"></span>
+    <div class="tb-group main">
+      <button class="btn ghost" id="newBtn">Новый</button>
+      <button class="btn ghost" id="sampleBtn">Пример</button>
+      <button class="btn ghost" id="openBtn">Открыть…</button>
+      <button class="btn" id="saveBtn">Сохранить проект</button>
+      <button class="btn primary" id="exportBtn" aria-haspopup="true" aria-expanded="false">Экспорт
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    </div>
+    <div class="menu" id="exportMenu" hidden>
+      <h3>Изображение сцены</h3>
+      <div class="seg" id="pngScale"><button data-v="1">1×</button><button data-v="2" class="on">2×</button><button data-v="3">3×</button><button data-v="4">4×</button></div>
+      <label class="check"><input type="checkbox" id="pngTransparent"> Прозрачный фон</label>
+      <button class="btn primary" id="pngBtn">Скачать PNG</button>
+      <button class="btn" id="videoBtn">Видео 360° (6 секунд)</button>
+      <hr>
+      <h3>Развёртка выбранного объекта</h3>
+      <button class="btn" id="tplBtn">Шаблон развёртки (SVG, мм)</button>
+      <button class="btn" id="flatBtn">Развёртка с дизайном (PNG)</button>
+      <p class="hint">Шаблон — упрощённая развёртка без клапанов. Сделайте макет поверх шаблона и загрузите его обратно в разделе «Развёртка».</p>
+    </div>
+  </header>
+
+  <aside class="panel left" aria-label="Объекты и сцена">
+    <section class="sec">
+      <div class="sec-h"><h2>Объекты в сцене</h2></div>
+      <div class="objlist" id="objList"></div>
+      <div class="row">
+        <select id="addPreset" class="grow" aria-label="Заготовка для нового объекта"></select>
+        <button class="btn" id="addObjBtn">Добавить</button>
+      </div>
+      <div class="grid2">
+        <button class="btn sm" id="dupObjBtn">Дублировать</button>
+        <button class="btn sm danger" id="delObjBtn">Удалить</button>
+      </div>
+    </section>
+    <section class="sec" id="modelSec"></section>
+    <section class="sec" id="sceneSec">
+      <div class="sec-h"><h2>Сцена и свет</h2></div>
+      <div class="field wide"><span class="fl">Освещение</span>
+        <select id="lightPreset">
+          <option value="studio">Студия, мягкий свет</option>
+          <option value="day">Дневной свет</option>
+          <option value="drama">Контрастный</option>
+          <option value="flat">Ровный каталожный</option>
+        </select></div>
+      <div id="sceneFields"></div>
+      <div class="field wide"><span class="fl">Фон</span>
+        <select data-k="bg" id="bgMode"><option value="gradient">Градиент</option><option value="solid">Сплошной</option><option value="transparent">Прозрачный</option></select></div>
+      <div class="row"><span class="hint grow">Цвета фона</span><input type="color" data-k="bg1" aria-label="Цвет фона 1"><input type="color" data-k="bg2" aria-label="Цвет фона 2"></div>
+      <label class="check"><input type="checkbox" data-k="autoRotate"> Автовращение</label>
+    </section>
+  </aside>
+
+  <main class="stage" id="stage">
+    <div id="viewport"></div>
+    <div class="views" id="views">
+      <button class="btn sm" data-view="front">Спереди</button>
+      <button class="btn sm" data-view="q">3/4</button>
+      <button class="btn sm" data-view="side">Сбоку</button>
+      <button class="btn sm" data-view="top">Сверху</button>
+      <button class="btn sm" data-view="back">Сзади</button>
+      <button class="btn sm" data-view="bottom">Снизу</button>
+      <button class="btn sm" data-view="focus" title="Приблизить выбранный объект (F или двойной клик)">К выбранному</button>
+      <button class="btn sm" data-view="fit" title="Вся сцена (H)">Показать всё</button>
+      <button class="btn sm on" id="orbitLockBtn" aria-pressed="true" title="Вращение, сдвиг и масштаб вокруг выбранного объекта">◎ Вокруг выбранного</button>
+    </div>
+    <div class="stage-hint" id="stageHint">
+      <button id="hideHint" aria-label="Скрыть подсказку">×</button>
+      <b>Клик по грани</b> — выбрать её для дизайна. <b>Перетащите выбранный слой</b> прямо по модели.<br>
+      Камера вращается вокруг выбранного объекта: левая кнопка — вращение, правая или Shift — сдвиг, колесо — масштаб.
+      <b>Двойной клик</b> или F — приблизить объект, H — вся сцена.
+    </div>
+    <div class="drop" id="dropHint" hidden>Отпустите, чтобы разместить на грани</div>
+    <div class="rec" id="recBadge" hidden>● Запись видео…</div>
+  </main>
+
+  <aside class="panel right" aria-label="Дизайн грани">
+    <section class="sec">
+      <div class="sec-h"><h2>Дизайн грани</h2><span class="badge" id="objBadge"></span></div>
+      <div class="chips" id="faceTabs"></div>
+      <div class="editor-wrap" id="editorWrap"><canvas id="editor" width="300" height="200"></canvas></div>
+      <div class="face-meta mono" id="faceMeta"></div>
+      <div class="row">
+        <span class="hint">Фон</span>
+        <input type="color" id="faceBg" aria-label="Цвет фона грани">
+        <div class="swatches" id="bgSwatches"></div>
+      </div>
+      <div class="grid2">
+        <button class="btn sm" id="bgAllBtn">Фон на все грани</button>
+        <button class="btn sm" id="clearFaceBtn">Очистить грань</button>
+      </div>
+      <div class="addrow">
+        <button class="btn" id="addImgBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>Картинка</button>
+        <button class="btn" id="addTextBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>Текст</button>
+        <button class="btn" id="addRectBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>Плашка</button>
+        <button class="btn" id="addEllBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>Круг</button>
+      </div>
+      <div class="layers" id="layers"></div>
+      <div class="row">
+        <select id="copyTarget" class="grow" aria-label="Куда скопировать дизайн"></select>
+        <button class="btn sm" id="copyFaceBtn">Копировать</button>
+      </div>
+    </section>
+    <section class="sec" id="libSec"></section>
+    <section class="sec" id="layerSec"></section>
+    <section class="sec" id="stickerSec"></section>
+    <section class="sec">
+      <div class="sec-h"><h2>Развёртка</h2><span class="mono hint" id="netSize"></span></div>
+      <canvas id="net" width="300" height="200" aria-label="Развёртка: клик по панели выбирает грань"></canvas>
+      <p class="hint">Клик по панели развёртки выбирает грань. Готовый макет всей развёртки можно наложить целиком: он сам разрежется по граням.</p>
+      <div class="grid2">
+        <button class="btn sm" id="tplBtn2">Шаблон SVG</button>
+        <button class="btn sm" id="dielineBtn">Загрузить макет</button>
+      </div>
+      <button class="btn sm danger" id="dielineOffBtn" hidden>Убрать макет развёртки</button>
+    </section>
+    <section class="sec">
+      <div class="sec-h"><h2>Свои шрифты</h2></div>
+      <p class="hint">TTF, OTF или WOFF. Шрифт сохраняется внутри проекта.</p>
+      <button class="btn sm" id="fontBtn">Загрузить шрифт…</button>
+      <div class="chips" id="fontList"></div>
+    </section>
+  </aside>
+</div>
+
+<input type="file" id="imgInput" accept="image/*" hidden>
+<input type="file" id="dielineInput" accept="image/*" hidden>
+<input type="file" id="projInput" accept=".json,application/json" hidden>
+<input type="file" id="fontInput" accept=".ttf,.otf,.woff,.woff2,font/*" hidden>
+<div id="toast" hidden role="status"></div>
+
+<!-- Скрипт редактора: файлы из src/app, сборка склеивает их в порядке из build.mjs -->
+<script type="module" data-app></script>
