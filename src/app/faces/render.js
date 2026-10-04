@@ -1,0 +1,204 @@
+// Печать на гранях: слои, текст, отделка, карты материалов
+
+/* draw a face canvas into its dieline rectangle, turned if the panel lies upside down on the die */
+function drawNetPanel(c, src, p, x, y, w, h, crop = null, inv = false) {
+  if (p.fan) {
+    // the wall unrolls into a fan; render it at the canvas' real pixel density
+    const t = c.getTransform(), sc = Math.hypot(t.a, t.b) || 1;
+    c.drawImage(fanImage(p.fan, src, Math.max(1, Math.round(w * sc)), Math.max(1, Math.round(h * sc))), x, y, w, h);
+    return;
+  }
+  c.save();
+  // quarter turns (q) of a panel lying on the sheet; inv cuts a sheet region back into the face
+  const q = p.q ?? (p.rot ? 2 : 0);
+  if (q) { c.translate(x + w / 2, y + h / 2); c.rotate((inv ? -q : q) * Math.PI / 2); if (q % 2) [w, h] = [h, w]; x = -w / 2; y = -h / 2; }
+  if (crop) c.drawImage(src, ...crop, x, y, w, h); else c.drawImage(src, x, y, w, h);
+  c.restore();
+}
+const mctx = document.createElement('canvas').getContext('2d');
+const hasLS = 'letterSpacing' in mctx;
+function textMetrics(L, H) {
+  const fs = Math.max(1, L.size * H);
+  mctx.font = fontStr(L, fs); if (hasLS) mctx.letterSpacing = (L.ls * fs) + 'px';
+  const lines = String(L.text ?? '').split('\n');
+  let mw = 0; for (const ln of lines) mw = Math.max(mw, mctx.measureText(ln).width);
+  return { fs, lines, w: Math.max(mw, fs * .3), h: fs * L.lh * lines.length };
+}
+function layerBox(L, W, H) {
+  if (L.type === 'image') { const im = getImg(L.src); const a = im ? im.naturalWidth / im.naturalHeight : (L.aspect || 1); const w = L.w * W; return [w, w / a]; }
+  if (L.type === 'shape') return [L.w * W, L.h * H];
+  const m = textMetrics(L, H); return [m.w, m.h];
+}
+const tmp = document.createElement('canvas');
+ const tctx = tmp.getContext('2d');
+const tileC = document.createElement('canvas');
+function foilPaint(ctx, effect, W, H) {
+  if (effect === 'foil-holo') {
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    ['#f9c5e4', '#c3e8ff', '#d9ffd2', '#fff6c2', '#e6ccff', '#bdf3ff'].forEach((c, i, a) => g.addColorStop(i / (a.length - 1), c));
+    return g;
+  }
+  const [a, b, c] = FOILS[effect];
+  const g = ctx.createLinearGradient(0, 0, W * .6, H);
+  g.addColorStop(0, a); g.addColorStop(.45, b); g.addColorStop(.7, a); g.addColorStop(1, c);
+  return g;
+}
+/* draws a layer into a face-sized context; `paint` overrides its colours (silhouette) */
+function drawLayer(ctx, L, W, H, paint = null, alpha = null) {
+  if (!L.visible) return;
+  const [w, h] = layerBox(L, W, H);
+  ctx.save();
+  ctx.globalAlpha = alpha ?? L.opacity;
+  ctx.globalCompositeOperation = paint ? 'source-over' : (L.blend || 'source-over');
+  ctx.translate(L.x * W, L.y * H); ctx.rotate(L.rot * DEG);
+  if (L.type === 'image') {
+    const im = artImg(L.src, L.recolor);
+    if (im) {
+      ctx.scale(L.flipX ? -1 : 1, L.flipY ? -1 : 1);
+      let src = im;
+      if (paint) {
+        const tw = Math.max(1, Math.ceil(w)), th = Math.max(1, Math.ceil(h));
+        tmp.width = tw; tmp.height = th;
+        tctx.globalCompositeOperation = 'source-over'; tctx.drawImage(im, 0, 0, tw, th);
+        tctx.globalCompositeOperation = 'source-in';
+        tctx.setTransform(1, 0, 0, 1, -(L.x * W - w / 2), -(L.y * H - h / 2));
+        tctx.fillStyle = paint; tctx.fillRect(L.x * W - w / 2, L.y * H - h / 2, tw, th);
+        tctx.setTransform(1, 0, 0, 1, 0, 0);
+        src = tmp;
+      }
+      if (L.tile) {
+        // repeat the image as a pattern across the whole face; the layer box is one tile
+        const tw = clamp(Math.round(w), 1, 4096), th = clamp(Math.round(h), 1, 4096);
+        tileC.width = tw; tileC.height = th; tileC.getContext('2d').drawImage(src, 0, 0, tw, th);
+        const pat = ctx.createPattern(tileC, 'repeat');
+        pat.setTransform(new DOMMatrix().translate(-w / 2, -h / 2).scale(w / tw, h / th));
+        const rr = Math.hypot(W, H) * 1.5; ctx.fillStyle = pat; ctx.fillRect(-rr, -rr, rr * 2, rr * 2);
+      } else ctx.drawImage(src, -w / 2, -h / 2, w, h);
+    }
+  } else if (L.type === 'shape') {
+    const fill = paint || L.fill, sw = L.stroke * Math.min(W, H);
+    ctx.beginPath();
+    if (L.kind === 'ellipse') ctx.ellipse(0, 0, Math.max(.1, w / 2 - sw / 2), Math.max(.1, h / 2 - sw / 2), 0, 0, Math.PI * 2);
+    else { const r = Math.min(L.radius * Math.min(w, h) / 2, w / 2, h / 2); ctx.roundRect(-w / 2 + sw / 2, -h / 2 + sw / 2, Math.max(.1, w - sw), Math.max(.1, h - sw), r); }
+    if (sw > 0) { ctx.lineWidth = sw; ctx.strokeStyle = fill; ctx.stroke(); } else { ctx.fillStyle = fill; ctx.fill(); }
+  } else {
+    const m = textMetrics(L, H);
+    ctx.font = fontStr(L, m.fs); if (hasLS) ctx.letterSpacing = (L.ls * m.fs) + 'px';
+    ctx.textBaseline = 'middle'; ctx.textAlign = L.align; ctx.fillStyle = paint || L.color;
+    const ax = L.align === 'left' ? -m.w / 2 : L.align === 'right' ? m.w / 2 : 0;
+    // letterSpacing adds trailing space after the last glyph; nudge centred text back
+    const nudge = hasLS && L.align === 'center' ? L.ls * m.fs / 2 : 0;
+    m.lines.forEach((ln, i) => ctx.fillText(ln, ax + nudge, -m.h / 2 + m.fs * L.lh * (i + .5)));
+  }
+  ctx.restore();
+}
+function renderFace(o, k) {
+  const rt = RT.get(o.id); if (!rt || !faceKeys(o).includes(k)) return;
+  const f = ensureFaceRT(o, k), face = o.faces[k], ctx = f.ctx;
+  const W = f.canvas.width, H = f.canvas.height;
+  // print on a clear PET lid: no board colour, paper grain or kraft, only the layers
+  const clear = f.clear = isClearFace(o, k);
+  const bf = clear && o.type === 'bag' ? BAG_FILM[o.bagMat] : null;
+  const fin = clear ? bf?.fin || PET_PRINT : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = faceGrain(o, k);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  if (clear) { ctx.clearRect(0, 0, W, H); if (bf?.ground) { ctx.fillStyle = bf.ground; ctx.fillRect(0, 0, W, H); } }
+  else { ctx.fillStyle = face.bg; ctx.fillRect(0, 0, W, H); }
+  if (!clear && o.dieline && outerKeys(o).includes(k)) {
+    const im = getImg(o.dieline), net = netLayout(o), p = net.panels.find(p => p.key === k);
+    if (im && p?.fan) ctx.drawImage(fanToRect(p.fan, im, W, H, o.dieline), 0, 0);
+    else if (im && p) drawNetPanel(ctx, im, p, 0, 0, W, H, [p.x / net.W * im.naturalWidth, p.y / net.H * im.naturalHeight, p.w / net.W * im.naturalWidth, p.h / net.H * im.naturalHeight], true);
+  }
+  const fxl = [];
+  for (const L of face.layers) {
+    if (!L.visible) continue;
+    if (L.type === 'text') ensureFont(L);
+    if (isFoil(L.effect)) fxl.push(L);
+    else { drawLayer(ctx, L, W, H); if (L.effect !== 'none') fxl.push(L); }
+  }
+  if (fin.kraft && !clear) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = fin.kraft; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
+  if (grain > 0 && !clear) {
+    const grainPat = f.pat || (f.pat = ctx.createPattern(grainCanvas, 'repeat'));
+    grainPat.setTransform(new DOMMatrix().scale(f.ppm * 45 / 256));
+    ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = Math.min(1, grain * (fin.kraft ? .9 : .45));
+    ctx.fillStyle = grainPat; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
+  for (const L of fxl) if (isFoil(L.effect)) drawLayer(ctx, L, W, H, foilPaint(ctx, L.effect, W, H), 1);
+  if (bf && o.bagStyle !== 'block' && (k === 'front' || k === 'back')) bagSeals(ctx, o, W, H);
+  const bw = o.type === 'bag' ? bagWindows(o)[k] : null;
+  f.win = !!bw;
+  if (bw) {
+    const kk = W / faceMM(o, k)[0];
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out'; ctx.beginPath();
+    ctx.roundRect(bw[0] * W, (1 - bw[3]) * H, (bw[1] - bw[0]) * W, (bw[3] - bw[2]) * H, bw.r * kk); ctx.fill(); ctx.restore();
+  }
+  // stickers sit on top of everything printed
+  const ops = [];
+  const frs = RT.get(o.id)?.frames;
+  if (!skipStickers) for (const st of o.stickers || []) {
+    if (!st.visible) continue;
+    const pls = placementsFor(o, st);
+    for (const pl of pls) {
+      if (pl.key !== k) continue;
+      // under a flap or lid the board is hidden by the outer face; no shadow there (it would show once opened)
+      const F = frs?.[k];
+      if (isClearFace(o, k)) continue;
+      if (F && pls.some(q => q.key !== k && frs[q.key] && frs[q.key].n.dot(F.n) > .99 && frs[q.key].c.dot(F.n) > F.c.dot(F.n) + .2)) continue;
+      ops.push({ st, M: pl.M });
+    }
+  }
+  const ppx = W / faceMM(o, k)[0], film = !!RT.get(o.id)?.frames;
+  for (const { st, M } of ops) {
+    ctx.setTransform(M[0] * ppx, M[1] * ppx, M[2] * ppx, M[3] * ppx, M[4] * ppx, M[5] * ppx);
+    if (film) stickerShadow(ctx, st, ppx); else drawSticker(ctx, st, ppx);
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  f.tex.needsUpdate = true;
+  updateFaceMaterial(o, k, f, fxl, fin, film ? [] : ops);
+}
+let skipStickers = false;
+function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
+  const m = f.mat;
+  const needFx = ops.length > 0 || fxl.some(L => isFoil(L.effect) || L.effect === 'spot-uv');
+  const needBump = ops.length > 0 || fxl.some(L => isFoil(L.effect) || L.effect === 'emboss' || L.effect === 'deboss');
+  const opsDraw = (x, ppx, color) => { for (const { st, M } of ops) { x.setTransform(M[0] * ppx, M[1] * ppx, M[2] * ppx, M[3] * ppx, M[4] * ppx, M[5] * ppx); stickerMask(x, st, color(st)); } x.setTransform(1, 0, 0, 1, 0, 0); };
+  if (needFx) {
+    const c = aux(f, 'fx'), x = f.fxCtx, W = c.width, H = c.height;
+    x.globalAlpha = 1; x.fillStyle = `rgb(0,${Math.round(fin.r * 255)},${Math.round(fin.m * 255)})`; x.fillRect(0, 0, W, H);
+    for (const L of fxl) {
+      if (isFoil(L.effect)) drawLayer(x, L, W, H, `rgb(0,${L.effect === 'foil-holo' ? 30 : 58},255)`, 1);
+      else if (L.effect === 'spot-uv') drawLayer(x, L, W, H, `rgb(0,10,${Math.round(fin.m * 255)})`, 1);
+    }
+    opsDraw(x, W / faceMM(o, k)[0], st => { const [r, mt] = STICKER_FX[st.finish] || STICKER_FX.gloss; return `rgb(0,${Math.round(r * 255)},${Math.round(mt * 255)})`; });
+    f.fxTex.needsUpdate = true;
+    m.roughnessMap = m.metalnessMap = f.fxTex; m.roughness = 1; m.metalness = 1;
+  } else { m.roughnessMap = m.metalnessMap = null; m.roughness = fin.r; m.metalness = fin.m; }
+  if (needBump) {
+    const c = aux(f, 'bump'), x = f.bumpCtx, W = c.width, H = c.height;
+    x.filter = 'none'; x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
+    x.fillStyle = '#808080'; x.fillRect(0, 0, W, H);
+    if (faceGrain(o, k) > 0 && !f.clear) {
+      const p = x.createPattern(grainCanvas, 'repeat'); p.setTransform(new DOMMatrix().scale(f.ppm / 2 * 45 / 256));
+      x.globalCompositeOperation = 'overlay'; x.globalAlpha = faceGrain(o, k) * .6; x.fillStyle = p; x.fillRect(0, 0, W, H);
+      x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1;
+    }
+    x.filter = `blur(${Math.max(.6, f.ppm / 2 * .35)}px)`;
+    for (const L of fxl) {
+      if (L.effect === 'emboss') drawLayer(x, L, W, H, '#ffffff', 1);
+      else if (L.effect === 'deboss') drawLayer(x, L, W, H, '#000000', 1);
+      else if (isFoil(L.effect)) drawLayer(x, L, W, H, '#5c5c5c', 1);
+    }
+    opsDraw(x, W / faceMM(o, k)[0], () => '#a6a6a6');   // a sticker stands a little proud of the board
+    x.filter = 'none';
+    f.bumpTex.needsUpdate = true;
+    m.bumpMap = f.bumpTex; m.bumpScale = 4;
+  } else if (faceGrain(o, k) > 0 && !f.clear) { m.bumpMap = f.grain; m.bumpScale = faceGrain(o, k) * 1.2; }
+  else m.bumpMap = null;
+  m.clearcoat = fin.cc; m.clearcoatRoughness = fin.ccr;
+  m.sheen = fin.sheen || 0; m.sheenRoughness = .8; m.sheenColor.set(0xffffff);
+  // bag film keeps depth so the flap and stickers on it always cover the side beneath
+  m.transparent = !!f.clear; m.depthWrite = !f.clear || o.type === 'bag';
+  m.alphaTest = f.win ? .5 : 0;   // a window cut in a paper bag
+  const sig = [!!m.roughnessMap, !!m.bumpMap, fin.cc > 0, !!fin.sheen, !!f.clear, !!f.win].join();
+  if (sig !== f.sig) { f.sig = sig; m.needsUpdate = true; }
+}
