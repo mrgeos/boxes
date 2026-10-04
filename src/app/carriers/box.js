@@ -1,6 +1,6 @@
 // Коробка: основание, крышки (откидная, с клапаном, мейлер, крышка-дно, прозрачная), окно с плёнкой
 import * as THREE from 'three';
-import { DEG, S, V2, clamp, r1, rrPoly, splitBand } from '../core/util.js';
+import { DEG, S, V2, clamp, rrPoly, splitBand } from '../core/util.js';
 import { clearLid, doubleWall, faceMM, netLayout, wallMM } from '../core/model.js';
 import { contactMat } from '../scene/renderer.js';
 import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';

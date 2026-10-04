@@ -15,7 +15,7 @@ import { buildBox } from '../carriers/box.js';
 import { buildSleeve, sleeveColors } from '../carriers/sleeve.js';
 import { computeFrames } from '../stickers/placement.js';
 import { buildStickerFilms } from '../stickers/film.js';
-import { camTween, orbitLock, updateShadowCam } from './camera.js';
+import { camTween, invalidate, orbitLock, updateShadowCam } from './camera.js';
 
 const viewport = $('#viewport');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -111,6 +111,7 @@ function aux(f, n) {
   return f[n];
 }
 function buildObject(o) {
+  invalidate();
   ensureFaces(o);
   let rt = RT.get(o.id);
   if (!rt) {
@@ -138,6 +139,7 @@ function buildObject(o) {
   rt.stickerMeshes = []; buildStickerFilms(o);
 }
 function disposeObject(id) {
+  invalidate();
   const rt = RT.get(id); if (!rt) return;
   rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
   world.remove(rt.group);
@@ -170,6 +172,7 @@ const contactMat = (() => {
   return new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false });
 })();
 function applyTransform(o) {
+  invalidate();
   const rt = RT.get(o.id); if (!rt) return;
   const before = rt.group.position.clone();
   rt.group.position.set(o.pos.x * S, 0, o.pos.z * S); rt.group.rotation.y = o.rotY * DEG;
@@ -179,6 +182,7 @@ function applyTransform(o) {
   updateShadowCam();
 }
 function applyLid(o) {
+  invalidate();
   const rt = RT.get(o.id); if (!rt) return;
   if (rt.bagPivot) rt.bagPivot.rotation.x = -clamp(o.lid, 0, 180) * DEG;
   if (rt.bagTape) rt.bagTape.visible = o.lid > 1;
@@ -217,6 +221,7 @@ function applyLid(o) {
   }
 }
 function applyObjMaterials(o) {
+  invalidate();
   const rt = RT.get(o.id); if (!rt) return;
   rt.edgeMat.color.set(o.edge);
   const inner = new THREE.Color(o.type === 'bag' ? (o.whiteInside ? WHITE_INSIDE : o.board) : o.type === 'dome' ? o.faces.insideBottom?.bg || '#f4f1ea' : o.faces.inside?.bg || '#f4f1ea');

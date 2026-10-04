@@ -9,9 +9,12 @@
 //
 // Скрипт хранится в файле сжатым (gzip, base64) и распаковывается браузером при открытии:
 // так файл в несколько раз меньше, и его целиком открывают просмотрщики с лимитом размера.
+//
+// node build.mjs --check ничего не пишет, а сверяет box-studio-3d.html со сборкой из src/ (так делает CI).
+// Сравнивается распакованный скрипт: сжатые байты могут отличаться между версиями zlib.
 import { build } from 'esbuild';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { gzipSync } from 'node:zlib';
+import { gzipSync, gunzipSync } from 'node:zlib';
 
 const read = f => readFileSync(new URL(f, import.meta.url), 'utf8');
 
@@ -40,5 +43,12 @@ const parts = [['<link rel="stylesheet" href="styles.css">', `<style>\n${read('s
 let html = page;
 for (const [from, to] of parts) { if (!html.includes(from)) throw new Error('В src/index.html нет ' + from); html = html.replace(from, () => to); }
 html = html.replace('<title>Box Studio 3D</title>', '<!-- Собрано из src/ командой npm run build. Включает three.js (MIT License, © three.js authors), скрипт сжат gzip. -->\n<title>Box Studio 3D</title>');
+const unpack = h => { const m = h.match(/const z = "([^"]*)";/); return m ? [h.replace(m[1], ''), gunzipSync(Buffer.from(m[1], 'base64')).toString('utf8')] : [h, '']; };
+if (process.argv.includes('--check')) {
+  const [a, b] = [unpack(read('box-studio-3d.html')), unpack(html)];
+  if (a[0] !== b[0] || a[1] !== b[1]) { console.error('box-studio-3d.html не совпадает со сборкой из src/: выполните npm run build и закоммитьте его'); process.exit(1); }
+  console.log('box-studio-3d.html совпадает со сборкой из src/');
+  process.exit(0);
+}
 writeFileSync(new URL('box-studio-3d.html', import.meta.url), html);
 console.log(`box-studio-3d.html: ${(Buffer.byteLength(html) / 1024).toFixed(0)} КБ (скрипт без сжатия ${(Buffer.byteLength(js) / 1024).toFixed(0)} КБ, ${Object.keys(out.metafile.inputs).filter(f => f.startsWith('src/app/')).length} модулей)`);

@@ -4,7 +4,6 @@ import { S, V2, arcPts, clamp, rrPoly } from '../core/util.js';
 import { FINISHES } from '../core/constants.js';
 import { RT } from '../scene/renderer.js';
 import { quadGeo } from '../scene/geometry.js';
-import { down } from '../scene/interaction.js';
 
 /* ---------- sleeve ----------
    A paper band glued into a tube around a closed box (or round an open tray: a matchbox-style box).

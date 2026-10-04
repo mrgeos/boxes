@@ -6,7 +6,7 @@ import { markAllText } from './core/fonts.js';
 import { RT, camera, controls, renderer, scene } from './scene/renderer.js';
 import { placementsFor } from './stickers/placement.js';
 import { buildStickerFilms } from './stickers/film.js';
-import { applyScene, initCamera, orbitLock, resize, setOrbitLock, setView } from './scene/camera.js';
+import { applyScene, initCamera, invalidate, orbitLock, resize, setOrbitLock, setView } from './scene/camera.js';
 import { select } from './core/selection.js';
 import { LS_KEY, loadProject } from './core/project.js';
 import { bindScene } from './ui/model-panel.js';
@@ -34,4 +34,4 @@ try { const saved = localStorage.getItem(LS_KEY); if (saved) { loadProject(JSON.
 if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
 libLoadBrowser();
-window.__boxStudio = { library, state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target, placementsFor, __bsf: o => buildStickerFilms(o) };
+window.__boxStudio = { library, state, sel, select, setView, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };

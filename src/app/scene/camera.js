@@ -27,9 +27,15 @@ let camTween = null, lastView = 'q';
 let orbitLock = true;
 try { orbitLock = localStorage.getItem('box-studio-3d/orbit') !== 'free'; } catch {}
 const view = { x: 0, y: 0 };
+/* the 3D view is drawn only while something changes, so a still scene costs no GPU time:
+   the loop draws when a queue has work, the camera moves or a face flashes, and for a moment after
+   anything that may change the scene in place (input, a new view, scene settings) */
+let drawUntil = 0;
+function invalidate(ms = 200) { drawUntil = Math.max(drawUntil, performance.now() + ms); }
    // screen-space pan, CSS px
 const lockActive = () => orbitLock && !!activeObj();
 function applyViewOffset() {
+  invalidate();
   const w = viewport.clientWidth, h = viewport.clientHeight;
   if (!w || !h) return;
   if (Math.abs(view.x) < .01 && Math.abs(view.y) < .01) camera.clearViewOffset();
@@ -40,6 +46,7 @@ function fitDistance(r) {
   return r / Math.sin(Math.min(vf, hf)) * 1.08;
 }
 function tweenCamera(p1, q1, instant = false) {
+  invalidate();
   if (instant) { camera.position.copy(p1); controls.target.copy(q1); view.x = view.y = 0; applyViewOffset(); controls.update(); return; }
   camTween = { t0: performance.now(), p0: camera.position.clone(), q0: controls.target.clone(), p1, q1, v0: { ...view } };
 }
@@ -78,6 +85,7 @@ function setOrbitLock(on) {
   if (on) focusSelected(); else if (view.x || view.y) tweenCamera(camera.position.clone(), controls.target.clone());
 }
 function updateShadowCam() {
+  invalidate();
   const b = sceneBounds(), c = b.getCenter(new THREE.Vector3()), r = Math.max(.5, b.getBoundingSphere(new THREE.Sphere()).radius);
   const s = state.scene, az = s.az * DEG, el = s.el * DEG;
   const dir = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
@@ -86,6 +94,7 @@ function updateShadowCam() {
   const sc = keyLight.shadow.camera; sc.left = sc.bottom = -r * 1.6; sc.right = sc.top = r * 1.6; sc.near = .01; sc.far = r * 10; sc.updateProjectionMatrix();
 }
 function applyScene() {
+  invalidate();
   const s = state.scene;
   keyLight.intensity = s.light; fillLight.intensity = s.light * .18;
   scene.environmentIntensity = s.env; floor.material.opacity = s.shadow;
@@ -109,7 +118,11 @@ function setRecording(v) { recording = v; }
 /* resizes the view with its box and starts the render loop */
 function initCamera() {
   new ResizeObserver(resize).observe(viewport);
+  // a handler may change materials or the scene directly: draw after any input
+  for (const t of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'click', 'drop', 'paste']) addEventListener(t, () => invalidate(), { capture: true, passive: true });
+  renderer.domElement.addEventListener('pointermove', () => invalidate(), { passive: true });
   renderer.setAnimationLoop(now => {
+    let changed = rebuildQueue.size || dirtyFaces.size || stickerDirty.size || camTween || recording || now < drawUntil;
     for (const id of rebuildQueue) { const o = state.objects.find(x => x.id === id); if (o) buildObject(o); }
     if (rebuildQueue.size) { rebuildQueue.clear(); updateShadowCam(); }
     for (const key of dirtyFaces) {
@@ -126,12 +139,12 @@ function initCamera() {
     }
     controls.enablePan = !lockActive();
     if (recording) recording.step(now);
-    else controls.update();
+    else if (controls.update()) changed = true;
     for (const rt of RT.values()) for (const k in rt.faces) {
       const f = rt.faces[k];
-      if (f.flash > 0) { f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
+      if (f.flash > 0) { changed = true; f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
     }
-    renderer.render(scene, camera);
+    if (changed) renderer.render(scene, camera);
     if (ui.editor) { ui.editor = false; drawEditor(); }
     if (ui.net) { ui.net = false; drawNet(); }
     if (ui.layers) { ui.layers = false; renderLayers(); }
@@ -140,4 +153,4 @@ function initCamera() {
   });
 }
 
-export { accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view };
+export { accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view };

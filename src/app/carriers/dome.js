@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { S, clamp } from '../core/util.js';
 import { LID_WALLS } from '../core/constants.js';
 import { faceMM } from '../core/model.js';
-import { floor } from '../scene/renderer.js';
 import { loopSurface, quadGeo, rrLoop, rrectPts } from '../scene/geometry.js';
 
 const applyDomePreset = (o, p) => Object.assign(o, { trayH: p.dome.trayH, botK: p.dome.botK, flangeW: p.dome.flange, domeTop: p.dome.top, cornerR: p.dome.cr, lid: 0 });

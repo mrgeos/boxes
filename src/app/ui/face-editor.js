@@ -115,7 +115,7 @@ const edUp = () => { if (edState.drag) { edState.drag = null; edState.guides = [
 /* hooks up the 2D editor */
 function initFaceEditor() {
   ed.addEventListener('pointerdown', e => {
-    const o = activeObj(), f = activeFaceData(); if (!f) return;
+    const f = activeFaceData(); if (!f) return;
     const [mx, my] = edPoint(e), { k, W, H } = edState, px = mx / k, py = my / k;
     const L = activeLayer(), hd = edState.handles;
     let mode = null;

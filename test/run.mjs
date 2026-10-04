@@ -22,6 +22,22 @@ await test('открывается без интернета, пример из 
   await ctx.close();
 });
 
+await test('сцена рисуется только при изменениях', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  const frames = () => page.evaluate(() => window.__boxStudio.renderer.info.render.frame);
+  let f0 = -1; for (let f = await frames(); f !== f0; f = await frames()) { f0 = f; await page.waitForTimeout(800); }   // wait until it settles
+  await page.waitForTimeout(1000);
+  assert.equal(await frames(), f0, 'в покое сцена не перерисовывается');
+  const shot = () => page.locator('#viewport').screenshot();
+  const before = await shot();
+  await page.$eval('#faceBg', el => { el.value = '#ff0000'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForTimeout(800);
+  assert.ok(await frames() > f0, 'после правки сцена перерисована');
+  assert.ok(!before.equals(await shot()), 'новый цвет грани виден в 3D');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 const presets = only && !'все заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return ids; })();
 if (presets.length) await test(`все заготовки (${presets.length}): построение, пломба, открывание, шаблон SVG`, async () => {
   const { ctx, page, errors } = await openEditor(browser);

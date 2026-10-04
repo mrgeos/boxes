@@ -1,6 +1,6 @@
 // Тортница: непрозрачное дно и прозрачная крышка из ПЭТ
 import * as THREE from 'three';
-import { DEG, S, V2, clamp, r1 } from '../core/util.js';
+import { DEG, S, clamp } from '../core/util.js';
 import { faceMM } from '../core/model.js';
 
 const TORTE_COLORS = [['#b8893a', 'Золото'], ['#c3c7cc', 'Серебро'], ['#1d1d1f', 'Чёрное'], ['#f4f4f1', 'Белое'], ['#7a1f2b', 'Бордо']];

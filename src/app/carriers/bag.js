@@ -283,7 +283,7 @@ function bagSeals(c, o, W, H) {
 }
 /* bag die: an edge two panels share is a fold, any other edge is cut; seals and the tape are marked */
 function bagSVG(o, n, f, label) {
-  const segs = [], key = (a, b, c, d) => [a, b, c, d].map(v => v.toFixed(2)).join(',');
+  const key = (a, b, c, d) => [a, b, c, d].map(v => v.toFixed(2)).join(',');
   const edges = p => [[p.x, p.y, p.x + p.w, p.y], [p.x, p.y + p.h, p.x + p.w, p.y + p.h], [p.x, p.y, p.x, p.y + p.h], [p.x + p.w, p.y, p.x + p.w, p.y + p.h]];
   const cut = [], fold = new Map(), zig = [];
   for (const p of n.panels) for (const [x1, y1, x2, y2] of edges(p)) {
