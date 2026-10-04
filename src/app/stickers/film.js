@@ -7,7 +7,6 @@ import { artImg } from '../core/vector.js';
 import { ensureFont, fontStr } from '../core/fonts.js';
 import { RT, maxAniso } from '../scene/renderer.js';
 import { torteSample } from '../carriers/torte.js';
-import { tmp } from '../faces/render.js';
 import { STICKER_FX, placementsFor, stickerSize } from './placement.js';
 import { dragSt } from '../scene/interaction.js';
 

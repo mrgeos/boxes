@@ -1,6 +1,6 @@
 // Бумажный стакан: конус, развёртка веером
 import * as THREE from 'three';
-import { S, clamp, pixelsOf, r1, sampleInto } from '../core/util.js';
+import { S, clamp, pixelsOf, sampleInto } from '../core/util.js';
 
 /* ---------- paper cup ----------
    The printed side wall is a cone. It is designed on a rectangle that maps onto the cone conformally:
