@@ -1,10 +1,8 @@
 // Тортница: непрозрачное дно и прозрачная крышка из ПЭТ
+import * as THREE from 'three';
+import { DEG, S, V2, clamp, r1 } from '../core/util.js';
+import { faceMM } from '../core/model.js';
 
-PRESETS.push(
-  // cake containers: w = base diameter, h = total height; the lid diameter and the base height are their own settings
-  { id: 'torte207', label: 'Тортница T-207, ⌀237×110', type: 'torte', dims: { w: 237, h: 110, d: 237 }, finish: 'matte', edge: '#ffffff', thick: .3, board: '#ffffff', grain: 0, torte: { lidD: 208, baseH: 18, lidR: 12, color: '#b8893a', fin: 'metal' } },
-  { id: 'torte18', label: 'Тортница T-18, ⌀180×103', type: 'torte', dims: { w: 180, h: 103, d: 180 }, finish: 'matte', edge: '#ffffff', thick: .3, board: '#ffffff', grain: 0, torte: { lidD: 158, baseH: 15, lidR: 10, color: '#b8893a', fin: 'metal' } },
-);
 const TORTE_COLORS = [['#b8893a', 'Золото'], ['#c3c7cc', 'Серебро'], ['#1d1d1f', 'Чёрное'], ['#f4f4f1', 'Белое'], ['#7a1f2b', 'Бордо']];
 const TORTE_FIN = { metal: 'Металлик', gloss: 'Глянцевый цветной ПЭТ', clear: 'Прозрачный ПЭТ' };
 const applyTortePreset = (o, p) => Object.assign(o, { lidD: p.torte.lidD, baseH: p.torte.baseH, lidR: p.torte.lidR, lidDraft: .03, baseColor: p.torte.color, baseFin: p.torte.fin, lid: 0 });
@@ -169,3 +167,5 @@ function tautSection(pts, r) {
   }
   for (const [i, rho, y] of moved) { pts[i].rho = rho; pts[i].y = y; }
 }
+
+export { TORTE_COLORS, TORTE_FIN, applyTortePreset, buildTorte, torteGeom, torteSample };

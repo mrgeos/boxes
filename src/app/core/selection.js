@@ -1,4 +1,11 @@
 // Выбор объекта, грани, слоя
+import { activeObj, sel } from './state.js';
+import { faceKeys } from './model.js';
+import { RT, ui } from '../scene/renderer.js';
+import { accent, focusSelected, orbitLock } from '../scene/camera.js';
+import { renderModel, renderObjects } from '../ui/model-panel.js';
+import { renderFacePanel, renderFaceTabs, renderLayerProps, renderLayers } from '../ui/face-panel.js';
+import { renderStickers } from '../ui/stickers-panel.js';
 
 function select(objId, face = undefined, layerId = null, { flash = false } = {}) {
   const changedObj = sel.obj !== objId;
@@ -16,3 +23,5 @@ function select(objId, face = undefined, layerId = null, { flash = false } = {})
   ui.editor = ui.net = ui.lib = true;
 }
 function selectLayer(id) { ui.lib = true; sel.layer = id; if (id && sel.sticker) { sel.sticker = null; ui.stickers = true; } renderLayers(); renderLayerProps(); ui.editor = true; }
+
+export { select, selectLayer };

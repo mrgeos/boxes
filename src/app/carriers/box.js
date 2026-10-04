@@ -1,4 +1,10 @@
 // Коробка: основание, крышки (откидная, с клапаном, мейлер, крышка-дно, прозрачная), окно с плёнкой
+import * as THREE from 'three';
+import { DEG, S, V2, clamp, r1, rrPoly, splitBand } from '../core/util.js';
+import { clearLid, doubleWall, faceMM, netLayout, wallMM } from '../core/model.js';
+import { contactMat } from '../scene/renderer.js';
+import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
+import { bridgeMM, buildHandleBox, frontWinMM, joinWinMM } from './handle-box.js';
 
 /* lid outline in mm: an outer-flap lid overhangs the base by the board thickness on the sides and front */
 function lidDimsMM(o) {
@@ -315,3 +321,5 @@ function buildBox(o, rt) {
     add(pivot, TW, T, rt.edgeMat, [0, -TF, z - T / 2], [P / 2, 0, 0]);
   }
 }
+
+export { buildBox, cutNetWindow, faceWindow, lidDimsMM, netWindowPath, netWindows, winMM, windowPath, windowPlace };

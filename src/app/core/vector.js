@@ -1,4 +1,6 @@
 // Векторные картинки: исходник SVG, его цвета и перекраска
+import { assets } from './state.js';
+import { getImg, onAssetLoaded } from './assets.js';
 
    // { id: asset id, hash, name, aspect, added }
 /* ---------- vector images ----------
@@ -59,3 +61,5 @@ function artImg(srcId, rc) {
   }
   return base;
 }
+
+export { artImg, hasRecolor, normSvg, svgURL, vecColors, vecOf };

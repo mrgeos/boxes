@@ -1,4 +1,7 @@
 // Геометрия деталей: плоскости с вырезами, ленты, сетки по поверхности
+import * as THREE from 'three';
+import { S, V2, clamp, dedupe } from '../core/util.js';
+import { faceMM } from '../core/model.js';
 
 /* polyline of a U-shaped notch cut into the top or bottom edge of a centred W×H plane */
 function notchPts(W, H, hw, depth, r, edge) {
@@ -102,3 +105,5 @@ function surfFrame(o, key, s3, parent, pinv) {
   };
   return { c: V(s3.rest.c), u, v, n, w, h, parent, pinv, map, nrm, key };
 }
+
+export { gridGeo, loopSurface, notchPts, planeGeo, planeGeoHole, quadGeo, ribbonGeo, rrLoop, rrectPts, surfFrame };

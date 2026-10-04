@@ -1,4 +1,13 @@
 // Модель объекта: создание, грани, их размеры, развёртка (общая часть и коробка)
+import { clamp, uid } from './util.js';
+import { FACE_LABEL, LID_COLORS, LID_WALLS, PRESETS, WHITE_INSIDE } from './constants.js';
+import { cupFan, cupGeom } from '../carriers/cup.js';
+import { BAG_LABEL, EXT_KEYS, applyBagPreset, bagDims, bagFilm, bagNet, defaultBagWin } from '../carriers/bag.js';
+import { applyDomePreset, domeGeom, domeNet, domeSide } from '../carriers/dome.js';
+import { TORTE_COLORS, applyTortePreset, torteGeom } from '../carriers/torte.js';
+import { lidDimsMM, winMM, windowPlace } from '../carriers/box.js';
+import { HANDLE_KEYS, HB_END_KEYS, applyHandlePreset, defaultFrontWin, defaultHandle, hbDims, hbNet, hbOpen } from '../carriers/handle-box.js';
+import { SLEEVE_GLUE, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn, sleeveSheet } from '../carriers/sleeve.js';
 
 /* printed faces of an object, in tab order; depends on the lid construction */
 function faceKeys(o) {
@@ -220,3 +229,5 @@ function netLayout(o) {
   }
   return { W, H, panels, oy, hinged, backLid, tx, tw, lid, folds };
 }
+
+export { clearLid, doubleWall, ensureFaces, faceKeys, faceLabel, faceMM, facePx, isClearFace, netLayout, newImage, newObject, newShape, newText, outerKeys, setBoard, wallMM };

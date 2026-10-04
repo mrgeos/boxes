@@ -1,4 +1,16 @@
 // Печать на гранях: слои, текст, отделка, карты материалов
+import { DEG, clamp } from '../core/util.js';
+import { FINISHES, FOILS, PET_PRINT, isFoil } from '../core/constants.js';
+import { faceKeys, faceMM, isClearFace, netLayout, outerKeys } from '../core/model.js';
+import { getImg } from '../core/assets.js';
+import { artImg } from '../core/vector.js';
+import { ensureFont, fontStr } from '../core/fonts.js';
+import { RT, aux, ensureFaceRT, grainCanvas } from '../scene/renderer.js';
+import { fanImage, fanToRect } from '../carriers/cup.js';
+import { BAG_FILM, bagSeals, bagWindows } from '../carriers/bag.js';
+import { faceGrain } from '../carriers/sleeve.js';
+import { STICKER_FX, placementsFor } from '../stickers/placement.js';
+import { drawSticker, stickerMask, stickerShadow } from '../stickers/film.js';
 
 /* draw a face canvas into its dieline rectangle, turned if the panel lies upside down on the die */
 function drawNetPanel(c, src, p, x, y, w, h, crop = null, inv = false) {
@@ -202,3 +214,6 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops = []) {
   const sig = [!!m.roughnessMap, !!m.bumpMap, fin.cc > 0, !!fin.sheen, !!f.clear, !!f.win].join();
   if (sig !== f.sig) { f.sig = sig; m.needsUpdate = true; }
 }
+function setSkipStickers(v) { skipStickers = v; }
+
+export { drawNetPanel, layerBox, renderFace, setSkipStickers, tmp };

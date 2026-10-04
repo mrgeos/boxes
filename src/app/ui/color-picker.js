@@ -1,4 +1,5 @@
 // Выбор цвета: цвета документа, последние, пипетка
+import { state } from '../core/state.js';
 
 const RECENT_KEY = 'box-studio-3d/recent-colors';
 let recentColors = [];
@@ -45,16 +46,22 @@ function openColorPop(input) {
   colorPop = { el, input };
   el.querySelector('button')?.focus({ preventScroll: true });
 }
-document.addEventListener('click', e => {
-  const t = e.target;
-  if (t instanceof HTMLInputElement && t.type === 'color' && !t.disabled) {
-    if (e.isTrusted === false && !t.dataset.pop) return;
-    e.preventDefault(); colorPop?.input === t ? closeColorPop() : openColorPop(t); return;
-  }
-  if (colorPop && !colorPop.el.contains(t)) closeColorPop();
-}, true);
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && colorPop) { const i = colorPop.input; closeColorPop(); i.focus(); } }, true);
-document.addEventListener('scroll', () => closeColorPop(), true);
-addEventListener('resize', closeColorPop);
-// whatever the native picker finishes with is remembered too
-document.addEventListener('change', e => { const t = e.target; if (t instanceof HTMLInputElement && t.type === 'color') rememberColor(t.value); }, true);
+
+/* hooks up the color popover */
+function initColorPicker() {
+  document.addEventListener('click', e => {
+    const t = e.target;
+    if (t instanceof HTMLInputElement && t.type === 'color' && !t.disabled) {
+      if (e.isTrusted === false && !t.dataset.pop) return;
+      e.preventDefault(); colorPop?.input === t ? closeColorPop() : openColorPop(t); return;
+    }
+    if (colorPop && !colorPop.el.contains(t)) closeColorPop();
+  }, true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && colorPop) { const i = colorPop.input; closeColorPop(); i.focus(); } }, true);
+  document.addEventListener('scroll', () => closeColorPop(), true);
+  addEventListener('resize', closeColorPop);
+  // whatever the native picker finishes with is remembered too
+  document.addEventListener('change', e => { const t = e.target; if (t instanceof HTMLInputElement && t.type === 'color') rememberColor(t.value); }, true);
+}
+
+export { initColorPicker };

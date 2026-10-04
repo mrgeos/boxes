@@ -1,4 +1,16 @@
 // Окно грани (2D-редактор)
+import { $, DEG } from '../core/util.js';
+import { activeFaceData, activeLayer, activeObj, sel } from '../core/state.js';
+import { faceMM } from '../core/model.js';
+import { RT, markFace, ui } from '../scene/renderer.js';
+import { faceWindow, windowPath } from '../carriers/box.js';
+import { sleeveDims, sleeveOn, sleevePanelLabel, sleeveSheet } from '../carriers/sleeve.js';
+import { layerBox } from '../faces/render.js';
+import { placementsFor } from '../stickers/placement.js';
+import { drawSticker } from '../stickers/film.js';
+import { selectLayer } from '../core/selection.js';
+import { commit } from '../core/project.js';
+import { refreshFields } from './fields.js';
 
 const ed = $('#editor'), ectx = ed.getContext('2d');
 const edState = { k: 1, dw: 0, dh: 0, drag: null, guides: [] };
@@ -98,53 +110,59 @@ function snapMove(L, nx, ny, W, H, free) {
   edState.guides = guides; L.x = nx; L.y = ny;
 }
 function edPoint(e) { const r = ed.getBoundingClientRect(); return [(e.clientX - r.left), (e.clientY - r.top)]; }
-ed.addEventListener('pointerdown', e => {
-  const o = activeObj(), f = activeFaceData(); if (!f) return;
-  const [mx, my] = edPoint(e), { k, W, H } = edState, px = mx / k, py = my / k;
-  const L = activeLayer(), hd = edState.handles;
-  let mode = null;
-  if (L && hd) {
-    if (Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < 9) mode = 'rot';
-    else if (hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9)) mode = 'scale';
-  }
-  let target = L;
-  if (!mode) {
-    target = hitLayer(f, W, H, px, py);
-    if (!target) { if (sel.layer) selectLayer(null); return; }
-    if (target.id !== sel.layer) selectLayer(target.id);
-    mode = 'move';
-  }
-  ed.setPointerCapture(e.pointerId);
-  const [cx, cy] = [target.x * W * k, target.y * H * k];
-  edState.drag = { mode, L: target, mx, my, x: target.x, y: target.y, rot: target.rot, w: target.w, h: target.h, size: target.size,
-    d0: Math.max(4, Math.hypot(mx - cx, my - cy)), cx, cy };
-});
-ed.addEventListener('pointermove', e => {
-  const d = edState.drag;
-  if (!d) {
-    const f = activeFaceData(); if (!f) return;
-    const [mx, my] = edPoint(e), hd = edState.handles;
-    let cur = 'default';
-    if (hd && Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < 9) cur = 'grab';
-    else if (hd && hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9)) cur = 'nwse-resize';
-    else if (hitLayer(f, edState.W, edState.H, mx / edState.k, my / edState.k)) cur = 'move';
-    ed.style.cursor = cur; return;
-  }
-  const [mx, my] = edPoint(e), { k, W, H } = edState, L = d.L;
-  if (d.mode === 'move') snapMove(L, d.x + (mx - d.mx) / (W * k), d.y + (my - d.my) / (H * k), W, H, e.altKey);
-  else if (d.mode === 'scale') {
-    const s = Math.max(.02, Math.hypot(mx - d.cx, my - d.cy) / d.d0);
-    if (L.type === 'image') L.w = d.w * s; else if (L.type === 'text') L.size = d.size * s; else { L.w = d.w * s; L.h = d.h * s; }
-  } else if (d.mode === 'rot') {
-    let a = Math.atan2(my - d.cy, mx - d.cx) / DEG + 90;
-    if (a > 180) a -= 360;
-    if (e.shiftKey) a = Math.round(a / 15) * 15; else for (const s of [-180, -90, 0, 90, 180]) if (Math.abs(a - s) < 3) a = s;
-    L.rot = Math.round(a * 10) / 10;
-  }
-  markFace(activeObj(), sel.face); refreshFields($('#layerSec'), L);
-});
 const edUp = () => { if (edState.drag) { edState.drag = null; edState.guides = []; ui.editor = true; ui.layers = true; commit(); } };
-ed.addEventListener('pointerup', edUp);
- ed.addEventListener('pointercancel', edUp);
-ed.addEventListener('dblclick', () => { const L = activeLayer(); if (L?.type === 'text') { const t = $('#layerSec textarea'); t?.focus(); t?.select(); } });
-new ResizeObserver(() => { ui.editor = true; ui.net = true; }).observe($('#editorWrap'));
+
+/* hooks up the 2D editor */
+function initFaceEditor() {
+  ed.addEventListener('pointerdown', e => {
+    const o = activeObj(), f = activeFaceData(); if (!f) return;
+    const [mx, my] = edPoint(e), { k, W, H } = edState, px = mx / k, py = my / k;
+    const L = activeLayer(), hd = edState.handles;
+    let mode = null;
+    if (L && hd) {
+      if (Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < 9) mode = 'rot';
+      else if (hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9)) mode = 'scale';
+    }
+    let target = L;
+    if (!mode) {
+      target = hitLayer(f, W, H, px, py);
+      if (!target) { if (sel.layer) selectLayer(null); return; }
+      if (target.id !== sel.layer) selectLayer(target.id);
+      mode = 'move';
+    }
+    ed.setPointerCapture(e.pointerId);
+    const [cx, cy] = [target.x * W * k, target.y * H * k];
+    edState.drag = { mode, L: target, mx, my, x: target.x, y: target.y, rot: target.rot, w: target.w, h: target.h, size: target.size,
+      d0: Math.max(4, Math.hypot(mx - cx, my - cy)), cx, cy };
+  });
+  ed.addEventListener('pointermove', e => {
+    const d = edState.drag;
+    if (!d) {
+      const f = activeFaceData(); if (!f) return;
+      const [mx, my] = edPoint(e), hd = edState.handles;
+      let cur = 'default';
+      if (hd && Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < 9) cur = 'grab';
+      else if (hd && hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9)) cur = 'nwse-resize';
+      else if (hitLayer(f, edState.W, edState.H, mx / edState.k, my / edState.k)) cur = 'move';
+      ed.style.cursor = cur; return;
+    }
+    const [mx, my] = edPoint(e), { k, W, H } = edState, L = d.L;
+    if (d.mode === 'move') snapMove(L, d.x + (mx - d.mx) / (W * k), d.y + (my - d.my) / (H * k), W, H, e.altKey);
+    else if (d.mode === 'scale') {
+      const s = Math.max(.02, Math.hypot(mx - d.cx, my - d.cy) / d.d0);
+      if (L.type === 'image') L.w = d.w * s; else if (L.type === 'text') L.size = d.size * s; else { L.w = d.w * s; L.h = d.h * s; }
+    } else if (d.mode === 'rot') {
+      let a = Math.atan2(my - d.cy, mx - d.cx) / DEG + 90;
+      if (a > 180) a -= 360;
+      if (e.shiftKey) a = Math.round(a / 15) * 15; else for (const s of [-180, -90, 0, 90, 180]) if (Math.abs(a - s) < 3) a = s;
+      L.rot = Math.round(a * 10) / 10;
+    }
+    markFace(activeObj(), sel.face); refreshFields($('#layerSec'), L);
+  });
+  ed.addEventListener('pointerup', edUp);
+   ed.addEventListener('pointercancel', edUp);
+  ed.addEventListener('dblclick', () => { const L = activeLayer(); if (L?.type === 'text') { const t = $('#layerSec textarea'); t?.focus(); t?.select(); } });
+  new ResizeObserver(() => { ui.editor = true; ui.net = true; }).observe($('#editorWrap'));
+}
+
+export { drawEditor, ed, edPoint, edState, hitLayer, initFaceEditor };

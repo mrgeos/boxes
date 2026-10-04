@@ -1,11 +1,11 @@
 // Лоток с прозрачной крышкой-призмой
+import * as THREE from 'three';
+import { S, clamp } from '../core/util.js';
+import { LID_WALLS } from '../core/constants.js';
+import { faceMM } from '../core/model.js';
+import { floor } from '../scene/renderer.js';
+import { loopSurface, quadGeo, rrLoop, rrectPts } from '../scene/geometry.js';
 
-PRESETS.push(
-  // tray with a clear domed lid: w × d = tray size at the rim, h = total height with the lid
-  { id: 'dome145', label: 'Лоток с крышкой-призмой 145×145×90, крафт', type: 'dome', dims: { w: 145, h: 90, d: 145 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, whiteInside: false, dome: { trayH: 40, botK: .66, flange: 8, top: .66, cr: 12 } },
-  { id: 'dome110', label: 'Лоток с крышкой-призмой 110×110×90, крафт', type: 'dome', dims: { w: 110, h: 90, d: 110 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, whiteInside: false, dome: { trayH: 40, botK: .68, flange: 6, top: .5, cr: 10 } },
-  { id: 'dome145w', label: 'Лоток с крышкой-призмой 145×145×90, белый', type: 'dome', dims: { w: 145, h: 90, d: 145 }, finish: 'matte', edge: '#ece8e0', thick: .6, board: '#f7f5f0', grain: .1, whiteInside: true, dome: { trayH: 40, botK: .66, flange: 8, top: .66, cr: 12 } },
-);
 const applyDomePreset = (o, p) => Object.assign(o, { trayH: p.dome.trayH, botK: p.dome.botK, flangeW: p.dome.flange, domeTop: p.dome.top, cornerR: p.dome.cr, lid: 0 });
 /* ---------- tray with a clear domed lid ----------
    A pressed board tray whose walls flare outward from a smaller floor, closed by a thermoformed PET lid:
@@ -176,3 +176,5 @@ function domeAcross(A, F, cur) {
   }
   return m;
 }
+
+export { applyDomePreset, buildDome, domeAcross, domeFrames, domeGeom, domeNet, domeSide };

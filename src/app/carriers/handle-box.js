@@ -1,4 +1,10 @@
 // Коробка для торта с ручкой: гильза, торцы с клапанами, подложка, окна, ручка
+import * as THREE from 'three';
+import { S, V2, arcPts, clamp, dedupe, esc, r1, splitBand } from '../core/util.js';
+import { faceKeys, faceMM } from '../core/model.js';
+import { getImg } from '../core/assets.js';
+import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
+import { netWindows, winMM } from './box.js';
 
 const HANDLE_KEYS = ['handleFront', 'handleBack'];
 const HANDLE_SHAPES = { arch: 'Арка', rect: 'Прямоугольная с прорезью', photo: 'Рамка с широкой проймой' };
@@ -274,3 +280,5 @@ function buildHandleBox(o, rt, { addG, add, film }) {
     }
   }
 }
+
+export { HANDLE_KEYS, HANDLE_SHAPES, HB_END_KEYS, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, buildHandleBox, defaultFrontWin, defaultHandle, frontWinMM, handleBoxSVG, hbDims, hbNet, hbOpen, joinWinMM };

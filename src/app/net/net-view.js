@@ -1,4 +1,12 @@
 // Развёртка в панели
+import { $ } from '../core/util.js';
+import { activeObj, sel } from '../core/state.js';
+import { faceKeys, netLayout } from '../core/model.js';
+import { RT } from '../scene/renderer.js';
+import { fanOutline, fanXY } from '../carriers/cup.js';
+import { cutNetWindow, netWindowPath, netWindows } from '../carriers/box.js';
+import { drawNetPanel } from '../faces/render.js';
+import { select } from '../core/selection.js';
 
 const netC = $('#net'), nctx = netC.getContext('2d');
 let netGeom = null;
@@ -54,8 +62,14 @@ function drawNet() {
   for (const q of netWindows(o, n)) { netWindowPath(c, q, pad, k); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1; c.stroke(); }
   netGeom = { n, k, pad };
 }
-netC.addEventListener('click', e => {
-  if (!netGeom) return; const r = netC.getBoundingClientRect(); const x = (e.clientX - r.left - netGeom.pad) / netGeom.k, y = (e.clientY - r.top - netGeom.pad) / netGeom.k;
-  const p = netGeom.n.panels.find(p => inPanel(p, x, y));
-  if (p && faceKeys(activeObj()).includes(p.key)) select(sel.obj, p.key, null, { flash: true });
-});
+
+/* hooks up clicks on the net */
+function initNetView() {
+  netC.addEventListener('click', e => {
+    if (!netGeom) return; const r = netC.getBoundingClientRect(); const x = (e.clientX - r.left - netGeom.pad) / netGeom.k, y = (e.clientY - r.top - netGeom.pad) / netGeom.k;
+    const p = netGeom.n.panels.find(p => inPanel(p, x, y));
+    if (p && faceKeys(activeObj()).includes(p.key)) select(sel.obj, p.key, null, { flash: true });
+  });
+}
+
+export { drawNet, initNetView, panelPath };

@@ -1,4 +1,10 @@
 // Экспорт картинки и видео
+import * as THREE from 'three';
+import { $, slug, toast } from '../core/util.js';
+import { activeObj, state } from '../core/state.js';
+import { RT, camera, controls, cvs, renderer, scene, viewport } from '../scene/renderer.js';
+import { resize, setRecording } from '../scene/camera.js';
+import { saveFile } from '../core/project.js';
 
 function paintBackground(c, w, h) {
   const s = state.scene;
@@ -35,14 +41,17 @@ function exportVideo() {
   const target = controls.target.clone(), off = camera.position.clone().sub(target);
   const radius = Math.hypot(off.x, off.z), y = off.y, a0 = Math.atan2(off.x, off.z), dur = 6000, t0 = performance.now();
   controls.enabled = false; $('#recBadge').hidden = false;
-  recording = { step(now) {
+  setRecording({ step(now) {
     const t = Math.min(1, (now - t0) / dur), a = a0 + t * Math.PI * 2;
     camera.position.set(target.x + Math.sin(a) * radius, target.y + y, target.z + Math.cos(a) * radius); camera.lookAt(target);
     if (t >= 1 && rec.state === 'recording') rec.stop();
-  } };
+  } });
   rec.onstop = () => {
-    recording = null; controls.enabled = true; scene.background = null; bgTex.dispose(); $('#recBadge').hidden = true;
+    setRecording(null); controls.enabled = true; scene.background = null; bgTex.dispose(); $('#recBadge').hidden = true;
     saveFile(`${slug(activeObj()?.name)}-360.${type.includes('mp4') ? 'mp4' : 'webm'}`, new Blob(chunks, { type: type.split(';')[0] }));
   };
   rec.start();
 }
+function setPngScale(v) { pngScale = v; }
+
+export { exportPNG, exportVideo, setPngScale };

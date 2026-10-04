@@ -1,4 +1,17 @@
 // История, автосохранение, файл проекта
+import { $, loadImage, readURL, toast } from './util.js';
+import { LIGHTS } from './constants.js';
+import { activeFaceData, activeObj, assets, sel, state } from './state.js';
+import { ensureFaces, faceKeys, faceMM, newImage, newObject, setBoard } from './model.js';
+import { addAsset } from './assets.js';
+import { libAdopt, libStore, library } from './library.js';
+import { vecOf } from './vector.js';
+import { registerFont } from './fonts.js';
+import { RT, buildObject, disposeObject, ui } from '../scene/renderer.js';
+import { activeSticker } from '../stickers/placement.js';
+import { applyScene, setLastView, setView } from '../scene/camera.js';
+import { renderFonts, renderLayerProps } from '../ui/face-panel.js';
+import { renderAll } from '../ui/wiring.js';
 
 const hist = { stack: [], i: -1 };
 const snapshot = () => JSON.stringify({ objects: state.objects, scene: state.scene, fonts: state.fonts });
@@ -67,7 +80,7 @@ function loadProject(d, { resetHistory = true } = {}) {
   applyScene(); renderAll();
   if (resetHistory) { hist.stack = []; hist.i = -1; }
   commit();
-  requestAnimationFrame(() => { lastView = 'q'; setView('fit', true); });
+  requestAnimationFrame(() => { setLastView('q'); setView('fit', true); });
 }
 /* ---------- file saving (viewer download capability, with a plain fallback) ---------- */
 let dlNS;
@@ -117,3 +130,5 @@ async function convertLegacy(p) {
   }
   return { objects: [o], scene: state.scene, fonts: state.fonts, assets: {} };
 }
+
+export { LS_KEY, addFontFile, commit, loadProject, openProjectFile, projectJSON, redo, saveFile, scheduleSave, undo, usedAssets };

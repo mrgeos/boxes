@@ -1,7 +1,5 @@
 // Мелкие помощники: DOM, числа, строки, геометрия на плоскости
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -68,3 +66,5 @@ function arcPts(cx, cy, r, a0, a1, n = 10) { const out = []; for (let i = 0; i <
 const TR = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
 const slug = s => [...(s || 'box').toLowerCase()].map(c => TR[c] ?? c).join('').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'box';
 function luminance(hex) { const c = new THREE.Color(hex); return .2126 * c.r + .7152 * c.g + .0722 * c.b; }
+
+export { $, $$, DEG, S, V2, arcPts, clamp, dedupe, esc, fmt, getPath, loadImage, luminance, pixelsOf, r1, readURL, rrPoly, sampleInto, setPath, slug, smooth, splitBand, toast, uid };

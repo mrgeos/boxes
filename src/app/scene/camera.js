@@ -1,4 +1,16 @@
 // Камера, виды, свет сцены, цикл отрисовки
+import * as THREE from 'three';
+import { $, $$, DEG, clamp } from '../core/util.js';
+import { activeObj, sel, state } from '../core/state.js';
+import { RT, buildObject, camera, controls, dirtyFaces, fillLight, floor, keyLight, rebuildQueue, renderer, scene, ui, viewport } from './renderer.js';
+import { renderFace } from '../faces/render.js';
+import { stickerDirty } from '../stickers/placement.js';
+import { buildStickerFilms } from '../stickers/film.js';
+import { renderLayers } from '../ui/face-panel.js';
+import { renderStickers } from '../ui/stickers-panel.js';
+import { renderLibrary } from '../ui/library-panel.js';
+import { drawEditor } from '../ui/face-editor.js';
+import { drawNet } from '../net/net-view.js';
 
 function sceneBounds(onlyActive = false) {
   const b = new THREE.Box3();
@@ -87,35 +99,45 @@ function resize() {
   const w = viewport.clientWidth, h = viewport.clientHeight; if (!w || !h) return;
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); applyViewOffset();
 }
-new ResizeObserver(resize).observe(viewport);
 const accent = new THREE.Color();
 let recording = null;
-renderer.setAnimationLoop(now => {
-  for (const id of rebuildQueue) { const o = state.objects.find(x => x.id === id); if (o) buildObject(o); }
-  if (rebuildQueue.size) { rebuildQueue.clear(); updateShadowCam(); }
-  for (const key of dirtyFaces) {
-    const [id, k] = key.split('|'); const o = state.objects.find(x => x.id === id); if (o) renderFace(o, k);
-  }
-  dirtyFaces.clear();
-  for (const id of stickerDirty) { const o = state.objects.find(x => x.id === id); if (o) buildStickerFilms(o); }
-  stickerDirty.clear();
-  if (camTween) {
-    const t = clamp((now - camTween.t0) / 520, 0, 1), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    camera.position.lerpVectors(camTween.p0, camTween.p1, e); controls.target.lerpVectors(camTween.q0, camTween.q1, e);
-    view.x = camTween.v0.x * (1 - e); view.y = camTween.v0.y * (1 - e); applyViewOffset();
-    if (t >= 1) camTween = null;
-  }
-  controls.enablePan = !lockActive();
-  if (recording) recording.step(now);
-  else controls.update();
-  for (const rt of RT.values()) for (const k in rt.faces) {
-    const f = rt.faces[k];
-    if (f.flash > 0) { f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
-  }
-  renderer.render(scene, camera);
-  if (ui.editor) { ui.editor = false; drawEditor(); }
-  if (ui.net) { ui.net = false; drawNet(); }
-  if (ui.layers) { ui.layers = false; renderLayers(); }
-  if (ui.stickers) { ui.stickers = false; renderStickers(); }
-  if (ui.lib) { ui.lib = false; renderLibrary(); }
-});
+/* other parts set these through functions (an imported binding is read-only) */
+function setLastView(v) { lastView = v; }
+function setCamTween(v) { camTween = v; }
+function setRecording(v) { recording = v; }
+
+/* resizes the view with its box and starts the render loop */
+function initCamera() {
+  new ResizeObserver(resize).observe(viewport);
+  renderer.setAnimationLoop(now => {
+    for (const id of rebuildQueue) { const o = state.objects.find(x => x.id === id); if (o) buildObject(o); }
+    if (rebuildQueue.size) { rebuildQueue.clear(); updateShadowCam(); }
+    for (const key of dirtyFaces) {
+      const [id, k] = key.split('|'); const o = state.objects.find(x => x.id === id); if (o) renderFace(o, k);
+    }
+    dirtyFaces.clear();
+    for (const id of stickerDirty) { const o = state.objects.find(x => x.id === id); if (o) buildStickerFilms(o); }
+    stickerDirty.clear();
+    if (camTween) {
+      const t = clamp((now - camTween.t0) / 520, 0, 1), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      camera.position.lerpVectors(camTween.p0, camTween.p1, e); controls.target.lerpVectors(camTween.q0, camTween.q1, e);
+      view.x = camTween.v0.x * (1 - e); view.y = camTween.v0.y * (1 - e); applyViewOffset();
+      if (t >= 1) camTween = null;
+    }
+    controls.enablePan = !lockActive();
+    if (recording) recording.step(now);
+    else controls.update();
+    for (const rt of RT.values()) for (const k in rt.faces) {
+      const f = rt.faces[k];
+      if (f.flash > 0) { f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
+    }
+    renderer.render(scene, camera);
+    if (ui.editor) { ui.editor = false; drawEditor(); }
+    if (ui.net) { ui.net = false; drawNet(); }
+    if (ui.layers) { ui.layers = false; renderLayers(); }
+    if (ui.stickers) { ui.stickers = false; renderStickers(); }
+    if (ui.lib) { ui.lib = false; renderLibrary(); }
+  });
+}
+
+export { accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view };

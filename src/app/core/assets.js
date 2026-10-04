@@ -1,4 +1,11 @@
 // Картинки проекта: хранение, загрузка, импорт файлов
+import { loadImage, readURL, uid } from './util.js';
+import { assets, imgCache, state } from './state.js';
+import { libAdd } from './library.js';
+import { normSvg, svgURL } from './vector.js';
+import { RT, markFace, markObj, rebuildQueue, ui } from '../scene/renderer.js';
+import { stickerDirty, touchSticker } from '../stickers/placement.js';
+import { tintCache } from '../stickers/film.js';
 
 function addAsset(url) { const id = 'a' + uid(); assets[id] = url; return id; }
 function getImg(id) {
@@ -44,3 +51,5 @@ async function importImageFile(file) {
   const id = await libAdd(url, (file.name || '').replace(/\.[^.]+$/, '').slice(0, 40), w / h, svgSrc); getImg(id);
   return { id, aspect: w / h };
 }
+
+export { addAsset, getImg, importImageFile, onAssetLoaded };

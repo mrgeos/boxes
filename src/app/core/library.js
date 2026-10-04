@@ -1,4 +1,10 @@
 // Библиотека ассетов: всё загруженное, один раз по содержимому; хранится в проекте и в браузере
+import { loadImage } from './util.js';
+import { assets } from './state.js';
+import { addAsset } from './assets.js';
+import { svgURL, vecOf } from './vector.js';
+import { ui } from '../scene/renderer.js';
+import { scheduleSave } from './project.js';
 
 /* ---------- asset library ----------
    Every image added while working (layers, stickers, product photos, dielines) is kept here, once per
@@ -65,3 +71,5 @@ async function libLoadBrowser() {
   }
   ui.lib = true;
 }
+
+export { libAdd, libAdopt, libLoadBrowser, libRemove, libStore, library };

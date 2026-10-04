@@ -1,4 +1,15 @@
 // Правая панель: грани, слои и их свойства
+import { $, $$, esc, fmt, toast, uid } from '../core/util.js';
+import { BLENDS, EFFECTS, EFFECT_SHORT, ICON, SWATCHES } from '../core/constants.js';
+import { activeFaceData, activeLayer, activeObj, assets, sel, state } from '../core/state.js';
+import { faceKeys, faceLabel, faceMM, facePx, netLayout, newImage } from '../core/model.js';
+import { getImg, importImageFile } from '../core/assets.js';
+import { hasRecolor, vecColors } from '../core/vector.js';
+import { allFonts, ensureFont } from '../core/fonts.js';
+import { applyObjMaterials, markFace, ui } from '../scene/renderer.js';
+import { select, selectLayer } from '../core/selection.js';
+import { commit } from '../core/project.js';
+import { bindFields, rangeField, refreshFields } from './fields.js';
 
 function renderFaceTabs() {
   const o = activeObj();
@@ -163,7 +174,6 @@ async function addImageToFace(file, obj = activeObj(), face = sel.face, at = nul
 }
 let pickCb = null;
 function pickImage(cb) { pickCb = cb; $('#imgInput').value = ''; $('#imgInput').click(); }
-$('#imgInput').onchange = e => { const f = e.target.files[0]; if (f && pickCb) pickCb(f); };
 /* ---------- vector colours: one row per colour of the SVG, swapped per layer / sticker ---------- */
 function vecColorsHTML(srcId, rc) {
   const cols = vecColors(srcId); if (!cols.length) return '';
@@ -188,3 +198,10 @@ function bindVecColors(root, getT, onChange) {
 function renderFonts() {
   $('#fontList').innerHTML = state.fonts.map(f => `<span class="chip" style="font-family:'${esc(f.name)}'">${esc(f.name)}</span>`).join('');
 }
+
+/* hooks up the image picker */
+function initFacePanel() {
+  $('#imgInput').onchange = e => { const f = e.target.files[0]; if (f && pickCb) pickCb(f); };
+}
+
+export { addImageToFace, addLayer, bindVecColors, deleteLayer, duplicateLayer, initFacePanel, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers, setFaceBg, updateFaceMeta, vecColorsHTML };

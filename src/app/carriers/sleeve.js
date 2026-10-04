@@ -1,4 +1,10 @@
 // Рукав (бандероль) вокруг коробки, в том числе с ручкой
+import * as THREE from 'three';
+import { S, V2, arcPts, clamp, rrPoly } from '../core/util.js';
+import { FINISHES } from '../core/constants.js';
+import { RT } from '../scene/renderer.js';
+import { quadGeo } from '../scene/geometry.js';
+import { down } from '../scene/interaction.js';
 
 /* ---------- sleeve ----------
    A paper band glued into a tube around a closed box (or round an open tray: a matchbox-style box).
@@ -163,3 +169,5 @@ function sleeveColors(o, rt) {
   rt.sleeveIn.color.copy(o.sleeve?.fin === 'kraft' ? paper : new THREE.Color('#f6f3ec')); rt.sleeveEdge.color.copy(paper).multiplyScalar(.92);
 }
 const faceGrain = (o, k) => k === 'sleeve' ? (o.sleeve?.fin === 'kraft' ? .45 : .06) : o.grain;
+
+export { SLEEVE_AXES, SLEEVE_FIN, SLEEVE_GLUE, SLEEVE_PANEL, applySleeve, buildSleeve, defaultSleeve, defaultSleeveHandle, faceGrain, sleeveColors, sleeveDims, sleeveOn, sleevePanelLabel, sleeveSheet };

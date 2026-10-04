@@ -1,4 +1,9 @@
 // Пример проекта
+import { LIGHTS } from './constants.js';
+import { state } from './state.js';
+import { newImage, newObject, newShape, newText, setBoard } from './model.js';
+import { addAsset } from './assets.js';
+import { newSticker } from '../stickers/placement.js';
 
 function makeEmblem(color) {
   const c = document.createElement('canvas'); c.width = c.height = 512; const x = c.getContext('2d');
@@ -60,3 +65,5 @@ function sampleProject() {
   for (const k of ['left', 'right']) wb.faces[k].layers = [T('200 × 150 × 50 мм', { font: 'Montserrat', weight: 500, size: .16, color: '#4e6b58' })];
   return { objects: [wb, m, t], scene: { ...state.scene, ...LIGHTS.studio, preset: 'studio' }, fonts: [] };
 }
+
+export { sampleProject };
