@@ -45,7 +45,7 @@ function usedAssets() {
   for (const o of state.objects) {
     if (o.dieline) used.add(o.dieline);
     for (const k in o.faces) for (const l of o.faces[k].layers) if (l.src) used.add(l.src);
-    for (const st of o.stickers || []) if (st.src) used.add(st.src);
+    for (const st of o.stickers || []) for (const id of [st.src, st.bgSrc]) if (id) used.add(id);
     if (o.product?.src) used.add(o.product.src);
   }
   for (const f of state.fonts) used.add(f.asset);

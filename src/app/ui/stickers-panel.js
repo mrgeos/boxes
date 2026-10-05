@@ -3,14 +3,14 @@ import { $, $$, esc, fmt, uid } from '../core/util.js';
 import { ICON } from '../core/constants.js';
 import { activeObj, sel } from '../core/state.js';
 import { clearLid, faceKeys, faceLabel } from '../core/model.js';
-import { importImageFile } from '../core/assets.js';
 import { allFonts } from '../core/fonts.js';
 import { RT, markFace, ui } from '../scene/renderer.js';
 import { hbOpen } from '../carriers/handle-box.js';
 import { STICKER_FINISH, STICKER_KIND, activeSticker, newSticker, stickerKeys, stickerSize, touchSticker } from '../stickers/placement.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField } from './fields.js';
-import { bindVecColors, pickImage, renderLayerProps, renderLayers, vecColorsHTML } from './face-panel.js';
+import { bindVecColors, renderLayerProps, renderLayers, vecColorsHTML } from './face-panel.js';
+import { pickAsset } from './asset-picker.js';
 
 /* ---------- stickers panel ---------- */
 /* a seal goes across the line where the box opens */
@@ -51,17 +51,18 @@ function renderStickers() {
   const kindIcon = t => t.kind === 'circle' ? ICON.ell : t.kind === 'rect' ? ICON.rect : '★';
   let html = `<div class="sec-h"><h2>Наклейки</h2><span class="hint">${list.length || ''}</span></div>
     <p class="hint">Наклеиваются поверх печати. Выберите наклейку и тяните её по модели — у ребра она переходит на соседнюю грань, как настоящая.</p>
-    <div class="addrow">
+    <div class="addrow five">
       <button class="btn" id="stCircle">${ICON.ell}Круг</button>
       <button class="btn" id="stRect">${ICON.rect}Прямоуг.</button>
+      <button class="btn" id="stPhoto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/></svg>Фото</button>
       <button class="btn" id="stCustom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7Z"/></svg>Своя форма</button>
       <button class="btn" id="stSeal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="20" rx="1"/><path d="M3 12h18" stroke-dasharray="2 2"/></svg>Пломба</button>
     </div>`;
   html += list.length ? `<div class="layers">${[...list].reverse().map(t => `<div class="layer ${t.id === sel.sticker ? 'on' : ''} ${t.visible ? '' : 'hidden'}" data-id="${t.id}">
-      <span class="th">${kindIcon(t)}</span><span class="ln">${esc(t.text || STICKER_KIND[t.kind])} · ${fmt(t.w)}×${fmt(stickerSize(t)[1])} мм</span>
+      <span class="th">${kindIcon(t)}</span><span class="ln">${esc(t.text || (t.bgSrc ? 'Фото' : STICKER_KIND[t.kind]))} · ${fmt(t.w)}×${fmt(stickerSize(t)[1])} мм</span>
       <span class="badge">${esc(faceLabel(o, t.face))}</span>
       <span class="acts"><button data-a="vis" aria-label="Видимость">${t.visible ? ICON.eye : ICON.eyeOff}</button><button data-a="dup" aria-label="Дублировать">${ICON.copy}</button><button data-a="del" aria-label="Удалить">${ICON.trash}</button></span></div>`).join('')}</div>`
-    : `<div class="empty">Наклеек пока нет. Круг, прямоугольник или своя форма из PNG/SVG с прозрачным фоном.</div>`;
+    : `<div class="empty">Наклеек пока нет. Круг, прямоугольник, фото (картинка на всю наклейку) или своя форма из PNG/SVG с прозрачным фоном.</div>`;
   if (st) {
     const custom = st.kind === 'custom';
     html += `<div class="sec-h" style="margin-top:6px"><h2>Наклейка</h2></div>
@@ -71,8 +72,10 @@ function renderStickers() {
       ${st.kind === 'rect' ? rangeField('Скругление, мм', 'radius', 0, 60, .5) : ''}
       ${custom ? `<div class="row"><button class="btn sm" id="stShape">${st.src ? 'Заменить форму…' : 'Загрузить форму…'}</button></div>${vecColorsHTML(st.src, st.recolor)}${rangeField('Белая окантовка, мм', 'outline', 0, 10, .1)}`
         : `<div class="row"><span class="hint">Фон</span><input type="color" data-k="fill" aria-label="Цвет наклейки"><label class="check"><input type="checkbox" data-k="clear"> Без фона</label></div>
+           <div class="row"><button class="btn sm" id="stBg">${st.bgSrc ? 'Заменить картинку фона…' : 'Картинка на фон…'}</button>${st.bgSrc ? '<button class="btn sm" id="stBgOff">Убрать</button>' : ''}</div>
+           ${st.bgSrc ? rangeField('Зум фона, %', 'bgScale', 100, 400, 1, 100) + rangeField('Фон по X, %', 'bgX', -50, 50, 1, 100) + rangeField('Фон по Y, %', 'bgY', -50, 50, 1, 100) : ''}
            <div class="row"><span class="hint">Обводка</span><input type="color" data-k="stroke" aria-label="Цвет обводки"><span class="grow"></span></div>${rangeField('Обводка, мм', 'strokeW', 0, 10, .1)}
-           <div class="row"><button class="btn sm" id="stImg">${st.src ? 'Заменить логотип…' : 'Логотип…'}</button>${st.src ? '<button class="btn sm" id="stImgOff">Убрать</button>' : ''}</div>
+           <div class="row"><button class="btn sm" id="stImg">${st.src ? 'Заменить логотип…' : 'Логотип поверх фона…'}</button>${st.src ? '<button class="btn sm" id="stImgOff">Убрать</button>' : ''}</div>
            ${st.src ? rangeField('Логотип, %', 'imgScale', 10, 100, 1, 100) + vecColorsHTML(st.src, st.recolor) : ''}`}
       <textarea data-k="text" rows="1" aria-label="Текст наклейки" placeholder="Текст на наклейке"></textarea>
       <div class="grid2"><select data-k="font" aria-label="Шрифт">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
@@ -90,8 +93,12 @@ function renderStickers() {
   $('#stCircle').onclick = () => addSticker(newSticker('circle', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]));
   $('#stRect').onclick = () => addSticker(newSticker('rect', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]));
   $('#stSeal').onclick = () => addSticker(newSticker('rect', 'front', { ...sealSpot(o), w: 22, h: o.type === 'dome' || o.type === 'torte' ? 80 : 50, radius: 2, text: '', fill: '#f3ead6', stroke: '#b8461b', strokeW: .8, finish: 'gloss' }));
-  $('#stCustom').onclick = () => pickImage(async file => {
-    const r = await importImageFile(file);
+  // a photo sticker: the picture fills a rectangle of its own proportions
+  $('#stPhoto').onclick = e => pickAsset(e.currentTarget, 'Фото на наклейку', r => {
+    const w = 50;
+    addSticker(newSticker('rect', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0], { bgSrc: r.id, w, h: Math.round(w / r.aspect * 2) / 2, radius: 2, text: '' }));
+  });
+  $('#stCustom').onclick = e => pickAsset(e.currentTarget, 'Своя форма: PNG или SVG с прозрачным фоном', r => {
     addSticker(newSticker('custom', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0], { src: r.id, aspect: r.aspect, w: 50, outline: 1.5 }));
   });
   $$('#stickerSec .layer').forEach(el => el.onclick = e => {
@@ -110,11 +117,19 @@ function renderStickers() {
   });
   $('#stDel').onclick = () => deleteSticker(st.id);
   $('#stSealPos').onclick = () => { Object.assign(st, sealSpot(o)); touchSticker(o, st); renderStickers(); commit(); };
-  const pickInto = (key, after) => pickImage(async file => { const r = await importImageFile(file); st[key] = r.id; if (after) after(r); touchSticker(o, st); renderStickers(); commit(); });
-  $('#stShape') && ($('#stShape').onclick = () => pickInto('src', r => { st.aspect = r.aspect; }));
-  $('#stImg') && ($('#stImg').onclick = () => pickInto('src'));
+  const pickInto = (btn, title, key) => btn && (btn.onclick = () => pickAsset(btn, title, r => { st[key] = r.id; if (key === 'src') { st.recolor = {}; if (st.kind === 'custom') st.aspect = r.aspect; } touchSticker(o, st); renderStickers(); commit(); }));
+  pickInto($('#stShape'), 'Форма наклейки', 'src');
+  pickInto($('#stImg'), 'Логотип на наклейке', 'src');
+  pickInto($('#stBg'), 'Картинка на фон наклейки', 'bgSrc');
   $('#stImgOff') && ($('#stImgOff').onclick = () => { st.src = null; touchSticker(o, st); renderStickers(); commit(); });
+  $('#stBgOff') && ($('#stBgOff').onclick = () => { st.bgSrc = null; touchSticker(o, st); renderStickers(); commit(); });
   bindVecColors(sec, activeSticker, t => { const look = RT.get(o.id)?.stickerLook?.get(t.id); if (look) look.key = ''; touchSticker(o, t); });
 }
 
-export { addSticker, deleteSticker, duplicateSticker, renderStickers };
+/* a picture put into a sticker (from the library, dropped on it): the shape of a custom one, the background of the others */
+function setStickerImage(o, st, it) {
+  if (st.kind === 'custom') { st.src = it.id; st.aspect = it.aspect; st.recolor = {}; } else st.bgSrc = it.id;
+  touchSticker(o, st); renderStickers(); commit();
+}
+
+export { addSticker, deleteSticker, duplicateSticker, renderStickers, setStickerImage };

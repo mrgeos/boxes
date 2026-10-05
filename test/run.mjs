@@ -289,6 +289,34 @@ await test('рукав-переноска для тортницы: лента п
   await ctx.close();
 });
 
+await test('наклейки: фото на всю наклейку, картинка на фон из библиотеки или с компьютера, сохраняются в проекте', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  await addPreset(page, 'mailer');
+  const sts = () => page.evaluate(() => window.__boxStudio.state.objects[0].stickers.map(t => ({ kind: t.kind, w: t.w, h: t.h, bg: t.bgSrc, src: t.src })));
+  // a photo sticker takes the picture's proportions (160 × 100)
+  let [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#stPhoto')]); await fc.setFiles(FIXTURES + 'photo.png');
+  await page.waitForFunction(() => window.__boxStudio.state.objects[0].stickers.length === 1);
+  let s = await sts();
+  assert.equal(s[0].kind, 'rect'); assert.ok(s[0].bg, 'картинка — фон наклейки');
+  assert.ok(Math.abs(s[0].h - s[0].w / 1.6) < .5, `пропорции картинки: ${s[0].w}×${s[0].h}`);
+  // a round sticker with a picture background from the library (the photo is there now), zoomed in
+  await page.click('#stCircle');
+  await page.click('#stBg'); await page.click('.apick .it');
+  await page.waitForFunction(() => !!window.__boxStudio.state.objects[0].stickers[1]?.bgSrc);
+  assert.equal((await sts())[1].bg, s[0].bg, 'та же картинка из библиотеки');
+  // the logo, from the computer through the same window
+  await page.click('#stImg');
+  [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('.apick [data-a="up"]')]); await fc.setFiles(FIXTURES + 'logo.svg');
+  await page.waitForFunction(() => !!window.__boxStudio.state.objects[0].stickers[1]?.src);
+  const r = page.locator('#stickerSec input[type=range][data-k="bgScale"]'); await r.fill('150'); await r.dispatchEvent('input');
+  assert.equal(await page.evaluate(() => window.__boxStudio.state.objects[0].stickers[1].bgScale), 1.5);
+  const d = JSON.parse(readFileSync(await (await (async () => { const [x] = await Promise.all([page.waitForEvent('download'), page.click('#saveBtn')]); return x; })()).path(), 'utf8'));
+  s = await sts();
+  assert.ok(d.assets[s[1].bg], 'картинка фона сохранена в проекте');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 const presets = only &&!'все заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return ids; })();
 if (presets.length) await test(`все заготовки (${presets.length}): построение, пломба, открывание, шаблон SVG`, async () => {
   const { ctx, page, errors } = await openEditor(browser);
