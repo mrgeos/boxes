@@ -252,6 +252,23 @@ await test('развёртка коробки — лоток-крест: кле�
   await ctx.close();
 });
 
+await test('коробка с ручкой: ручка вырублена из крышки, её дизайн печатается с оборота', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  await addPreset(page, 'cakeHandleKraft');
+  let svg = readFileSync(await (await download(page, '#tplBtn')).path(), 'utf8');
+  assert.match(svg, /Ручка вырублена из крышки/);
+  assert.match(svg, /ОБОРОТ КРЫШКИ — ВИД С ОБОРОТА/, 'на листе показан оборот с лепестками');
+  assert.match(svg, /РУЧКА: ПЕРЕД · [\d.]+×[\d.]+ мм · с оборота/);
+  const lid = await page.evaluate(() => { const o = window.__boxStudio.state.objects[0]; return { bg: o.faces.handleFront.bg, inside: o.faces.inside.bg }; });
+  assert.equal(lid.bg, lid.inside, 'снаружи ручки — оборот картона');
+  // without a bridge there is nothing to crease the leaves to: separate parts
+  const r = page.locator('input[data-k="handle.bridge"]').first(); await r.fill('0'); await r.dispatchEvent('input'); await page.waitForTimeout(400);
+  svg = readFileSync(await (await download(page, '#tplBtn')).path(), 'utf8');
+  assert.match(svg, /Лепестки ручки — отдельные детали/);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 const presets = only &&!'все заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return ids; })();
 if (presets.length) await test(`все заготовки (${presets.length}): построение, пломба, открывание, шаблон SVG`, async () => {
   const { ctx, page, errors } = await openEditor(browser);

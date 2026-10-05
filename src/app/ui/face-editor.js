@@ -50,8 +50,13 @@ function drawEditor() {
   }
   const fw = faceWindow(o, sel.face);
   if (fw) {
-    c.save(); windowPath(c, fw, 0, 0, dw, dh); c.globalCompositeOperation = 'destination-out'; c.fill(); c.restore();
+    // the handle's leaves lie in the lid's opening on the flat sheet: what is printed there ends up on their inner side
+    const keep = q => { c.beginPath(); q.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](v.x * dw, v.y * dh)); c.closePath(); };
+    c.save();
+    if (fw.keep) { c.beginPath(); c.rect(-1, -1, dw + 2, dh + 2); for (const q of fw.keep) { q.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](v.x * dw, v.y * dh)); c.closePath(); } c.clip('evenodd'); }
+    windowPath(c, fw, 0, 0, dw, dh); c.globalCompositeOperation = 'destination-out'; c.fill(); c.restore();
     c.save(); windowPath(c, fw, 0, 0, dw, dh); c.strokeStyle = 'rgba(0,160,227,.9)'; c.setLineDash([5, 4]); c.lineWidth = 1.2; c.stroke(); c.setLineDash([]);
+    for (const q of fw.keep || []) { keep(q); c.setLineDash([2, 3]); c.stroke(); c.setLineDash([]); }
     c.fillStyle = 'rgba(0,120,170,.85)'; c.font = '600 11px Onest, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText('окно · плёнка', (fw.x + fw.w / 2) * dw, (fw.y + fw.h / 2) * dh); c.restore();
   }

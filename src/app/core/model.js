@@ -91,7 +91,7 @@ function ensureFaces(o) {
   o.window.place ??= 'edge'; o.window.off ??= 0; o.window.corners ??= 'round';
   if (o.whiteInside === undefined) o.whiteInside = true;
   for (const st of o.stickers) if (!faceKeys(o).includes(st.face)) st.face = faceKeys(o)[0];
-  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) || k === 'sleeve' ? '#ffffff' : k.startsWith('inside') ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
+  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) || k === 'sleeve' ? '#ffffff' : k.startsWith('inside') || HANDLE_KEYS.includes(k) ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
   if (!o.board) o.board = (o.faces.front || o.faces.wrap).bg;
 }
 function newObject(presetId = 'mailer') {
@@ -115,7 +115,8 @@ function newObject(presetId = 'mailer') {
 function setBoard(o, c) {
   o.board = c;
   for (const k of outerKeys(o)) if (!(o.type === 'bag' && EXT_KEYS.includes(k)) && k !== 'sleeve') o.faces[k].bg = c;
-  for (const k of ['inside', 'insideBottom']) if (o.faces[k]) o.faces[k].bg = o.whiteInside ? WHITE_INSIDE : c;
+  // the handle is cut out of the lid: its outside is the board's reverse, like the inside
+  for (const k of ['inside', 'insideBottom', ...HANDLE_KEYS]) if (o.faces[k]) o.faces[k].bg = o.whiteInside ? WHITE_INSIDE : c;
 }
 const newText = (text = 'Текст') => ({ id: uid(), type: 'text', text, font: 'Montserrat', weight: 700, italic: false, size: .14, color: '#1c1b19', align: 'center', ls: 0, lh: 1.1, x: .5, y: .5, rot: 0, opacity: 1, blend: 'source-over', effect: 'none', visible: true });
 const newImage = (src, aspect = 1) => ({ id: uid(), type: 'image', src, aspect, w: .5, tile: false, x: .5, y: .5, rot: 0, opacity: 1, blend: 'source-over', effect: 'none', flipX: false, flipY: false, visible: true });

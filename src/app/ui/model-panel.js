@@ -67,6 +67,7 @@ function renderModel() {
       + rangeField('Пройма: скругление верхних углов, мм', 'handle.hole.rTop', 0, 200, .5) + rangeField('Пройма: скругление нижних углов, мм', 'handle.hole.rBot', 0, 200, .5)
       + rangeField('Перемычка под ручкой, мм (0 — нет)', 'handle.bridge', 0, 120, 1)
       + `<label class="check"><input type="checkbox" data-k="handle.up"> Ручка поднята</label>`
+      + `<p class="hint">${bridgeMM(o) ? 'Ручка вырублена из крышки: на развёртке лепестки лежат в вырезе окна и поднимаются по биговкам у краёв перемычки. Снаружи ручки оборот картона, поэтому её дизайн печатается с оборота.' : 'Без перемычки лепестки ручки вырубаются отдельными деталями.'}</p>`
       + `<label class="check"><input type="checkbox" data-k="frontWin.on"> Окно на передней стенке</label>`
       + (o.frontWin?.on ? rangeField('Окно спереди: ширина, мм', 'frontWin.w', 10, 800, 1) + rangeField('Окно спереди: высота, мм', 'frontWin.h', 10, 800, 1)
         + rangeField('Окно спереди: центр от низа, мм', 'frontWin.y', 5, 800, 1) + rangeField('Окно спереди: радиус, мм', 'frontWin.r', 0, 200, .5)
