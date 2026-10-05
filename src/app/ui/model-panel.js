@@ -44,13 +44,18 @@ function renderModel() {
   if (sel.group && groupById(sel.group)) return renderGroupPanel(sec);
   const group = o && parentOf(o.id);
   if (!o) { sec.innerHTML = '<div class="sec-h"><h2>Форма</h2></div><div class="empty">Нет выбранного объекта</div>'; return; }
-  const box = o.type === 'box', cup = o.type === 'cup', bag = o.type === 'bag', dome = o.type === 'dome', torte = o.type === 'torte', film = bagFilm(o);
+  const box = o.type === 'box', pbag = o.type === 'paperbag', cup = o.type === 'cup', bag = o.type === 'bag', dome = o.type === 'dome', torte = o.type === 'torte', film = bagFilm(o);
   sec.innerHTML = `
     <div class="sec-h"><h2>Форма и размеры</h2></div>
     <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="name" aria-label="Название"></div>
-    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="dome">Лоток с прозрачной крышкой-призмой</option><option value="torte">Тортница (ПЭТ)</option><option value="cup">Бумажный стакан</option><option value="bag">Пакет</option><option value="tube">Тубус / банка</option></select></div>
+    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="dome">Лоток с прозрачной крышкой-призмой</option><option value="torte">Тортница (ПЭТ)</option><option value="cup">Бумажный стакан</option><option value="bag">Пакет</option><option value="paperbag">Бумажный пакет с ручками</option><option value="tube">Тубус / банка</option></select></div>
     <div class="field wide"><span class="fl">Заготовка</span><select id="presetSel"><option value="">— выбрать размер —</option>${PRESETS.filter(p => p.type === o.type).map(p => `<option value="${p.id}">${p.label}</option>`).join('')}</select></div>
-    ${box ? rangeField('Ширина, мм', 'dims.w', 20, 800, 1) + rangeField('Глубина, мм', 'dims.d', 20, 800, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)
+    ${pbag ? rangeField('Ширина, мм', 'dims.w', 60, 800, 1) + rangeField('Глубина (фальц), мм', 'dims.d', 30, 400, 1) + rangeField('Высота, мм', 'dims.h', 80, 900, 1)
+        + `<label class="check"><input type="checkbox" data-k="pb.handles"> Плоские бумажные ручки</label>`
+        + (o.pb.handles ? rangeField('Ручка: ширина ленты, мм', 'pb.hw', 8, 60, 1) + rangeField('Ручка: высота над краем, мм', 'pb.hh', 20, 300, 1) + rangeField('Ручка: между ножками, мм', 'pb.span', 30, 800, 1) : '')
+        + rangeField('Отворот внутрь по верху, мм', 'pb.top', 10, 120, 1)
+        + `<p class="hint">Грани: перед, фальцы и зад, каждая — стоящим прямоугольником. Ручки клеятся изнутри под отворот. Цвет бумаги — внизу, в «Материале»; белая или крафтовая изнанка — галочкой.</p>`
+      : box ? rangeField('Ширина, мм', 'dims.w', 20, 800, 1) + rangeField('Глубина, мм', 'dims.d', 20, 800, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)
       : cup ? rangeField('Диаметр верха, мм', 'dims.w', 40, 160, 1) + rangeField('Диаметр дна, мм', 'dims.d', 30, 160, 1) + rangeField('Высота, мм', 'dims.h', 40, 250, 1)
           + `<div class="field wide"><span class="fl">Стенка</span><select data-k="cupWall"><option value="double">Двухслойная (внешний слой выше дна)</option><option value="single">Однослойная</option></select></div>`
           + `<label class="check"><input type="checkbox" data-k="cupLid"> Крышка</label>`
@@ -123,7 +128,7 @@ function renderModel() {
       <div class="swatches" id="torteSw">${TORTE_COLORS.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.baseColor === c}"></button>`).join('')}</div>
       <input type="color" data-k="baseColor" aria-label="Свой цвет дна"></div></div>
     <div class="field wide"><span class="fl">Материал дна</span><select data-k="baseFin">${Object.entries(TORTE_FIN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : film ? `<p class="hint">Плёнка: всё, что не закрыто печатью, остаётся ${o.bagMat === 'clear' ? 'прозрачным' : 'полупрозрачным'}. Материал меняется в настройках пакета выше.</p>` : `
-    <div class="field wide"><span class="fl">${bag ? 'Цвет бумаги' : 'Цвет картона'}</span><div class="row">
+    <div class="field wide"><span class="fl">${bag || pbag ? 'Цвет бумаги' : 'Цвет картона'}</span><div class="row">
       <div class="swatches" id="boardSw">${BOARD.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.board === c}"></button>`).join('')}</div>
       <input type="color" id="boardColor" value="${o.board || '#ffffff'}" aria-label="Свой цвет картона"></div></div>
     <label class="check"><input type="checkbox" data-k="whiteInside"> Белая внутренняя сторона</label>
@@ -141,6 +146,7 @@ function renderModel() {
     if (k === 'lidType') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'wallT' || k === 'lidFit') { rebuildQueue.add(o.id); applyObjMaterials(o); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lidMat') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+    if (k.startsWith('pb.')) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'pb.handles') renderModel(); return; }
     if (k === 'sleeve.slide') { applySleeve(o); return; }
     if (k === 'carry.slide') { applyCarry(o); return; }
     if (k.startsWith('carry.')) {

@@ -64,6 +64,8 @@ const PRESETS = [
   { id: 'cup350', label: 'Бумажный стакан 350 мл', type: 'cup', dims: { w: 90, h: 110, d: 60 }, finish: 'matte', edge: '#ece8e0', thick: .4, board: '#f7f5f0', grain: .1 },
   { id: 'cup450', label: 'Бумажный стакан 450 мл', type: 'cup', dims: { w: 90, h: 130, d: 60 }, finish: 'matte', edge: '#ece8e0', thick: .4, board: '#f7f5f0', grain: .1 },
   // bags: w = width, h = height, d = gusset depth (flat-bottom bag) or content thickness (flat bag)
+  { id: 'paperBagKraft', label: 'Бумажный пакет с ручками 240×140×320, крафт', type: 'paperbag', dims: { w: 240, h: 320, d: 140 }, finish: 'matte', edge: '#b88d5c', thick: .1, board: '#c39460', grain: .45, whiteInside: false },
+  { id: 'paperBagWhite', label: 'Бумажный пакет с ручками 320×120×400, белый', type: 'paperbag', dims: { w: 320, h: 400, d: 120 }, finish: 'matte', edge: '#f2f0ea', thick: .1, board: '#ffffff', grain: .1, whiteInside: true },
   { id: 'bagFlat', label: 'Пакет плоский 140×140 с клапаном', type: 'bag', dims: { w: 140, h: 140, d: 12 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'flat', top: 'flap', mat: 'frosty', flapH: 35 } },
   { id: 'bagFlatClear', label: 'Пакет плоский прозрачный 100×150', type: 'bag', dims: { w: 100, h: 150, d: 10 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'flat', top: 'flap', mat: 'clear', flapH: 30 } },
   { id: 'bagBlock', label: 'Пакет с плоским дном 90×60×230', type: 'bag', dims: { w: 90, h: 230, d: 60 }, finish: 'matte', edge: '#ffffff', thick: .05, board: '#ffffff', grain: 0, bag: { style: 'block', top: 'fold', turns: 2, mat: 'frosty', flapH: 16 } },

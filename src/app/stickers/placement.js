@@ -30,7 +30,7 @@ function computeFrames(o, rt) {
   if (o.type === 'bag') { rt.frames = rt.bagFrames || null; return; }
   if (o.type === 'dome') { rt.frames = domeFrames(o, rt); return; }
   if (o.type === 'torte') { rt.frames = {}; return; }   // films are laid along sections of the solid (torteSample)
-  if (o.type !== 'box') return;
+  if (o.type !== 'box' && o.type !== 'paperbag') return;
   // frames are taken closed: lid shut, tray pushed in (and the tray is never a neighbour for stickers)
   const saved = o.lid, savedOut = o.tray?.out; o.lid = 0; if (o.tray) o.tray.out = 0; applyLid(o);
   rt.group.updateMatrixWorld(true);
