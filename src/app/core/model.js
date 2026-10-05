@@ -7,7 +7,7 @@ import { applyDomePreset, domeGeom, domeNet, domeSide } from '../carriers/dome.j
 import { TORTE_COLORS, applyTortePreset, torteGeom } from '../carriers/torte.js';
 import { lidDimsMM, winMM, windowPlace } from '../carriers/box.js';
 import { HANDLE_KEYS, HB_END_KEYS, applyHandlePreset, defaultFrontWin, defaultHandle, hbDims, hbNet, hbOpen } from '../carriers/handle-box.js';
-import { SLEEVE_GLUE, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn, sleeveSheet } from '../carriers/sleeve.js';
+import { SLEEVE_GLUE, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn, sleeveSheet, upgradeSleeve } from '../carriers/sleeve.js';
 
 /* printed faces of an object, in tab order; depends on the lid construction */
 /* faces that close into a ring (a sleeve glued into a loop, the wall of a tube, a cup or a cake lid): what runs
@@ -59,6 +59,7 @@ const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBo
 const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : (o.type === 'bag' && BAG_LABEL[k]) || FACE_LABEL[k];
 function ensureFaces(o) {
   o.stickers ??= [];
+  upgradeSleeve(o);
   if (o.type === 'box') {
     o.lidType ??= 'flat';
     o.flapH ??= Math.round(o.dims.h * .35);
@@ -233,9 +234,10 @@ function netLayout(o) {
   }
   if (sleeveOn(o)) {
     const SD = sleeveDims(o), y = H + 15, sh = sleeveSheet(SD), m = q => q.map(([a, b]) => [a, y + b]);
-    panels.push({ key: 'sleeve', x: 0, y, w: SD.bw, h: SD.P, part: true, creases: sh.creases.map(([a, b, c, d]) => [a, y + b, c, y + d]), ...(sh.outline ? { poly: m(sh.outline), holes: sh.holes.map(m) } : {}) },
-      { key: 'glue', blank: 'клеевой клапан', x: 0, y: y + SD.P, w: SD.bw, h: SLEEVE_GLUE, part: true, crease: true });
-    W = Math.max(W, SD.bw); H = y + SD.P + SLEEVE_GLUE;
+    panels.push({ key: 'sleeve', x: 0, y, w: SD.bw, h: SD.P, part: true, creases: sh.creases.map(([a, b, c, d]) => [a, y + b, c, y + d]), ...(sh.outline ? { poly: m(sh.outline), holes: sh.holes.map(m), glue: m(sh.glue) } : {}) });
+    // a band without a handle closes with a glue flap; with a handle its two ends (the leaves) are glued back to back
+    if (!sh.outline) panels.push({ key: 'glue', blank: 'клеевой клапан', x: 0, y: y + SD.P, w: SD.bw, h: SLEEVE_GLUE, part: true, crease: true });
+    W = Math.max(W, SD.bw); H = y + SD.P + (sh.outline ? 0 : SLEEVE_GLUE);
   }
   return { W, H, panels, oy, hinged, backLid, tx, tw, lid, folds };
 }

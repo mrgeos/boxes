@@ -38,7 +38,7 @@ function drawEditor() {
     c.save(); c.strokeStyle = 'rgba(230,0,126,.75)'; c.setLineDash([5, 4]); c.lineWidth = 1;
     c.fillStyle = 'rgba(120,110,95,.85)'; c.font = '600 11px Onest, system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
     SD.names.forEach((nm, i) => {
-      const y = SD.stops[i] / SD.P * dh, flip = SD.hh ? i === 2 || i >= 5 : i >= 2;
+      const y = SD.stops[i] / SD.P * dh, flip = SD.flips[i];
       if (i) { c.beginPath(); c.moveTo(0, y); c.lineTo(dw, y); c.stroke(); }
       c.fillText(sleevePanelLabel(SD, nm) + (flip ? ' (вверх ногами)' : ''), 6, y + 5);
     });

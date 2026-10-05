@@ -200,6 +200,30 @@ await test('рукав и обечайка — кольцо: слой через
   await ctx.close();
 });
 
+await test('рукав с ручкой: лента от верха ручки, проймы на концах, старые проекты переносятся', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  await addPreset(page, 'cakeSleeveHandle');
+  const svg = readFileSync(await (await download(page, '#tplBtn')).path(), 'utf8');
+  assert.match(svg, /клей с оборота/, 'лепесток ручки помечен под склейку');
+  assert.doesNotMatch(svg, /клеевой клапан/, 'клеевого клапана у рукава с ручкой нет');
+  // the hand holes: one at each end of the band
+  const holes = await page.evaluate(() => { const S = window.__boxStudio, o = S.state.objects[0]; return S.sleeveHoles(o); });
+  assert.equal(holes.length, 2);
+  assert.ok(holes[0] < .15 && holes[1] > .85, 'проймы у начала и у конца ленты: ' + holes.map(v => v.toFixed(2)));
+  // a project saved before: no `join`, the band started at the back edge of the top; its design moves along with it
+  const [d] = await Promise.all([page.waitForEvent('download'), page.click('#saveBtn')]);
+  const proj = JSON.parse(readFileSync(await d.path(), 'utf8')), o = proj.objects[0];
+  delete o.sleeve.handle.join;
+  o.faces.sleeve.layers = [{ id: 'old', type: 'shape', kind: 'rect', w: .5, h: .02, fill: '#0a7aa1', radius: 0, stroke: 0, x: .5, y: .5, rot: 0, opacity: 1, blend: 'source-over', effect: 'none', visible: true }];
+  const file = (await d.path()) + '-legacy.json'; (await import('node:fs')).writeFileSync(file, JSON.stringify(proj));
+  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#openBtn')]); await fc.setFiles(file); await page.waitForTimeout(1200);
+  const up = await page.evaluate(() => { const S = window.__boxStudio, o = S.state.objects[0]; return { join: o.sleeve.handle.join, y: o.faces.sleeve.layers[0].y, s0: S.sleeveFold(o) }; });
+  assert.equal(up.join, 'ends');
+  assert.ok(Math.abs(((.5 - up.s0) + 1) % 1 - up.y) < 1e-9, `слой сдвинут вдоль ленты (${up.y})`);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 const presets = only && !'все заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return ids; })();
 if (presets.length) await test(`все заготовки (${presets.length}): построение, пломба, открывание, шаблон SVG`, async () => {
   const { ctx, page, errors } = await openEditor(browser);
