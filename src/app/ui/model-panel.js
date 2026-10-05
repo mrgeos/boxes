@@ -10,6 +10,7 @@ import { applyDomePreset } from '../carriers/dome.js';
 import { TORTE_COLORS, TORTE_FIN, applyTortePreset } from '../carriers/torte.js';
 import { winMM, windowPlace } from '../carriers/box.js';
 import { HANDLE_SHAPES, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, defaultFrontWin, defaultHandle } from '../carriers/handle-box.js';
+import { CARRY_PANEL, CARRY_STYLES, applyCarry, carryDims, carryOn } from '../carriers/carry.js';
 import { SLEEVE_AXES, SLEEVE_FIN, SLEEVE_PANEL, applySleeve, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn } from '../carriers/sleeve.js';
 import { applyScene, lastView, setView, updateShadowCam } from '../scene/camera.js';
 import { select } from '../core/selection.js';
@@ -20,6 +21,24 @@ import { commit } from '../core/project.js';
 import { bindFields, rangeField, refreshFields } from './fields.js';
 import { pickImage, renderFacePanel, renderFaceTabs, updateFaceMeta } from './face-panel.js';
 
+/* the carrier sleeve of a cake container */
+function carryFields(o) {
+  const on = `<label class="check"><input type="checkbox" data-k="carry.on"> Рукав-переноска (бумажная лента под дном с ручкой сверху)</label>`;
+  if (!carryOn(o)) return on;
+  const D = carryDims(o), tent = D.tent;
+  return on + `<div class="field wide"><span class="fl">Форма</span><select data-k="carry.style">${Object.entries(CARRY_STYLES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+    + rangeField('Ширина ленты, мм', 'carry.w', 20, Math.floor(o.dims.w), 1)
+    + (tent ? rangeField('Дно шире тортницы (с каждой стороны), мм', 'carry.spread', 0, 300, 1) : rangeField('Высота прямых стенок, мм', 'carry.wall', Math.ceil(D.G.hb + 3), Math.floor(o.dims.h), 1))
+    + rangeField('Ручка: высота, мм', 'carry.h', 20, 300, 1) + rangeField('Ручка: скругление верхних углов, мм', 'carry.r', 0, 100, .5)
+    + rangeField('Пройма: ширина, мм', 'carry.hole.w', 0, 400, 1) + rangeField('Пройма: высота, мм', 'carry.hole.h', 0, 200, 1)
+    + rangeField('Пройма: от основания ручки, мм', 'carry.hole.y', 3, 300, .5) + rangeField('Пройма: скругление, мм', 'carry.hole.r', 0, 100, .5)
+    + `<label class="check"><input type="checkbox" data-k="carry.cut.on"> Окно внизу ${tent ? 'скатов' : 'стенок'} (видно тортницу)</label>`
+    + (o.carry.cut?.on ? rangeField('Окно: ширина, мм', 'carry.cut.w', 5, 500, 1) + rangeField('Окно: высота, мм', 'carry.cut.h', 3, 300, 1)
+      + rangeField('Окно: от дна, мм', 'carry.cut.y', 3, 300, .5) + rangeField('Окно: скругление, мм', 'carry.cut.r', 0, 100, .5) : '')
+    + `<div class="field wide"><span class="fl">Бумага рукава</span><select data-k="carry.fin">${Object.entries(SLEEVE_FIN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+    + rangeField('Снять рукав, мм', 'carry.slide', 0, Math.ceil(D.ys + D.hh), 1)
+    + `<p class="hint">Дизайн — грань «Рукав-переноска»: одна лента, на ней отмечены сгибы (${D.names.map(k => CARRY_PANEL[k]).join(', ')}). Цвет бумаги — фон этой грани. Лента начинается и кончается на верху ручки: её концы — лепестки с проймами, они склеиваются оборотом. Бока открыты.</p>`;
+}
 function renderModel() {
   const o = activeObj(), sec = $('#modelSec');
   if (sel.group && groupById(sel.group)) return renderGroupPanel(sec);
@@ -98,6 +117,7 @@ function renderModel() {
       + `<p class="hint">Дизайн рукава — грань «Рукав»: одна лента, на ней отмечены сгибы (${SD.names.map(k => SLEEVE_PANEL[k]).join(', ')}). Цвет бумаги — фон этой грани. На развёртке рукав — отдельная деталь с биговками и клеевым клапаном.${o.lidType !== 'none' ? ' Перед открытием крышки сдвиньте рукав.' : ' Лоток в рукаве — коробка-пенал: сдвиньте рукав, чтобы выдвинуть лоток.'}</p>`; })() : ''}
     ${box && windowPlace(o) ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
     ${box && o.window.on && windowPlace(o) ? windowFields(o) : ''}
+    ${torte ? carryFields(o) : ''}
     <div class="sec-h" style="margin-top:4px"><h2>Материал</h2></div>
     ${torte ? `<div class="field wide"><span class="fl">Дно</span><div class="row">
       <div class="swatches" id="torteSw">${TORTE_COLORS.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.baseColor === c}"></button>`).join('')}</div>
@@ -122,6 +142,12 @@ function renderModel() {
     if (k === 'wallT' || k === 'lidFit') { rebuildQueue.add(o.id); applyObjMaterials(o); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lidMat') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'sleeve.slide') { applySleeve(o); return; }
+    if (k === 'carry.slide') { applyCarry(o); return; }
+    if (k.startsWith('carry.')) {
+      ensureFaces(o); rebuildQueue.add(o.id); markFace(o, 'carry'); ui.net = ui.editor = true; updateFaceMeta();
+      if (['carry.on', 'carry.style', 'carry.cut.on'].includes(k)) { select(o.id, k === 'carry.on' && o.carry.on ? 'carry' : faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]); renderModel(); renderFaceTabs(); }
+      return;
+    }
     if (k.startsWith('sleeve.')) {
       if (k === 'sleeve.axis') { const SD = sleeveDims(o); o.sleeve.x = 0; o.sleeve.w = Math.round(Math.min(o.sleeve.w, SD.len)); o.sleeve.slide = 0; }
       ensureFaces(o); rebuildQueue.add(o.id); markFace(o, 'sleeve'); ui.net = ui.editor = true; updateFaceMeta();
@@ -138,7 +164,7 @@ function renderModel() {
     }
     if (k === 'earsOn' || k === 'earFull') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
-    if (k.startsWith('dims') || k === 'thickness') { if (sleeveOn(o)) markFace(o, 'sleeve'); rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
+    if (k.startsWith('dims') || k === 'thickness') { if (sleeveOn(o)) markFace(o, 'sleeve'); if (carryOn(o)) markFace(o, 'carry'); rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lid') { applyLid(o); return; }
     if (k === 'bagStyle') { o.dims.d = o.bagStyle === 'block' ? Math.round(o.dims.w * .65) : 12; o.lid = 0; ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'bagTop' || k === 'ext.on') { o.lid = 0; if (k === 'bagTop' && o.bagTop === 'fold' && o.bagStyle === 'block' && o.rollTurns < 2) { o.rollTurns = 2; o.flapH = 16; } ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
@@ -154,7 +180,7 @@ function renderModel() {
       return;
     }
     if (k === 'baseColor') { applyObjMaterials(o); $$('#torteSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.baseColor)); return; }
-    if (['lidD', 'baseH', 'lidDraft', 'lidR', 'baseFin'].includes(k)) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
+    if (['lidD', 'baseH', 'lidDraft', 'lidR', 'baseFin'].includes(k)) { if (carryOn(o)) markFace(o, 'carry'); rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (['trayH', 'botK', 'domeTop', 'flangeW', 'cornerR'].includes(k)) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k === 'cupWall' || k === 'cupLid') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'cupLid') renderModel(); return; }
     if (k === 'lidColor') { applyObjMaterials(o); $$('#lidSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.lidColor)); return; }

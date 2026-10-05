@@ -13,6 +13,7 @@ import { buildDome, domeGeom } from '../carriers/dome.js';
 import { TORTE_COLORS, buildTorte } from '../carriers/torte.js';
 import { buildBox } from '../carriers/box.js';
 import { buildSleeve, sleeveColors } from '../carriers/sleeve.js';
+import { buildCarry, carryColors } from '../carriers/carry.js';
 import { computeFrames } from '../stickers/placement.js';
 import { buildStickerFilms } from '../stickers/film.js';
 import { camTween, invalidate, orbitLock, updateShadowCam } from './camera.js';
@@ -142,7 +143,7 @@ function buildObject(o) {
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'bag') buildBag(o, rt); else buildTube(o, rt);
-  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); applyObjMaterials(o); markObj(o);
+  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); applyObjMaterials(o); markObj(o);
   rt.stickerMeshes = []; buildStickerFilms(o);
   if (parentOf(o.id) && JSON.stringify(foot) !== JSON.stringify(rt.foot)) layoutSoon();   // the row makes room for its new size
 }
@@ -251,6 +252,7 @@ function applyObjMaterials(o) {
   rt.foldMat.color.copy(fold);
   rt.cupLidMat.color.set(o.lidColor || LID_COLORS[0][0]);
   if (rt.sleeve) sleeveColors(o, rt);
+  if (rt.carry) carryColors(o, rt);
   if (rt.trayMat) { const gold = o.tray?.fin === 'gold'; rt.trayMat.color.set(gold ? '#d6b25e' : '#c9cdd3'); rt.trayMat.metalness = .9; rt.trayMat.roughness = .3; }
   if (rt.baseMat) {
     const metal = o.baseFin === 'metal';

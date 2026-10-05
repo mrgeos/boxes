@@ -4,6 +4,7 @@ import { activeFaceData, activeLayer, activeObj, sel } from '../core/state.js';
 import { faceMM } from '../core/model.js';
 import { RT, markFace, ui } from '../scene/renderer.js';
 import { faceWindow, windowPath } from '../carriers/box.js';
+import { CARRY_PANEL, carryDims, carryOn, carrySheet } from '../carriers/carry.js';
 import { sleeveDims, sleeveOn, sleevePanelLabel, sleeveSheet } from '../carriers/sleeve.js';
 import { layerBox } from '../faces/render.js';
 import { placementsFor } from '../stickers/placement.js';
@@ -46,6 +47,20 @@ function drawEditor() {
     const sh = sleeveSheet(SD), kx = dw / SD.bw, ky = dh / SD.P;
     c.setLineDash([]); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1.2;
     for (const q of [...(sh.outline ? [sh.outline.filter(([, y]) => y <= SD.P)] : []), ...sh.holes]) { c.beginPath(); q.forEach(([x, y], i) => c[i ? 'lineTo' : 'moveTo'](x * kx, y * ky)); if (q !== sh.outline) c.closePath(); c.stroke(); }
+    c.restore();
+  }
+  if (sel.face === 'carry' && carryOn(o)) {
+    // the carrier sleeve: where the band folds, which part goes where, the cut of the handle and windows
+    const D = carryDims(o), sh = carrySheet(D), kx = dw / D.bw, ky = dh / D.P;
+    c.save(); c.strokeStyle = 'rgba(230,0,126,.75)'; c.setLineDash([5, 4]); c.lineWidth = 1;
+    c.fillStyle = 'rgba(120,110,95,.85)'; c.font = '600 11px Onest, system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
+    D.names.forEach((nm, i) => {
+      const y = D.stops[i] * ky;
+      if (i) { c.beginPath(); c.moveTo(0, y); c.lineTo(dw, y); c.stroke(); }
+      c.fillText(CARRY_PANEL[nm] + (D.flips[i] ? ' (вверх ногами)' : ''), 6, y + 5);
+    });
+    c.setLineDash([]); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1.2;
+    for (const q of [sh.outline, ...sh.holes]) { c.beginPath(); q.forEach(([x, y], i) => c[i ? 'lineTo' : 'moveTo'](x * kx, y * ky)); c.closePath(); c.stroke(); }
     c.restore();
   }
   const fw = faceWindow(o, sel.face);

@@ -5,6 +5,7 @@ import { cupFan, cupGeom } from '../carriers/cup.js';
 import { BAG_LABEL, EXT_KEYS, applyBagPreset, bagDims, bagFilm, bagNet, defaultBagWin } from '../carriers/bag.js';
 import { applyDomePreset, domeGeom, domeNet, domeSide } from '../carriers/dome.js';
 import { TORTE_COLORS, applyTortePreset, torteGeom } from '../carriers/torte.js';
+import { carryDims, carryOn, carrySheet, defaultCarry } from '../carriers/carry.js';
 import { lidDimsMM, winMM, windowPlace } from '../carriers/box.js';
 import { HANDLE_KEYS, HB_END_KEYS, applyHandlePreset, defaultFrontWin, defaultHandle, hbDims, hbNet, hbOpen } from '../carriers/handle-box.js';
 import { SLEEVE_GLUE, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn, sleeveSheet, upgradeSleeve } from '../carriers/sleeve.js';
@@ -21,7 +22,7 @@ function loopAxis(o, k) {
 function faceKeys(o) {
   if (o.type === 'tube') return ['wrap', 'top', 'bottom'];
   if (o.type === 'cup') return ['wrap'];
-  if (o.type === 'torte') return ['lidWrap', 'top'];
+  if (o.type === 'torte') return ['lidWrap', 'top', ...(carryOn(o) ? ['carry'] : [])];
   if (o.type === 'dome') return ['front', 'right', 'back', 'left', 'top', ...LID_WALLS, 'bottom', 'insideBottom'];
   if (o.type === 'bag') {
     const k = ['front'];
@@ -55,7 +56,7 @@ const wallMM = o => clamp(Math.max(o.wallT ?? o.thickness, o.thickness), o.thick
 const doubleWall = o => o.type === 'box' && wallMM(o) > o.thickness * 1.6 + .2;
 /* a separate lid can be clear PET (cake boxes): its faces carry only print, the rest is plastic */
 const clearLid = o => o.type === 'box' && o.lidType === 'telescope' && o.lidMat === 'clear';
-const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k))) || o.type === 'torte';
+const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k))) || (o.type === 'torte' && k !== 'carry');
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
 const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : (o.type === 'bag' && BAG_LABEL[k]) || FACE_LABEL[k];
 function ensureFaces(o) {
@@ -77,7 +78,7 @@ function ensureFaces(o) {
     o.frontWin ??= defaultFrontWin(o.dims);
     if (o.lidType === 'handle') { o.hbSides ??= 'right'; o.tray ??= { out: 0, fin: 'board' }; o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 0, cake: true }; }
   }
-  if (o.type === 'torte') { o.lidD ??= Math.round(o.dims.w * .88); o.baseH ??= Math.round(clamp(o.dims.w * .075, 10, 25)); o.lidR ??= Math.round(o.lidD * .06); o.lidDraft ??= .03; o.baseColor ??= TORTE_COLORS[0][0]; o.baseFin ??= 'metal'; }
+  if (o.type === 'torte') { o.lidD ??= Math.round(o.dims.w * .88); o.baseH ??= Math.round(clamp(o.dims.w * .075, 10, 25)); o.lidR ??= Math.round(o.lidD * .06); o.lidDraft ??= .03; o.baseColor ??= TORTE_COLORS[0][0]; o.baseFin ??= 'metal'; o.carry ??= defaultCarry(o); }
   if (o.type === 'dome') { o.trayH ??= Math.round(o.dims.h * .45); o.botK ??= .66; o.flangeW ??= 8; o.domeTop ??= .6; o.cornerR ??= 12; }
   if (o.type === 'cup') { o.cupWall ??= 'double'; o.cupLid ??= true; o.lidColor ??= LID_COLORS[0][0]; }
   if (o.type === 'bag') {
@@ -91,7 +92,7 @@ function ensureFaces(o) {
   o.window.place ??= 'edge'; o.window.off ??= 0; o.window.corners ??= 'round';
   if (o.whiteInside === undefined) o.whiteInside = true;
   for (const st of o.stickers) if (!faceKeys(o).includes(st.face)) st.face = faceKeys(o)[0];
-  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) || k === 'sleeve' ? '#ffffff' : k.startsWith('inside') || HANDLE_KEYS.includes(k) ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
+  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) || k === 'sleeve' || k === 'carry' ? '#ffffff' : k.startsWith('inside') || HANDLE_KEYS.includes(k) ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
   if (!o.board) o.board = (o.faces.front || o.faces.wrap).bg;
 }
 function newObject(presetId = 'mailer') {
@@ -106,6 +107,7 @@ function newObject(presetId = 'mailer') {
   if (p.bag) applyBagPreset(o, p);
   if (p.dome) applyDomePreset(o, p);
   if (p.torte) applyTortePreset(o, p);
+  if (p.carry) o.carry = { ...defaultCarry(o), ...p.carry, on: true };
   ensureFaces(o);
   if (p.board) setBoard(o, p.board);
   if (p.sleeve?.bg) o.faces.sleeve.bg = p.sleeve.bg;
@@ -114,7 +116,7 @@ function newObject(presetId = 'mailer') {
 /* unprinted board colour: outer faces take it, the inside stays white unless switched off */
 function setBoard(o, c) {
   o.board = c;
-  for (const k of outerKeys(o)) if (!(o.type === 'bag' && EXT_KEYS.includes(k)) && k !== 'sleeve') o.faces[k].bg = c;
+  for (const k of outerKeys(o)) if (!(o.type === 'bag' && EXT_KEYS.includes(k)) && k !== 'sleeve' && k !== 'carry') o.faces[k].bg = c;
   // the handle is cut out of the lid: its outside is the board's reverse, like the inside
   for (const k of ['inside', 'insideBottom', ...HANDLE_KEYS]) if (o.faces[k]) o.faces[k].bg = o.whiteInside ? WHITE_INSIDE : c;
 }
@@ -126,6 +128,7 @@ function faceMM(o, k) {
   const { w, h, d } = o.dims;
   if (o.type === 'tube') return k === 'wrap' ? [Math.PI * w, h] : [w, w];
   if (o.type === 'cup') { const G = cupGeom(o); return [G.Wr, G.Hr]; }
+  if (k === 'carry') { const D = carryDims(o); return [D.bw, D.P]; }
   if (o.type === 'torte') {
     const G = torteGeom(o);
     return k === 'top' ? [2 * G.Rt, 2 * G.Rt] : [Math.PI * (G.Rl + G.Rs), Math.hypot(G.Rl - G.Rs, G.yS - G.y1)];
@@ -189,7 +192,14 @@ function netLayout(o) {
   if (o.type === 'torte') {
     // print areas of the clear lid: the wall unrolled and the round top above it
     const [C, hw] = faceMM(o, 'lidWrap'), [Dt] = faceMM(o, 'top'), gap = 15, W = Math.max(C, Dt);
-    return { W, H: Dt + gap + hw, panels: [{ key: 'top', x: W / 2 - Dt / 2, y: 0, w: Dt, h: Dt, circle: true }, { key: 'lidWrap', x: (W - C) / 2, y: Dt + gap, w: C, h: hw }] };
+    const n = { W, H: Dt + gap + hw, panels: [{ key: 'top', x: W / 2 - Dt / 2, y: 0, w: Dt, h: Dt, circle: true }, { key: 'lidWrap', x: (W - C) / 2, y: Dt + gap, w: C, h: hw }] };
+    if (carryOn(o)) {
+      // the carrier sleeve is die-cut from paper: one band below the print areas of the lid
+      const D = carryDims(o), sh = carrySheet(D), y = n.H + gap, m = q => q.map(([a, b]) => [a, y + b]);
+      n.panels.push({ key: 'carry', x: 0, y, w: D.bw, h: D.P, part: true, poly: m(sh.outline), holes: sh.holes.map(m), glue: m(sh.glue), creases: sh.creases.map(([a, b, c, d]) => [a, y + b, c, y + d]) });
+      n.W = Math.max(n.W, D.bw); n.H = y + D.P;
+    }
+    return n;
   }
   if (o.type === 'cup') {
     // the side wall is printed flat as a fan (an annular sector), with a glue overlap on the left

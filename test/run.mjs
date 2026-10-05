@@ -269,6 +269,26 @@ await test('коробка с ручкой: ручка вырублена из �
   await ctx.close();
 });
 
+await test('рукав-переноска для тортницы: лента под дном, ручка из концов ленты, окно внизу', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  for (const id of ['torte207Carry', 'torte18Carry']) {
+    await addPreset(page, id);
+    const svg = readFileSync(await (await download(page, '#tplBtn')).path(), 'utf8');
+    assert.match(svg, /РУКАВ-ПЕРЕНОСКА · [\d.]+×[\d.]+ мм/, `${id}: лента на развёртке`);
+    assert.match(svg, /клей с оборота/, `${id}: лепестки ручки склеиваются`);
+    // a polygon each: the band's outline, two hand holes, two windows
+    const cut = (svg.match(/<polygon points="[^"]+" fill="none" stroke="#00a0e3"/g) || []).length;
+    assert.equal(cut, 5, `${id}: контур, две проймы, два окна (${cut})`);
+  }
+  // a plain container gets one with a tick
+  await addPreset(page, 'torte18');
+  await page.click('input[data-k="carry.on"]'); await page.waitForTimeout(500);
+  assert.ok(await page.evaluate(() => { const o = window.__boxStudio.state.objects[0]; return o.carry.on && !!o.faces.carry; }));
+  assert.match(readFileSync(await (await download(page, '#tplBtn')).path(), 'utf8'), /Рукав-переноска — бумажная вырубка/);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 const presets = only &&!'все заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return ids; })();
 if (presets.length) await test(`все заготовки (${presets.length}): построение, пломба, открывание, шаблон SVG`, async () => {
   const { ctx, page, errors } = await openEditor(browser);
