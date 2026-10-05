@@ -5,6 +5,7 @@ import { clearLid, doubleWall, faceMM, netLayout, wallMM } from '../core/model.j
 import { contactMat } from '../scene/renderer.js';
 import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
 import { bridgeMM, buildHandleBox, frontWinMM, joinWinMM } from './handle-box.js';
+import { netPoint } from './box-net.js';
 
 /* lid outline in mm: an outer-flap lid overhangs the base by the board thickness on the sides and front */
 function lidDimsMM(o) {
@@ -117,10 +118,11 @@ function netWindows(o, n = netLayout(o)) {
     if (J && p.key === 'front') continue;
     let fw = faceWindow(o, p.key); if (!fw) continue;
     if (J && fw.joinFront) { if (fw.polys.length < 2) continue; fw = { ...fw, polys: fw.polys.slice(1) }; }
-    let fx = fw.x, fy = fw.y, rr = fw.rr;
-    if (p.rot) { fx = 1 - fw.x - fw.w; fy = 1 - fw.y - fw.h; rr = [rr[2], rr[3], rr[0], rr[1]]; }
-    const polys = fw.polys?.map(q => q.map(v => ({ x: p.x + (p.rot ? 1 - v.x : v.x) * p.w, y: p.y + (p.rot ? 1 - v.y : v.y) * p.h })));
-    out.push({ x: p.x + fx * p.w, y: p.y + fy * p.h, w: fw.w * p.w, h: fw.h * p.h, rr: [...rr], polys, rmm: fw.rmm });
+    // the face's window on the sheet, the panel turned by quarter turns: corners and radii go round with it
+    const q = (((p.q ?? (p.rot ? 2 : 0)) % 4) + 4) % 4, [ax, ay] = netPoint(p, fw.x, fw.y), [bx, by] = netPoint(p, fw.x + fw.w, fw.y + fw.h);
+    const rr = [0, 1, 2, 3].map(i => fw.rr[(i + 4 - q) % 4]);
+    const polys = fw.polys?.map(pl => pl.map(v => { const [x, y] = netPoint(p, v.x, v.y); return { x, y }; }));
+    out.push({ x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay), rr, polys, rmm: fw.rmm });
   }
   for (let i = 0; i < out.length; i++) for (let j = out.length - 1; j > i; j--) {
     let a = out[i], b = out[j]; if (b.y < a.y) [a, b] = [b, a];

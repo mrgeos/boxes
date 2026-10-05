@@ -224,7 +224,35 @@ await test('рукав с ручкой: лента от верха ручки, �
   await ctx.close();
 });
 
-const presets = only && !'все заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return ids; })();
+await test('развёртка коробки — лоток-крест: клеевые клапаны в углах, крышка на задней стенке, старые макеты не ломаются', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  const svgOf = async () => readFileSync(await (await download(page, '#tplBtn')).path(), 'utf8');
+  const size = svg => svg.match(/width="([\d.]+)mm" height="([\d.]+)mm"/).slice(1).map(Number);
+  // a tray without a lid: the bottom in the middle, the walls round it, a glue flap at each end of the front and back walls
+  await addPreset(page, 'tray');
+  let svg = await svgOf(), { w, h, d } = await page.evaluate(() => window.__boxStudio.state.objects[0].dims);
+  assert.match(svg, /лоток-крест/);
+  assert.equal((svg.match(/>клей</g) || []).length, 4, 'четыре клеевых клапана');
+  assert.deepEqual(size(svg), [w + 2 * h, d + 2 * h], 'лист — крест: дно со стенками по четырём сторонам');
+  // a lid with a flap: the lid off the back wall's top edge, the flap after it, in one column with the base
+  await addPreset(page, 'flap150');
+  svg = await svgOf();
+  const m = await page.evaluate(() => { const S = window.__boxStudio, o = S.state.objects[0]; return { ...o.dims, top: S.faceMM(o, 'top')[1], flap: S.faceMM(o, 'flap')[1] }; });
+  assert.ok(Math.abs(size(svg)[1] - (m.d + 2 * m.h + m.top + m.flap)) < .2, 'крышка и клапан идут за задней стенкой: ' + size(svg)[1]);
+  assert.match(svg, /Крышка отогнута от верхнего края задней стенки/);
+  // a project with an uploaded design of the whole sheet keeps the sheet it was drawn on
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#saveBtn')]);
+  const proj = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+  delete proj.objects[0].netV; proj.objects[0].dieline = 'old-sheet';
+  const file = (await dl.path()) + '-legacy.json'; (await import('node:fs')).writeFileSync(file, JSON.stringify(proj));
+  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#openBtn')]); await fc.setFiles(file); await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(() => window.__boxStudio.state.objects[0].netV), 1);
+  assert.doesNotMatch(await svgOf(), /лоток-крест/, 'старая раскладка листа');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+const presets = only &&!'все заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return ids; })();
 if (presets.length) await test(`все заготовки (${presets.length}): построение, пломба, открывание, шаблон SVG`, async () => {
   const { ctx, page, errors } = await openEditor(browser);
   for (const id of presets) {

@@ -8,6 +8,7 @@ import { TORTE_COLORS, applyTortePreset, torteGeom } from '../carriers/torte.js'
 import { lidDimsMM, winMM, windowPlace } from '../carriers/box.js';
 import { HANDLE_KEYS, HB_END_KEYS, applyHandlePreset, defaultFrontWin, defaultHandle, hbDims, hbNet, hbOpen } from '../carriers/handle-box.js';
 import { SLEEVE_GLUE, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn, sleeveSheet, upgradeSleeve } from '../carriers/sleeve.js';
+import { boxNet } from '../carriers/box-net.js';
 
 /* printed faces of an object, in tab order; depends on the lid construction */
 /* faces that close into a ring (a sleeve glued into a loop, the wall of a tube, a cup or a cake lid): what runs
@@ -59,6 +60,7 @@ const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBo
 const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : (o.type === 'bag' && BAG_LABEL[k]) || FACE_LABEL[k];
 function ensureFaces(o) {
   o.stickers ??= [];
+  o.netV ??= o.dieline ? 1 : 2;
   upgradeSleeve(o);
   if (o.type === 'box') {
     o.lidType ??= 'flat';
@@ -199,6 +201,8 @@ function netLayout(o) {
   const keys = faceKeys(o), lt = o.lidType || 'flat';
   // a window across the hinge needs the lid attached to the back panel too, so the cut is one opening
   if (lt === 'handle') return hbNet(o);
+  // the blank as it is made (v2); projects with an uploaded design of the whole sheet keep the sheet it was drawn on
+  if ((o.netV ?? 2) >= 2) return addSleeve(o, boxNet(o));
   const backLid = lt === 'flap' || lt === 'tuck' || (lt === 'flat' && !!winMM(o) && windowPlace(o) === 'back');
   const hinged = keys.includes('top') && !backLid && lt !== 'telescope';
   const panels = [];
@@ -232,14 +236,17 @@ function netLayout(o) {
     for (const k of extra) { const [pw, ph] = faceMM(o, k); panels.push({ key: k, x, y, w: pw, h: ph, part: true }); x += pw + gap; rowH = Math.max(rowH, ph); }
     W = Math.max(W, x - gap); H = y + rowH;
   }
-  if (sleeveOn(o)) {
-    const SD = sleeveDims(o), y = H + 15, sh = sleeveSheet(SD), m = q => q.map(([a, b]) => [a, y + b]);
-    panels.push({ key: 'sleeve', x: 0, y, w: SD.bw, h: SD.P, part: true, creases: sh.creases.map(([a, b, c, d]) => [a, y + b, c, y + d]), ...(sh.outline ? { poly: m(sh.outline), holes: sh.holes.map(m), glue: m(sh.glue) } : {}) });
-    // a band without a handle closes with a glue flap; with a handle its two ends (the leaves) are glued back to back
-    if (!sh.outline) panels.push({ key: 'glue', blank: 'клеевой клапан', x: 0, y: y + SD.P, w: SD.bw, h: SLEEVE_GLUE, part: true, crease: true });
-    W = Math.max(W, SD.bw); H = y + SD.P + (sh.outline ? 0 : SLEEVE_GLUE);
-  }
-  return { W, H, panels, oy, hinged, backLid, tx, tw, lid, folds };
+  return addSleeve(o, { W, H, panels, oy, hinged, backLid, tx, tw, lid, folds });
+}
+/* a sleeve is a separate band below the box's blank */
+function addSleeve(o, n) {
+  if (!sleeveOn(o)) return n;
+  const SD = sleeveDims(o), y = n.H + 15, sh = sleeveSheet(SD), m = q => q.map(([a, b]) => [a, y + b]);
+  n.panels.push({ key: 'sleeve', x: 0, y, w: SD.bw, h: SD.P, part: true, creases: sh.creases.map(([a, b, c, d]) => [a, y + b, c, y + d]), ...(sh.outline ? { poly: m(sh.outline), holes: sh.holes.map(m), glue: m(sh.glue) } : {}) });
+  // a band without a handle closes with a glue flap; with a handle its two ends (the leaves) are glued back to back
+  if (!sh.outline) n.panels.push({ key: 'glue', blank: 'клеевой клапан', x: 0, y: y + SD.P, w: SD.bw, h: SLEEVE_GLUE, part: true, crease: true });
+  n.W = Math.max(n.W, SD.bw); n.H = y + SD.P + (sh.outline ? 0 : SLEEVE_GLUE);
+  return n;
 }
 
 export { loopAxis, clearLid, doubleWall, ensureFaces, faceKeys, faceLabel, faceMM, facePx, isClearFace, netLayout, newImage, newObject, newShape, newText, outerKeys, setBoard, wallMM };
