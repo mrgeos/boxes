@@ -10,6 +10,13 @@ import { HANDLE_KEYS, HB_END_KEYS, applyHandlePreset, defaultFrontWin, defaultHa
 import { SLEEVE_GLUE, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn, sleeveSheet } from '../carriers/sleeve.js';
 
 /* printed faces of an object, in tab order; depends on the lid construction */
+/* faces that close into a ring (a sleeve glued into a loop, the wall of a tube, a cup or a cake lid): what runs
+   past one end of the face goes on at the other. The axis the ring runs along, or null */
+function loopAxis(o, k) {
+  if (k === 'sleeve') return 'y';
+  if ((k === 'wrap' && (o.type === 'tube' || o.type === 'cup')) || (k === 'lidWrap' && o.type === 'torte')) return 'x';
+  return null;
+}
 function faceKeys(o) {
   if (o.type === 'tube') return ['wrap', 'top', 'bottom'];
   if (o.type === 'cup') return ['wrap'];
@@ -233,4 +240,4 @@ function netLayout(o) {
   return { W, H, panels, oy, hinged, backLid, tx, tw, lid, folds };
 }
 
-export { clearLid, doubleWall, ensureFaces, faceKeys, faceLabel, faceMM, facePx, isClearFace, netLayout, newImage, newObject, newShape, newText, outerKeys, setBoard, wallMM };
+export { loopAxis, clearLid, doubleWall, ensureFaces, faceKeys, faceLabel, faceMM, facePx, isClearFace, netLayout, newImage, newObject, newShape, newText, outerKeys, setBoard, wallMM };

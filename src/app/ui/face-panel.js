@@ -6,7 +6,7 @@ import { faceKeys, faceLabel, faceMM, facePx, netLayout, newImage } from '../cor
 import { getImg, importImageFile } from '../core/assets.js';
 import { hasRecolor, vecColors } from '../core/vector.js';
 import { allFonts, ensureFont } from '../core/fonts.js';
-import { applyObjMaterials, markFace, ui } from '../scene/renderer.js';
+import { RT, applyObjMaterials, markFace, ui } from '../scene/renderer.js';
 import { select, selectLayer } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField, refreshFields } from './fields.js';
@@ -111,6 +111,7 @@ function renderLayerProps() {
       ${L.kind === 'rect' ? rangeField('Скругление', 'radius', 0, 100, 1, 100) : ''}${rangeField('Контур (0 — заливка)', 'stroke', 0, 100, 1, 1000)}`;
   }
   html += `${rangeField('Центр X, %', 'x', -50, 150, .1, 100)}${rangeField('Центр Y, %', 'y', -50, 150, .1, 100)}${rangeField('Поворот, °', 'rot', -180, 180, 1)}${rangeField('Непрозрачность', 'opacity', 0, 100, 1, 100)}
+    ${!(L.type === 'image' && L.tile) && Object.keys(RT.get(o.id)?.frames || {}).length ? '<label class="check" title="Часть слоя за краем грани печатается на соседних гранях, через сгиб. Включается сама, если тянуть слой через ребро на модели"><input type="checkbox" data-k="wrap"> Переходит через рёбра на соседние грани</label>' : ''}
     <div class="field wide"><span class="fl">Отделка</span><select data-k="effect">${effOpts}</select></div>
     <div class="field wide"><span class="fl">Наложение</span><select data-k="blend">${Object.entries(BLENDS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
     <div class="grid2"><button class="btn sm" id="centerBtn">По центру</button><button class="btn sm danger" id="delLayerBtn">Удалить слой</button></div>`;

@@ -18,6 +18,7 @@ import { buildStickerFilms } from '../stickers/film.js';
 import { camTween, invalidate, orbitLock, updateShadowCam } from './camera.js';
 import { layoutSoon, parentOf, placeOf } from '../core/groups.js';
 import { moving } from './move.js';
+import { wrapTouch } from '../faces/wrap.js';
 
 const viewport = $('#viewport');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -83,7 +84,11 @@ const RT = new Map();
 const dirtyFaces = new Set();
 const rebuildQueue = new Set();
 const ui = { editor: true, net: true, layers: false, stickers: false, lib: true };
-function markFace(o, k) { dirtyFaces.add(o.id + '|' + k); if (o.id === sel.obj) { ui.editor = true; ui.net = true; } }
+function markFace(o, k) {
+  for (const t of wrapTouch(o, k)) dirtyFaces.add(o.id + '|' + t);   // faces its layers run onto, now and before
+  dirtyFaces.add(o.id + '|' + k);
+  if (o.id === sel.obj) { ui.editor = true; ui.net = true; }
+}
 function markObj(o) { for (const k of faceKeys(o)) markFace(o, k); }
 function ensureFaceRT(o, k) {
   const rt = RT.get(o.id); let f = rt.faces[k];

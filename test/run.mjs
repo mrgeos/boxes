@@ -139,6 +139,67 @@ await test('контекстное меню: объект, слой, пусто�
   await ctx.close();
 });
 
+await test('слой через ребро: печать на соседней грани, перенос мышью, закрытые края', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  // pixels of the plate's colour on each face
+  const plate = () => page.evaluate(() => { const S = window.__boxStudio, rt = S.RT.get(S.state.objects[0].id), out = {};
+    for (const k in rt.faces) { const c = rt.faces[k].canvas, d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - 10) < 30 && Math.abs(d[i + 1] - 122) < 30 && Math.abs(d[i + 2] - 161) < 30) n++; if (n) out[k] = n; }
+    return out; });
+  // a point of face k (fractions of it) on screen
+  const pt = (k, fx, fy) => page.evaluate(([k, fx, fy]) => { const S = window.__boxStudio, rt = S.RT.get(S.state.objects[0].id), F = rt.frames[k];
+    const p = F.c.clone().addScaledVector(F.u, (fx - .5) * F.w).addScaledVector(F.v, (.5 - fy) * F.h).multiplyScalar(.01); rt.group.localToWorld(p).project(S.camera);
+    const r = S.renderer.domElement.getBoundingClientRect(); return [r.left + (p.x + 1) / 2 * r.width, r.top + (1 - p.y) / 2 * r.height]; }, [k, fx, fy]);
+  const shape = () => page.evaluate(() => { const o = window.__boxStudio.state.objects[0]; for (const k in o.faces) { const L = o.faces[k].layers.find(l => l.type === 'shape' && l.id !== 'cover'); if (L) return { face: k, y: L.y, hmm: L.h * window.__boxStudio.faceMM(o, k)[1], wrap: !!L.wrap }; } });
+
+  await addPreset(page, 'mailer');
+  await page.click('#faceTabs .chip[data-f="front"]'); await page.click('#addRectBtn');
+  await page.evaluate(() => window.__boxStudio.setView('q', true)); await page.waitForTimeout(700);
+  assert.deepEqual(Object.keys(await plate()), ['front'], 'плашка только на переде');
+  const h0 = (await shape()).hmm;
+  // a layer over it (an invisible one, as big as the face): the selected plate is still grabbed under it
+  await page.evaluate(() => { const S = window.__boxStudio, o = S.state.objects[0], f = o.faces.front, L = f.layers.find(l => l.type === 'shape');
+    f.layers.push({ ...structuredClone(L), id: 'cover', w: 1, h: 1, x: .5, y: .5, opacity: 0 }); S.select(o.id, 'front', L.id); });
+  // drag it up to the lid's front edge: it runs over the edge, then belongs to the lid
+  await page.mouse.move(...await pt('front', .5, .5)); await page.waitForTimeout(200); await page.mouse.down();
+  await page.mouse.move(...await pt('top', .5, .97), { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(700);
+  const s = await shape();
+  assert.equal(s.face, 'top', 'слой переехал на крышку'); assert.ok(s.wrap, 'включился переход через рёбра');
+  assert.ok(Math.abs(s.hmm - h0) < .01, `размер в мм сохранён (${h0} → ${s.hmm})`);
+  const p = await plate();
+  assert.ok(p.front > 1000 && p.top > 1000, 'плашка на стыке печатается на обеих гранях: ' + JSON.stringify(p));
+  // the base's wall under a lid: its top edge is covered, nothing comes out on the lid
+  await addPreset(page, 'lidbase');
+  await page.evaluate(() => { const S = window.__boxStudio, o = S.state.objects[0];
+    o.faces.front.layers.push({ id: 'wrapTest', type: 'shape', kind: 'rect', w: .5, h: .22, fill: '#0a7aa1', radius: 0, stroke: 0, x: .5, y: 0, rot: 0, opacity: 1, blend: 'source-over', effect: 'none', visible: true, wrap: true });
+    S.select(o.id, 'front', 'wrapTest'); });
+  await page.locator('#layerSec [data-k="opacity"]').last().dispatchEvent('input'); await page.waitForTimeout(800);
+  assert.deepEqual(Object.keys(await plate()), ['front'], 'с края под крышкой на крышку не переходит');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+await test('рукав и обечайка — кольцо: слой через шов продолжается с другого конца', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  // blue pixels in a row of a face's canvas (fraction of its height or width)
+  const blue = (k, along, at) => page.evaluate(([k, along, at]) => { const S = window.__boxStudio, c = S.RT.get(S.state.objects[0].id).faces[k].canvas, x = c.getContext('2d');
+    const d = along === 'y' ? x.getImageData(0, Math.round(at * (c.height - 1)), c.width, 1).data : x.getImageData(Math.round(at * (c.width - 1)), 0, 1, c.height).data;
+    let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 60 && d[i + 2] > 120) n++; return n; }, [k, along, at]);
+  const ellipse = async (face, x, y) => {
+    await page.click(`#faceTabs .chip[data-f="${face}"]`); await page.click('#addEllBtn');
+    await page.evaluate(([face, x, y]) => { const S = window.__boxStudio, o = S.state.objects[0], L = o.faces[face].layers.at(-1); Object.assign(L, { fill: '#0a7aa1', w: .3, h: .12, x, y }); S.select(o.id, face, L.id); }, [face, x, y]);
+    await page.locator('#layerSec [data-k="opacity"]').last().dispatchEvent('input'); await page.waitForTimeout(800);
+  };
+  await addPreset(page, 'cakeSleeveHandle');
+  await ellipse('sleeve', .5, .98);
+  assert.ok(await blue('sleeve', 'y', .995) > 50 && await blue('sleeve', 'y', .005) > 50, 'на рукаве круг у шва печатается у обоих концов ленты');
+  assert.equal(await blue('sleeve', 'y', .5), 0);
+  await addPreset(page, 'tube');
+  await ellipse('wrap', .01, .5);
+  assert.ok(await blue('wrap', 'x', .002) > 20 && await blue('wrap', 'x', .998) > 20, 'на тубусе круг у шва продолжается с другого края');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 const presets = only && !'все заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return ids; })();
 if (presets.length) await test(`все заготовки (${presets.length}): построение, пломба, открывание, шаблон SVG`, async () => {
   const { ctx, page, errors } = await openEditor(browser);
