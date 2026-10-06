@@ -59,12 +59,12 @@ function layerReach(o, k, L) {
   }
   return out;
 }
-/* the parts of other faces' layers that face k prints: { L, from, G, clip } in drawing order */
+/* the parts of other faces' layers that face k prints: { L, from, z (its place in its own face's stack), G, clip } */
 function wrapsOnto(o, k) {
   const out = [];
   for (const from of faceKeys(o)) {
     if (from === k) continue;
-    for (const L of o.faces[from]?.layers || []) for (const r of layerReach(o, from, L)) if (r.key === k) out.push({ L, from, G: r.G, clip: clipPolygon(o, k, r.clips), hole: r.hole });
+    (o.faces[from]?.layers || []).forEach((L, z) => { for (const r of layerReach(o, from, L)) if (r.key === k) out.push({ L, from, z, G: r.G, clip: clipPolygon(o, k, r.clips), hole: r.hole }); });
   }
   return out;
 }

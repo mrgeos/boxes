@@ -178,6 +178,22 @@ await test('слой через ребро: печать на соседней �
   await ctx.close();
 });
 
+await test('слой через ребро лежит под слоями соседней грани: логотип поверх паттерна на другой грани', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  await addPreset(page, 'mailer');
+  // a red background over the top that runs onto the front, and a blue logo on the front
+  await page.evaluate(() => { const S = window.__boxStudio, o = S.state.objects[0], base = { type: 'shape', kind: 'rect', radius: 0, stroke: 0, rot: 0, opacity: 1, blend: 'source-over', effect: 'none', visible: true };
+    o.faces.top.layers.push({ ...base, id: 'bgpat', w: 1.5, h: 1.5, fill: '#ff0000', x: .5, y: .5, wrap: true });
+    o.faces.front.layers.push({ ...base, id: 'logo', w: .3, h: .3, fill: '#0000ff', x: .5, y: .5 });
+    S.select(o.id, 'front', 'logo'); });
+  await page.locator('#layerSec [data-k="opacity"]').last().dispatchEvent('input'); await page.waitForTimeout(800);
+  const px = await page.evaluate(() => { const S = window.__boxStudio, c = S.RT.get(S.state.objects[0].id).faces.front.canvas, d = c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data, e = c.getContext('2d').getImageData(4, 4, 1, 1).data; return { mid: [...d], edge: [...e] }; });
+  assert.ok(px.mid[2] > 200 && px.mid[0] < 60, 'логотип виден поверх паттерна: ' + px.mid);
+  assert.ok(px.edge[0] > 200 && px.edge[2] < 60, 'паттерн с соседней грани виден вокруг логотипа: ' + px.edge);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 await test('рукав и обечайка — кольцо: слой через шов продолжается с другого конца', async () => {
   const { ctx, page, errors } = await openEditor(browser);
   // blue pixels in a row of a face's canvas (fraction of its height or width)

@@ -136,8 +136,11 @@ function renderFace(o, k) {
     c.save(); c.translate(ax === 'x' ? it.shift * cw : 0, ax === 'y' ? it.shift * ch : 0); drawLayer(c, it.L, cw, ch, paint, alpha); c.restore();
   };
   // on a ring a layer over one end is drawn again past the other end (shift: whole lengths of the face)
-  const own = face.layers.flatMap(L => [{ L }, ...(ax ? loopShifts(L, W, H, ax).map(shift => ({ L, shift })) : [])]);
-  for (const it of [...own, ...wrapsOnto(o, k)]) {
+  const own = face.layers.flatMap((L, z) => [{ L, z }, ...(ax ? loopShifts(L, W, H, ax).map(shift => ({ L, z, shift })) : [])]);
+  // a part that came over an edge sits in the stack at its place in its own face (the bottom layer of a face is
+  // under the bottom layer of this one), so a pattern spread over several faces stays under the logos of each
+  const items = [...own, ...wrapsOnto(o, k)].map((it, i) => ({ it, i })).sort((a, b) => a.it.z - b.it.z || (!!b.it.from - !!a.it.from) || a.i - b.i).map(x => x.it);
+  for (const it of items) {
     const L = it.L; if (!L.visible) continue;
     if (L.type === 'text') ensureFont(L);
     if (isFoil(L.effect)) fxl.push(it);
