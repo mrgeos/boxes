@@ -108,7 +108,10 @@ function drawEditor() {
     const ax = loopAxis(o, sel.face);
     if (!(L.type === 'image' && L.tile) && !(L.wrap && layerReach(o, sel.face, L).length)) {
       c.save(); c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); c.clip();
-      c.beginPath(); c.rect(-PAD, -PAD, cw, ch);
+      // hatched: past the face's edge and in its window (but not on the handle's leaves printed there)
+      if (fw) windowPath(c, fw, 0, 0, dw, dh); else c.beginPath();
+      for (const q of fw?.keep || []) { q.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](v.x * dw, v.y * dh)); c.closePath(); }
+      c.rect(-PAD, -PAD, cw, ch);
       if (circle) c.arc(dw / 2, dh / 2, dw / 2, 0, Math.PI * 2, true);
       else c.rect(ax === 'x' ? -PAD : 0, ax === 'y' ? -PAD : 0, ax === 'x' ? cw : dw, ax === 'y' ? ch : dh);
       c.clip('evenodd');
