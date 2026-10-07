@@ -74,15 +74,15 @@ function renderLayers() {
     if (L.group && !seen.has(L.group)) {
       seen.add(L.group);
       const ms = f.layers.filter(l => l.group === L.group), all = ms.every(l => picked.has(l.id)), vis = ms.some(l => l.visible);
-      rows.push(`<div class="layer grp ${all ? 'on' : ''} ${vis ? '' : 'hidden'}" data-g="${L.group}" draggable="true">
+      rows.push(`<div class="layer grp ${all ? 'on' : ''} ${vis ? '' : 'hidden'}" data-g="${L.group}" style="--d:0" draggable="true">
         <button class="tw" data-a="fold" aria-label="${folded.has(L.group) ? 'Развернуть' : 'Свернуть'}">${folded.has(L.group) ? '▸' : '▾'}</button>
         <span class="th">${ICON_GROUP}</span><span class="ln">${esc(f.groups?.[L.group] || 'Группа')}</span><span class="badge">${ms.length}</span>
         <span class="acts">${rowActs(vis, ms.every(l => l.locked))}</span></div>`);
     }
     if (L.group && folded.has(L.group)) continue;
     const mods = layerMods(o, L).map(m => `<button class="mod ${m.cls || ''}" data-a="mod" data-to="${esc(m.to)}" title="${esc(m.t)}" aria-label="${esc(m.t)}">${ICON[m.i]}</button>`).join('');
-    rows.push(`<div class="layer ${picked.has(L.id) ? 'on' : ''} ${L.id === sel.layer && picked.size > 1 ? 'main' : ''} ${L.visible ? '' : 'hidden'} ${L.locked ? 'locked' : ''} ${L.clipBelow ? 'clipped' : ''} ${L.group ? 'in-grp' : ''}" data-id="${L.id}" draggable="true">
-      ${L.clipBelow ? '<span class="clip-mark" title="Обтравка по слою ниже">↳</span>' : ''}${thumbHTML(L)}<span class="ln">${esc(layerName(L))}</span><span class="mods">${mods}</span>
+    rows.push(`<div class="layer ${picked.has(L.id) ? 'on' : ''} ${L.id === sel.layer && picked.size > 1 ? 'main' : ''} ${L.visible ? '' : 'hidden'} ${L.locked ? 'locked' : ''} ${L.clipBelow ? 'clipped' : ''} ${L.group ? 'in-grp' : ''}" data-id="${L.id}" style="--d:${L.group ? 1 : 0}" draggable="true">
+      <span class="tw" ${L.clipBelow ? 'title="Обтравка по слою ниже"' : 'aria-hidden="true"'}>${L.clipBelow ? '↳' : ''}</span>${thumbHTML(L)}<span class="ln">${esc(layerName(L))}</span><span class="mods">${mods}</span>
       <span class="acts">${rowActs(L.visible, L.locked)}</span></div>`);
   }
   box.innerHTML = rows.join('');

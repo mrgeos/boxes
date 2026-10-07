@@ -38,14 +38,14 @@ function renderObjects() {
     const cls = `obj ${g ? 'grp' : ''} ${on.has(id) ? 'on' : ''} ${hid ? 'hidden' : ''} ${lck ? 'locked' : ''}`;
     const acts = `<span class="acts">${rowActs(hid, lck)}</span>`;
     if (g) return `<div class="${cls}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true">
-      <button class="caret" data-open aria-label="${g.open ? 'Свернуть' : 'Развернуть'}" aria-expanded="${g.open}">${g.open ? '▾' : '▸'}</button>${GROUP_ICON}<span class="nm">${esc(g.name)}</span><span class="dm">${count(os.length)}</span>${acts}</div>`;
+      <button class="caret" data-open aria-label="${g.open ? 'Свернуть' : 'Развернуть'}" aria-expanded="${g.open}">${g.open ? '▾' : '▸'}</button><span class="th">${GROUP_ICON}</span><span class="nm">${esc(g.name)}</span><span class="dm">${count(os.length)}</span>${acts}</div>`;
     const o = own(id), url = thumbOf(id), xs = extrasOf(o), open = !foldedObj.has(id), xOn = id === sel.obj && (sel.sticker || sel.part);
     const th = url ? `<img class="th" src="${url}" alt="">` : `<span class="th">${ICON[o.type] || ICON.box}</span>`;
     // the object's extras (stickers, a sleeve) under it, one level in; the object row folds them
     const kids = open ? xs.map(e => `<div class="obj xtra ${xOn === e.id ? 'on' : ''} ${extraHidden(e) ? 'hidden' : ''} ${e.T.locked ? 'locked' : ''}" data-obj="${id}" data-x="${e.id}" style="--d:${depth + 1}" tabindex="0" role="button">
-      <span class="th">${extraIcon(e)}</span><span class="nm">${esc(extraName(o, e))}</span><span class="acts">${extraActs(e)}</span></div>`).join('') : '';
+      <span class="caret"></span><span class="th">${extraIcon(e)}</span><span class="nm">${esc(extraName(o, e))}</span><span class="acts">${extraActs(e)}</span></div>`).join('') : '';
     return `<div class="${xOn ? cls.replace(' on ', ' kid-on ') : cls}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true" title="${esc(o.name)} · ${dimsText(o)} мм">
-      ${xs.length ? `<button class="caret" data-fold aria-label="${open ? 'Свернуть допы' : 'Развернуть допы'}" aria-expanded="${open}">${open ? '▾' : '▸'}</button>` : '<span class="caret"></span>'}${th}<span class="nm">${esc(o.name)}</span><span class="mods">${objMods(id, o).map(m => `<button class="mod" data-mod="${m.k}" title="${esc(m.t)}" aria-label="${esc(m.t)}">${ICON[m.i]}</button>`).join('')}</span><span class="dm mono">${dimsText(o)}</span>${acts}</div>${kids}`;
+      ${xs.length ? `<button class="caret" data-fold aria-label="${open ? 'Свернуть допы' : 'Развернуть допы'}" aria-expanded="${open}">${open ? '▾' : '▸'}</button>` : '<span class="caret"></span>'}${th}<span class="nm">${esc(o.name)}</span><span class="mods">${objMods(o).map(m => `<button class="mod" data-mod="${m.k}" title="${esc(m.t)}" aria-label="${esc(m.t)}">${ICON[m.i]}</button>`).join('')}</span><span class="dm mono">${dimsText(o)}</span>${acts}</div>${kids}`;
   }).join('') || '<div class="empty">Добавьте коробку, стакан или тубус</div>';
   // an extra's row: picks it (as an object of its own); its lock and eye, a double click renames it
   $$('#objList .obj.xtra').forEach(el => {
@@ -88,11 +88,10 @@ function renderObjects() {
 const rowActs = (hid, lck) => `<button data-a="lock" class="${lck ? 'pin' : ''}" title="${lck ? 'Разблокировать' : 'Заблокировать: не выбирается и не двигается в сцене'}" aria-label="Блокировка">${lck ? ICON.lock : ICON.unlock}</button>
   <button data-a="vis" class="${hid ? 'pin' : ''}" title="${hid ? 'Показать' : 'Скрыть: не видно в сцене, в картинке и видео'}" aria-label="Видимость">${hid ? ICON.eyeOff : ICON.eye}</button>`;
 /* what is going on with an object, as small marks in its row: { k: what a click does, i: icon, t: title } */
-function objMods(id, o) {
-  const m = [], lid = lidAction(o), g = parentOf(id);
+function objMods(o) {
+  const m = [], lid = lidAction(o);
   if (lid && o.lid > 0) m.push({ k: 'lid', i: 'lidOpen', t: `Открыто. Клик: ${lid[1].toLowerCase()}` });
   if (o.dieline) m.push({ k: 'net', i: 'dieline', t: 'Свой макет развёртки' });
-  if (g) m.push({ k: 'group', i: 'row', t: `В ряду группы «${g.name}»` });
   return m;
 }
 function modAction(id, k) {

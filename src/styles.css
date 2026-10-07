@@ -126,10 +126,13 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .obj .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .obj .dm{color:var(--muted);font-size:11px}
 .obj > svg,.obj .th svg{width:16px;height:16px;flex:none;color:var(--muted)}
-.obj{padding-left:calc(8px + var(--d, 0) * 16px);position:relative}
+/* a ladder as in Figma: every row keeps room for the fold arrow, a level steps in by an icon and a gap, so a
+   child's icon stands under its parent's name; the highlight runs the full width */
+.obj{padding-left:calc(4px + var(--d, 0) * 30px);position:relative}
 .obj.grp .nm{font-weight:600}
-.obj .caret{all:unset;cursor:pointer;width:14px;margin-right:-4px;text-align:center;color:var(--muted);font-size:11px;flex:none}
-.obj.drop-before::before,.obj.drop-after::after,.objlist.drop-end::after{content:"";position:absolute;left:calc(8px + var(--d, 0) * 16px);right:4px;height:2px;border-radius:1px;background:var(--accent)}
+.obj .caret{all:unset;cursor:pointer;width:16px;height:20px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:10px;flex:none;border-radius:3px}
+.obj .caret:not(:empty):hover{color:var(--fg);background:var(--panel)}
+.obj.drop-before::before,.obj.drop-after::after,.objlist.drop-end::after{content:"";position:absolute;left:calc(26px + var(--d, 0) * 30px);right:4px;height:2px;border-radius:1px;background:var(--accent)}
 .obj.drop-before::before{top:-3px}.obj.drop-after::after{bottom:-3px}
 .objlist{position:relative}.objlist.drop-end::after{bottom:-4px;left:8px}
 .obj.drop-into{border-color:var(--accent);border-style:dashed}
@@ -173,7 +176,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .addrow .btn{height:auto;padding:6px 4px;flex-direction:column;gap:3px;font-size:11px}
 
 .layers{display:flex;flex-direction:column;gap:3px}
-.layer{display:flex;align-items:center;gap:6px;padding:2px 4px 2px 6px;border:1px solid transparent;border-radius:5px;background:none;cursor:pointer;min-height:28px}
+.layer{display:flex;align-items:center;gap:6px;padding:2px 4px 2px calc(2px + var(--d, 0) * 26px);border:1px solid transparent;border-radius:5px;background:none;cursor:pointer;min-height:28px}
 .layer:hover{background:var(--field)}
 .layer.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 .layer.hidden .ln{opacity:.45}
@@ -271,12 +274,9 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .cut{border-top:1px solid var(--line);margin-top:10px;padding-top:8px;display:grid;gap:6px}
 .cut h3{margin:0;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .cut .btn.on{border-color:var(--accent);color:var(--accent)}
-.layer.clipped{padding-left:18px}
-.layer .clip-mark{color:var(--muted);font-size:12px;margin-right:-2px}
 .layer.main{box-shadow:0 0 0 2px var(--accent) inset}
-.layer.in-grp{margin-left:16px}
-.layer.grp .tw{border:0;background:none;color:var(--muted);cursor:pointer;width:16px;padding:0;font-size:11px}
-.layer.grp{padding-left:2px}
+.layer .tw{border:0;background:none;color:var(--muted);width:16px;height:20px;padding:0;font-size:10px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:3px}
+.layer button.tw{cursor:pointer}.layer button.tw:hover{color:var(--fg);background:var(--panel)}
 .layer.dragging{opacity:.45}
 .layer.drop-above{box-shadow:0 -2px 0 var(--accent)}
 .layer.drop-below{box-shadow:0 2px 0 var(--accent)}
@@ -299,7 +299,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .crumb b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
 .obj .caret:empty{cursor:default}
 .obj.xtra{min-height:26px}
-.obj.xtra .th{width:18px;height:18px;color:var(--muted)}
+.obj.xtra .th{color:var(--muted)}
 .obj.xtra .th svg{width:14px;height:14px}
 .obj.xtra .nm{font-size:12.5px}
 .obj.kid-on{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
