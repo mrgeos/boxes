@@ -13,6 +13,7 @@ import { renderLayerProps } from './face-panel.js';
 import { placementsFor } from '../stickers/placement.js';
 import { drawSticker } from '../stickers/film.js';
 import { pickLayers } from '../core/selection.js';
+import { startTextEdit } from './text-edit.js';
 import { boundsOf, clickPick, groupOf, layerAABB, moveLayers, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
 import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
@@ -324,7 +325,8 @@ function initFaceEditor() {
     const f = activeFaceData(), [mx, my] = edPoint(e), hit = f && hitLayer(f, edState.W, edState.H, mx / edState.k, my / edState.k);
     if (hit?.group && selectedIds().length > 1) { pickLayers([hit.id]); return; }
     const L = activeLayer();
-    if (L?.type === 'text') { const t = $('#layerSec textarea'); t?.focus(); t?.select(); }
+    // a text: typed in place
+    if (L?.type === 'text') return startTextEdit(L, '2d');
     // a picture: its crop frame
     if (L?.type === 'image' && !L.tile) { setEditMode(editMode() === 'crop' ? null : 'crop'); renderLayerProps(); ui.editor = true; }
   });

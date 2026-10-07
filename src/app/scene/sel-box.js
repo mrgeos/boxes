@@ -186,7 +186,8 @@ function syncSelBox() {
     const c = locate([0, 0], true); if (c) handles.push({ mode: 'center', ...c });
   } else for (const [sx, sy] of corners.map(([x, y]) => [Math.sign(x), Math.sign(y)])) { const x = sx * (hw + 1), y = sy * (hh + 1); run(x, y, x - sx * k, y); run(x, y, x, y - sy * k); }
   // three corners in order tell whether the item is seen mirrored (from the back of the face)
-  for (const c of corners.slice(0, 3)) { const h = locate(c, true); if (h) handles.push({ mode: 'corner', ...h }); }
+  // (and all four give the box on the screen, for typing a text in place)
+  corners.forEach((c, i) => { const h = locate(c, true); if (h) handles.push({ mode: 'corner', idx: i, ...h }); });
   const segs = new Map();   // mesh -> ends of its segments
   for (const { meshes, at } of surfaces) for (const [si, pts] of strokes.entries()) {
     let prev = at(pts[0]);
@@ -238,14 +239,22 @@ function handleAt(x, y) {
   for (const mode of ['rot', 'scale', 'edit']) for (const h of handles) {
     if (h.mode !== mode) continue;
     const q = onScreen(h); if (!q.seen || Math.hypot(q.x - x, q.y - y) > 10) continue;
-    const c = handles.find(g => g.mode === 'center'), cs = handles.filter(g => g.mode === 'corner').map(onScreen);
+    const c = handles.find(g => g.mode === 'center'), cs = handles.filter(g => g.mode === 'corner').slice(0, 3).map(onScreen);
     const cc = c ? onScreen(c) : q;
     const flip = cs.length === 3 && (cs[1].x - cs[0].x) * (cs[2].y - cs[1].y) - (cs[1].y - cs[0].y) * (cs[2].x - cs[1].x) < 0 ? -1 : 1;
     return { mode, c: [cc.x, cc.y], flip, idx: h.idx };
   }
   return null;
 }
+/* the selected item's box on the screen: its four corners (client px; top-left, top-right, bottom-right,
+   bottom-left of the item), or null */
+function boxOnScreen() {
+  if (!lines.length || !lines.every(attached)) return null;
+  const cs = handles.filter(g => g.mode === 'corner'); if (cs.length < 4) return null;
+  const r = cvs.getBoundingClientRect();
+  return cs.map(h => { const v = h.p.clone().applyMatrix4(h.mesh.matrixWorld).project(camera); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; });
+}
 /* hides the frame for a picture of the scene; returns a function that brings it back */
 function hideSelBox() { const was = lines.map(l => l.visible); lines.forEach(l => { l.visible = false; }); return () => lines.forEach((l, i) => { l.visible = was[i] ?? true; }); }
 
-export { handleAt, hideSelBox, syncSelBox };
+export { boxOnScreen, handleAt, hideSelBox, syncSelBox };

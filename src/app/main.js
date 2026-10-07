@@ -1,6 +1,7 @@
 // Запуск
 import { initTabs } from './ui/tabs.js';
 import { initActionBar } from './ui/action-bar.js';
+import { initTextEdit } from './ui/text-edit.js';
 import * as THREE from 'three';
 import { sel, state } from './core/state.js';
 import { faceMM } from './core/model.js';
@@ -38,6 +39,7 @@ initWiring();
 initColorPicker();
 initTabs();
 initActionBar();
+initTextEdit();
 resize();
 bindScene();
 setOrbitLock(orbitLock);

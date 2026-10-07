@@ -16,6 +16,7 @@ import { addImageToFace, deleteLayer, duplicateLayer, layerCmd, moveLayer, rende
 import { deleteSticker, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
 import { setTab } from '../ui/tabs.js';
 import { handleAt } from './sel-box.js';
+import { startTextEdit } from '../ui/text-edit.js';
 import { rotateItem, scaleItem, sizeOf } from '../core/transform.js';
 import { editDrag, editFrom, editMode, editRects, setEditMode } from '../core/mask.js';
 import { layerBox } from '../faces/render.js';
@@ -205,9 +206,11 @@ function initInteraction() {
     const h = pick(e.clientX, e.clientY); if (!h) return setView('fit');
     // a double click on a layer of a picked group picks it alone (inside the group)
     const o = state.objects.find(x => x.id === h.objId);
-    if (o && h.face === sel.face && h.uv && !h.wall && selectedIds().length > 1) {
+    if (o && h.face === sel.face && h.uv && !h.wall && tool() === 'select') {
       const [W, H] = facePx(o, h.face), hl = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H);
-      if (hl?.group) { pickLayers([hl.id]); return; }
+      if (hl?.group && selectedIds().length > 1) { pickLayers([hl.id]); return; }
+      // a text: typed in place, on the model
+      if (hl?.type === 'text') { pickLayers([hl.id]); startTextEdit(hl, '3d'); return; }
     }
     // a double click on the selected picture: its crop frame
     const L = activeLayer();
@@ -400,6 +403,8 @@ function initInteraction() {
       return;
     }
     const L = activeLayer(); if (!L) return;
+    // Enter: type into the picked text, in place
+    if (e.key === 'Enter' && !mod && L.type === 'text' && selectedIds().length === 1) { e.preventDefault(); return startTextEdit(L, '3d'); }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteLayer(L.id); }
     else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateLayer(L.id); }
     else if (e.key === 'Escape') selectLayer(null);

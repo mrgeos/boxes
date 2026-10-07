@@ -13,6 +13,7 @@ import { addSticker } from './stickers-panel.js';
 import { lidAction, toggleLid } from './context-menus.js';
 import { pickAsset } from './asset-picker.js';
 import { setTab } from './tabs.js';
+import { startTextEdit } from './text-edit.js';
 
 /* Tools decide what a drag on the model does:
    select (V) — picks faces, layers and stickers and drags the graphics over the model; objects stay put;
@@ -43,7 +44,7 @@ function renderActionBar() {
 const face = o => sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0];
 function initActionBar() {
   $$('#actionBar [data-tool]').forEach(b => { b.onclick = () => setTool(b.dataset.tool); b.title = TOOLS[b.dataset.tool]; });
-  $('#abText').onclick = () => { const o = activeObj(); if (!o) return; setTab('design'); addLayer(newText('Ваш текст'), face(o), o); };
+  $('#abText').onclick = () => { const o = activeObj(); if (!o) return; setTab('design'); const L = newText('Ваш текст'); addLayer(L, face(o), o); startTextEdit(L, '3d', true); };
   $('#abImage').onclick = e => { const o = activeObj(); if (!o) return; pickAsset(e.currentTarget, 'Картинка на грань', r => { setTab('design'); placeLibImage(r, o, face(o)); }); };
   $('#abSticker').onclick = () => { const o = activeObj(); if (!o) return; setTab('stickers'); addSticker(newSticker('circle', face(o))); };
   $('#abLid').onclick = () => { const o = activeObj(); if (o) toggleLid(o).then(renderActionBar); };

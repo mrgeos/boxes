@@ -1,5 +1,6 @@
 // Кнопки шапки и панелей
 import { $, $$, S, fmt, luminance, slug, toast, uid } from '../core/util.js';
+import { startTextEdit } from './text-edit.js';
 import { activeFaceData, activeObj, sel, state } from '../core/state.js';
 import { faceKeys, faceLabel, netLayout, newObject, newShape, newText, outerKeys } from '../core/model.js';
 import { importImageFile } from '../core/assets.js';
@@ -51,7 +52,7 @@ function initWiring() {
     copyFaceDesign(o, sel.face, t === '*' ? outerKeys(o).filter(k => k !== sel.face) : [t]);
   };
   $('#addImgBtn').onclick = () => { if (!activeObj()) return; pickImage(f => addImageToFace(f)); };
-  $('#addTextBtn').onclick = () => { const L = newText('Ваш текст'); const f = activeFaceData(); if (!f) return; L.color = luminance(f.bg) < .5 ? '#ffffff' : '#1c1b19'; addLayer(L); };
+  $('#addTextBtn').onclick = () => { const L = newText('Ваш текст'); const f = activeFaceData(); if (!f) return; L.color = luminance(f.bg) < .5 ? '#ffffff' : '#1c1b19'; addLayer(L); startTextEdit(L, '2d', true); };
   $('#addRectBtn').onclick = () => activeFaceData() && addLayer(newShape('rect'));
   $('#addEllBtn').onclick = () => activeFaceData() && addLayer(newShape('ellipse'));
   $('#dielineBtn').onclick = () => { if (!activeObj()) return; $('#dielineInput').value = ''; $('#dielineInput').click(); };

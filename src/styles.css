@@ -263,3 +263,6 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .abar-al button:disabled{opacity:.35;cursor:default}
 .abar-al svg{width:16px;height:16px}
 .abar-al .sep{width:1px;height:18px;background:var(--line);margin:0 4px}
+/* typing a text in place: an invisible textarea over the layer, only its caret and selection show */
+.text-edit{position:fixed;left:0;top:0;z-index:50;margin:0;border:0;outline:0;box-sizing:content-box;background:transparent;color:transparent;resize:none;overflow:hidden;white-space:pre;transform-origin:0 0;box-shadow:none}
+.text-edit::selection{background:rgba(10,122,161,.32);color:transparent}
