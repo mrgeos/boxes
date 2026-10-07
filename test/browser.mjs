@@ -24,11 +24,12 @@ export async function openEditor(browser, { offline = false } = {}) {
   return { ctx, page, errors };
 }
 /* the ids of all presets, from the gallery */
-export const presetIds = async page => { await page.click('.rail-btn[data-tab="models"]'); return page.$$eval('#galSec .gal-it', a => a.map(x => x.dataset.preset)); };
+export const presetIds = async page => { await page.click('.rail-btn[data-tab="add"]'); return page.$$eval('#galSec .gal-it', a => a.map(x => x.dataset.preset)); };
 /* clears the sample scene and adds one object from a preset (through the gallery) */
 export async function addPreset(page, id) {
   await page.click('.rail-btn[data-tab="models"]');
   while (await page.locator('#objList .obj').count()) { await page.click('#objList .obj >> nth=0'); await page.click('#delObjBtn'); }
+  await page.click('.rail-btn[data-tab="add"]');
   await page.click(`#galSec .gal-it[data-preset="${id}"]`); await page.waitForTimeout(400);
 }
 export async function download(page, button) {

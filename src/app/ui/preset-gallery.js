@@ -30,7 +30,7 @@ function saveThumbs() {
 
 function renderGallery() {
   const sec = $('#galSec'), T = loadThumbs(), list = PRESETS.filter(p => cat === 'all' || catOf(p) === cat);
-  sec.innerHTML = `<div class="sec-h"><h2>Добавить из заготовок</h2><span class="hint">${list.length}</span></div>
+  sec.innerHTML = `<div class="sec-h"><h2>Браузер заготовок</h2><span class="hint">${list.length}</span></div>
     <div class="gal-cats" role="tablist">${CATS.map(([k, n]) => `<button role="tab" data-cat="${k}" class="${k === cat ? 'on' : ''}" aria-selected="${k === cat}">${n}</button>`).join('')}</div>
     <div class="gal">${list.map(p => `<button class="gal-it" data-preset="${p.id}" title="${esc(p.label)}"><span class="th ${T[keyOf(p)] ? '' : 'wait'}" data-th="${p.id}"></span><span class="nm">${esc(p.label)}</span></button>`).join('')}</div>`;
   $$('#galSec .gal-cats button').forEach(b => { b.onclick = () => { cat = b.dataset.cat; renderGallery(); }; });
