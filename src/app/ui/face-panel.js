@@ -281,7 +281,9 @@ function renderLayerProps() {
   if (!L && sel.bg && activeFaceData()) return renderBgProps(sec, o, activeFaceData());
   if (!L) { sec.innerHTML = `<div class="sec-h"><h2>Слой</h2></div><p class="hint">Выберите слой в списке, в окне грани или кликом по модели. Стрелки сдвигают слой, Shift+стрелки — сильнее.</p>`; return; }
   const effOpts = Object.entries(EFFECTS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-  let html = `<div class="sec-h"><h2>Слой: ${esc(layerName(L)).slice(0, 24)}</h2><span class="badge">${faceLabel(o, sel.face)}</span></div>${alignBarHTML(1)}`;
+  // a picture's name is in its card (under the title), and its alignment under the card
+  const pic = L.type === 'image';
+  let html = `<div class="sec-h"><h2>${pic ? 'Картинка' : `Слой: ${esc(layerName(L)).slice(0, 24)}`}</h2><span class="badge">${faceLabel(o, sel.face)}</span></div>${pic ? '' : alignBarHTML(1)}`;
   if (L.type === 'text') {
     html += `<textarea data-k="text" rows="2" aria-label="Текст"></textarea>
       <div class="grid2"><select data-k="font" aria-label="Шрифт">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
@@ -292,7 +294,7 @@ function renderLayerProps() {
       ${rangeField('Дуга, °', 'arc', -360, 360, 1)}`;
   } else if (L.type === 'image') {
     // what the picture is (a card), then how it lies on the face (with the position below)
-    html += imageCardHTML(o, L);
+    html += imageCardHTML(o, L) + alignBarHTML(1);
   } else {
     html += `<div class="field wide"><span class="fl">Форма</span><select data-k="kind" aria-label="Форма"><option value="rect">Прямоугольник</option><option value="ellipse">Эллипс</option></select></div>
       ${rangeField('Ширина, %', 'w', 1, 200, .1, 100)}${rangeField('Высота, %', 'h', 1, 200, .1, 100)}
@@ -407,7 +409,7 @@ function bindCrop(o, L) {
 /* a picture's card: what it is (its preview, name, print resolution) and a button to put another one in its place */
 function imageCardHTML(o, L) {
   const dpi = imageDpi(o, L), u = assets[L.src];
-  const q = dpi == null ? '' : dpi < 150 ? `<b class="bad">${dpi} dpi</b> — мало для офсета, нужно от 300` : dpi < 300 ? `<b class="warn">${dpi} dpi</b> — для офсета лучше 300` : `<b>${dpi} dpi</b> — подходит для печати`;
+  const q = dpi == null ? '' : dpi < 150 ? `<b class="bad">${dpi} dpi</b> — мало для офсета, нужно от 300` : dpi < 300 ? `<b class="warn">${dpi} dpi</b> — для офсета лучше 300` : `<b>${dpi} dpi</b> — для печати хорошо`;
   return `<div class="imgcard"><span class="ic-th" ${u ? `style="background-image:url('${u}')"` : ''}></span>
     <div class="ic-t"><b class="ic-n" title="${esc(layerName(L))}">${esc(layerName(L))}</b><span class="hint mono" title="При печати этого размера">${q}</span></div>
     <button class="btn sm" id="imgReplace">Заменить…</button></div>`;
