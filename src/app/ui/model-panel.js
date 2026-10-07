@@ -3,7 +3,7 @@ import { $, $$, esc } from '../core/util.js';
 import { BOARD, FINISHES, LID_COLORS, LID_TYPES, LIGHTS, PRESETS } from '../core/constants.js';
 import { activeObj, sel, state } from '../core/state.js';
 import { clearLid, ensureFaces, faceKeys, faceMM, setBoard } from '../core/model.js';
-import { importImageFile } from '../core/assets.js';
+import { pickAsset } from './asset-picker.js';
 import { applyLid, applyObjMaterials, markFace, markObj, rebuildQueue, ui } from '../scene/renderer.js';
 import { BAG_MATS, BAG_TOPS, applyBagPreset, bagFilm } from '../carriers/bag.js';
 import { applyDomePreset } from '../carriers/dome.js';
@@ -24,7 +24,7 @@ import { renderActionBar } from './action-bar.js';
 import { renderGroupPanel } from './group-panel.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField, refreshFields } from './fields.js';
-import { pickImage, renderFacePanel, renderFaceTabs, updateFaceMeta } from './face-panel.js';
+import { renderFacePanel, renderFaceTabs, updateFaceMeta } from './face-panel.js';
 
 /* the paper sleeve round a box: its own shape panel (an extra, core/extras.js) */
 function sleeveFields(o) { const SD = sleeveDims(o); return `<div class="field wide"><span class="fl">Рукав опоясывает</span><select data-k="sleeve.axis">${Object.entries(SLEEVE_AXES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
@@ -232,8 +232,8 @@ function renderModel() {
   $$('#torteSw .sw').forEach(b => b.onclick = () => { o.baseColor = b.dataset.c; applyObjMaterials(o); renderModel(); commit(); });
   $('#boardColor')?.addEventListener('input', e => board(e.target.value));
   $('#boardColor')?.addEventListener('change', () => commit());
-  if ($('#prodBtn')) $('#prodBtn').onclick = () => pickImage(async file => {
-    const r = await importImageFile(file); o.product.src = r.id; o.product.aspect = r.aspect;
+  if ($('#prodBtn')) $('#prodBtn').onclick = e => pickAsset(e.currentTarget, 'Фото торта (PNG с прозрачным фоном)', r => {
+    o.product.src = r.id; o.product.aspect = r.aspect;
     rebuildQueue.add(o.id); renderModel(); commit();
   });
   if ($('#prodOff')) $('#prodOff').onclick = () => { o.product.src = null; rebuildQueue.add(o.id); renderModel(); commit(); };

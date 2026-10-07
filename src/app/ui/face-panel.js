@@ -10,6 +10,7 @@ import { viewNet } from '../net/net-view.js';
 import { drawLayer, layerBox } from '../faces/render.js';
 import { openMenu } from './menu.js';
 import { pickAsset } from './asset-picker.js';
+import { swapImage } from './library-panel.js';
 import { NONE, addKeyout, hasColorEdits, hasRecolor, removeKeyout, setKeyoutTol, setVecColor, vecColors } from '../core/vector.js';
 import { allFonts, ensureFont } from '../core/fonts.js';
 import { RT, markFace, ui } from '../scene/renderer.js';
@@ -322,7 +323,8 @@ function renderLayerProps() {
   bindCrop(o, L); bindAlignBar(sec);
   $('#gradKind') && ($('#gradKind').onchange = e => { setGradient(o, sel.face, activeLayer(), e.target.value || null); ui.layers = true; renderLayerProps(); commit(); });
   if (L.type === 'image') {
-    $('#imgReplace').onclick = () => pickImage(async file => { const r = await importImageFile(file); const L = activeLayer(); L.src = r.id; L.aspect = r.aspect; L.recolor = {}; markFace(o, sel.face); renderLayers(); renderLayerProps(); commit(); });
+    // another picture in its place: from the uploads, or from the computer (as the action bar does)
+    $('#imgReplace').onclick = e => pickAsset(e.currentTarget, 'Заменить картинку', r => swapImage(r));
     bindVecColors(sec, activeLayer, () => { markFace(o, sel.face); ui.layers = true; }, renderLayerProps);
     $$('#fitSeg button', sec).forEach(b => b.onclick = () => { setImageFit(o, sel.face, activeLayer(), b.dataset.fit); ui.layers = true; renderLayerProps(); commit(); });
     for (const ax of ['X', 'Y']) $('#flip' + ax, sec).onclick = () => { const L = activeLayer(); L['flip' + ax] = !L['flip' + ax]; markFace(o, sel.face); ui.layers = true; renderLayerProps(); commit(); };

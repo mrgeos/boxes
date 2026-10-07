@@ -12,7 +12,9 @@ import { addFontFile, commit, loadProject, openProjectFile, paintProjectName, pr
 import { refreshFields } from './fields.js';
 import { renderModel } from './model-panel.js';
 import { renderObjects } from './object-list.js';
-import { addImageToFace, addLayer, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers } from './face-panel.js';
+import { pickAsset } from './asset-picker.js';
+import { placeLibImage } from './library-panel.js';
+import { addLayer, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers } from './face-panel.js';
 import { renderStickers } from './stickers-panel.js';
 import { renderLibrary } from './library-panel.js';
 import { exportPNG, exportVideo, setPngScale } from '../export/image.js';
@@ -41,7 +43,8 @@ function initWiring() {
     const o = activeObj(), f = activeFaceData(), t = $('#copyTarget').value; if (!f || !t) return toast('Выберите, куда копировать');
     copyFaceDesign(o, sel.face, t === '*' ? outerKeys(o).filter(k => k !== sel.face) : [t]);
   };
-  $('#addImgBtn').onclick = () => { if (!activeObj()) return; pickImage(f => addImageToFace(f)); };
+  // a picture onto the face: from the uploads or from the computer, as in the action bar
+  $('#addImgBtn').onclick = e => { if (!activeObj()) return; pickAsset(e.currentTarget, 'Картинка на грань', r => placeLibImage(r)); };
   $('#addTextBtn').onclick = () => { const L = newText('Ваш текст'); const f = activeFaceData(); if (!f) return; L.color = luminance(f.bg) < .5 ? '#ffffff' : '#1c1b19'; addLayer(L); startTextEdit(L, '2d', true); };
   $('#addRectBtn').onclick = () => activeFaceData() && addLayer(newShape('rect'));
   $('#addEllBtn').onclick = () => activeFaceData() && addLayer(newShape('ellipse'));

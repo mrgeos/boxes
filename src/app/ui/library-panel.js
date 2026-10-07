@@ -44,7 +44,7 @@ function renderLibrary() {
 /* puts a library picture into the selected image layer or sticker */
 function swapImage(it) {
   const o = activeObj(), L = activeLayer(), st = activeSticker(); if (!o) return;
-  if (L?.type === 'image') { L.src = it.id; L.aspect = it.aspect; L.recolor = {}; markFace(o, sel.face); renderLayers(); renderLayerProps(); return commit(); }
+  if (L?.type === 'image') { L.src = it.id; L.aspect = it.aspect; L.recolor = {}; delete L.keyout; markFace(o, sel.face); renderLayers(); renderLayerProps(); return commit(); }
   if (st) return setStickerImage(o, st, it);
 }
 function placeLibImage(it, obj = activeObj(), face = sel.face, at = null) {
