@@ -8,7 +8,7 @@ import { hasRecolor, vecColors } from '../core/vector.js';
 import { allFonts, ensureFont } from '../core/fonts.js';
 import { RT, applyObjMaterials, markFace, ui } from '../scene/renderer.js';
 import { pickLayers, select } from '../core/selection.js';
-import { alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setLayerSelection, shiftLayers } from '../core/layers.js';
+import { alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setGradient, setLayerSelection, shiftLayers } from '../core/layers.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField, refreshFields } from './fields.js';
 import { MASKS, cropped, editMode, hasPanels, resetCrop, setClipBelow, setClipTo, setEditMode, setMask } from '../core/mask.js';
@@ -225,7 +225,9 @@ function renderLayerProps() {
       <select data-k="weight" aria-label="Насыщенность"><option value="400">Обычный</option><option value="500">Средний</option><option value="700">Жирный</option><option value="900">Сверхжирный</option></select></div>
       <div class="row"><input type="color" data-k="color" aria-label="Цвет текста"><select data-k="align" class="grow" aria-label="Выравнивание"><option value="left">По левому краю</option><option value="center">По центру</option><option value="right">По правому краю</option></select>
       <label class="check"><input type="checkbox" data-k="italic"> Курсив</label></div>
-      ${rangeField('Кегль, % выс.', 'size', .5, 80, .1, 100)}${rangeField('Трекинг', 'ls', -10, 80, 1, 100)}${rangeField('Интерлиньяж', 'lh', .7, 2.5, .01)}`;
+      ${gradHTML(L)}
+      ${rangeField('Кегль, % выс.', 'size', .5, 80, .1, 100)}${rangeField('Трекинг', 'ls', -10, 80, 1, 100)}${rangeField('Интерлиньяж', 'lh', .7, 2.5, .01)}
+      ${rangeField('Дуга, °', 'arc', -360, 360, 1)}`;
   } else if (L.type === 'image') {
     const dpi = imageDpi(o, L);
     html += `<div class="row"><button class="btn sm" id="imgReplace">Заменить…</button><button class="btn sm" id="imgCover">Залить грань</button><button class="btn sm" id="imgFit">Вписать</button></div>
@@ -236,6 +238,7 @@ function renderLayerProps() {
       ${dpi != null ? `<p class="hint">При печати этого размера: <b class="mono">${dpi} dpi</b>${dpi < 150 ? ' — мало для офсета, нужно от 300 dpi' : dpi < 300 ? ' — допустимо, для офсета лучше 300 dpi' : ' — подходит для печати'}.</p>` : ''}`;
   } else {
     html += `<div class="row"><input type="color" data-k="fill" aria-label="Цвет"><select data-k="kind" class="grow" aria-label="Форма"><option value="rect">Прямоугольник</option><option value="ellipse">Эллипс</option></select></div>
+      ${gradHTML(L)}
       ${rangeField('Ширина, %', 'w', 1, 200, .1, 100)}${rangeField('Высота, %', 'h', 1, 200, .1, 100)}
       ${L.kind === 'rect' ? rangeField('Скругление', 'radius', 0, 100, 1, 100) : ''}${rangeField('Контур (0 — заливка)', 'stroke', 0, 100, 1, 1000)}`;
   }
@@ -256,6 +259,7 @@ function renderLayerProps() {
     markFace(activeObj(), sel.face);
   });
   bindCrop(o, L); bindAlignBar(sec);
+  $('#gradKind') && ($('#gradKind').onchange = e => { setGradient(o, sel.face, activeLayer(), e.target.value || null); ui.layers = true; renderLayerProps(); commit(); });
   $('#centerBtn').onclick = () => { const L = activeLayer(); L.x = .5; L.y = .5; markFace(o, sel.face); refreshFields(sec, L); commit(); };
   $('#delLayerBtn').onclick = () => deleteLayer(L.id);
   if (L.type === 'image') {
@@ -264,6 +268,13 @@ function renderLayerProps() {
     $('#imgCover').onclick = () => fitImage(true);
     $('#imgFit').onclick = () => fitImage(false);
   }
+}
+/* the fill of a text or shape: plain colour or a gradient from it to a second colour */
+function gradHTML(L) {
+  const g = L.grad, opt = (v, t) => `<option value="${v}" ${v === (g?.kind || '') ? 'selected' : ''}>${t}</option>`;
+  return `<div class="row"><select id="gradKind" class="grow" aria-label="Заливка">${opt('', 'Сплошной цвет')}${opt('linear', 'Линейный градиент')}${opt('radial', 'Радиальный градиент')}</select>
+    ${g ? '<input type="color" data-k="grad.color" aria-label="Второй цвет градиента">' : ''}</div>
+    ${g?.kind === 'linear' ? rangeField('Угол градиента, °', 'grad.angle', -180, 180, 1) : ''}`;
 }
 /* the layer's cut: crop frame of a picture, a mask shape, clipping to the layer below, to the face or the panel */
 function cropHTML(o, L) {

@@ -8,7 +8,7 @@ function rangeField(label, k, min, max, step, mul = 1) {
 function showVal(el, v) {
   const mul = +(el.dataset.mul || 1);
   if (el.type === 'checkbox') el.checked = !!v;
-  else if (el.type === 'range' || el.type === 'number') el.value = +(v * mul).toFixed(2);
+  else if (el.type === 'range' || el.type === 'number') el.value = +((+v || 0) * mul).toFixed(2);
   else el.value = v ?? '';
 }
 function bindFields(root, getT, onInput, onCommit = commit) {

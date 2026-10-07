@@ -43,8 +43,36 @@ function textMetrics(L, H) {
   mctx.font = fontStr(L, fs); if (hasLS) mctx.letterSpacing = (L.ls * fs) + 'px';
   const lines = String(L.text ?? '').split('\n');
   let mw = 0; for (const ln of lines) mw = Math.max(mw, mctx.measureText(ln).width);
-  return { fs, lines, w: Math.max(mw, fs * .3), h: fs * L.lh * lines.length };
+  const m = { fs, lines, w: Math.max(mw, fs * .3), h: fs * L.lh * lines.length };
+  if (Math.abs(L.arc || 0) >= 1) m.g = arcGeom(L.arc, m.w, m.h);
+  return m;
 }
+/* text bent along a circle: the line of width w turns by `deg` degrees (> 0 arches up, < 0 sags);
+   R the radius of the text's middle, s the bend's side, cy the shift that centres the band in its box (w × h) */
+function arcGeom(deg, w, h) {
+  const th = Math.min(Math.abs(deg), 360) * DEG, R = w / th, s = Math.sign(deg), half = th / 2;
+  // the band between radii R ± h/2 over angles ±half, drawn arching up; a sagging one is its mirror
+  const angs = [-half, half, ...[0, Math.PI / 2, -Math.PI / 2, Math.PI, -Math.PI].filter(a => Math.abs(a) <= half)];
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const r of [Math.max(0, R - h / 2), R + h / 2]) for (const a of angs) {
+    const x = r * Math.sin(a), y = s * (R - r * Math.cos(a));
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+  }
+  return { R, s, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0 };
+}
+/* a point (x along the line, y across it) of straight text → [x, y, turn] on the arc */
+function arcPt(g, x, y) {
+  const a = x / g.R, r = g.R - g.s * y;
+  return [r * Math.sin(a), g.s * (g.R - r * Math.cos(a)) - g.cy, g.s * a];
+}
+/* a point on the arc → [x, y] of straight text */
+function arcInv(g, px, py) {
+  const qy = g.s * (py + g.cy) - g.R;
+  return [Math.atan2(px, -qy) * g.R, g.s * (g.R - Math.hypot(px, qy))];
+}
+/* the arc's centre and canvas angle of the point x along the line (the angle runs backwards when the text sags) */
+const arcCentre = g => [0, g.s * g.R - g.cy];
+const arcAng = (g, x) => g.s * (x / g.R - Math.PI / 2);
 function layerBox(L, W, H) {
   if (L.type === 'image') {
     // a cropped image: the box is the part shown
@@ -52,7 +80,21 @@ function layerBox(L, W, H) {
     return [w, w / a];
   }
   if (L.type === 'shape') return [L.w * W, L.h * H];
-  const m = textMetrics(L, H); return [m.w, m.h];
+  const m = textMetrics(L, H); return m.g ? [m.g.w, m.g.h] : [m.w, m.h];
+}
+/* the layer's colour, or its gradient over the layer's w × h box from that colour to grad.color;
+   `at` ([x, y, turn] of a glyph's frame in the box) keeps the gradient on the box while the glyph turns */
+function layerPaint(ctx, L, base, w, h, at = null) {
+  const g = L.grad; if (!g) return base;
+  const loc = at ? (x, y) => { const dx = x - at[0], dy = y - at[1], c = Math.cos(at[2]), s = Math.sin(at[2]); return [dx * c + dy * s, dy * c - dx * s]; } : (x, y) => [x, y];
+  let gr;
+  if (g.kind === 'radial') { const [cx, cy] = loc(0, 0); gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, w / 2, h / 2)); }
+  else {
+    const a = (g.angle ?? 90) * DEG, ux = Math.cos(a), uy = Math.sin(a), e = Math.max(.5, (Math.abs(w * ux) + Math.abs(h * uy)) / 2);
+    gr = ctx.createLinearGradient(...loc(-ux * e, -uy * e), ...loc(ux * e, uy * e));
+  }
+  gr.addColorStop(0, base); gr.addColorStop(1, g.color);
+  return gr;
 }
 /* the shown part of a cropped picture, kept while the picture and its crop stay the same */
 const cropCache = new WeakMap();
@@ -116,7 +158,7 @@ function drawLayer(ctx, L, W, H, paint = null, alpha = null, op = null) {
       } else ctx.drawImage(src, -w / 2, -h / 2, w, h);
     }
   } else if (L.type === 'shape') {
-    const fill = paint || L.fill, sw = L.stroke * Math.min(W, H);
+    const fill = paint || layerPaint(ctx, L, L.fill, w, h), sw = L.stroke * Math.min(W, H);
     ctx.beginPath();
     if (L.kind === 'ellipse') ctx.ellipse(0, 0, Math.max(.1, w / 2 - sw / 2), Math.max(.1, h / 2 - sw / 2), 0, 0, Math.PI * 2);
     else { const r = Math.min(L.radius * Math.min(w, h) / 2, w / 2, h / 2); ctx.roundRect(-w / 2 + sw / 2, -h / 2 + sw / 2, Math.max(.1, w - sw), Math.max(.1, h - sw), r); }
@@ -124,15 +166,36 @@ function drawLayer(ctx, L, W, H, paint = null, alpha = null, op = null) {
   } else {
     const m = textMetrics(L, H);
     ctx.font = fontStr(L, m.fs); if (hasLS) ctx.letterSpacing = (L.ls * m.fs) + 'px';
-    ctx.textBaseline = 'middle'; ctx.textAlign = L.align; ctx.fillStyle = paint || L.color;
-    const ax = L.align === 'left' ? -m.w / 2 : L.align === 'right' ? m.w / 2 : 0;
-    // letterSpacing adds trailing space after the last glyph; nudge centred text back
-    const nudge = hasLS && L.align === 'center' ? L.ls * m.fs / 2 : 0;
-    m.lines.forEach((ln, i) => ctx.fillText(ln, ax + nudge, -m.h / 2 + m.fs * L.lh * (i + .5)));
+    ctx.textBaseline = 'middle'; ctx.textAlign = L.align;
+    if (m.g) drawArcText(ctx, L, m, w, h, paint);
+    else {
+      ctx.fillStyle = paint || layerPaint(ctx, L, L.color, w, h);
+      const ax = L.align === 'left' ? -m.w / 2 : L.align === 'right' ? m.w / 2 : 0;
+      // letterSpacing adds trailing space after the last glyph; nudge centred text back
+      const nudge = hasLS && L.align === 'center' ? L.ls * m.fs / 2 : 0;
+      m.lines.forEach((ln, i) => ctx.fillText(ln, ax + nudge, -m.h / 2 + m.fs * L.lh * (i + .5)));
+    }
     // the text being typed: its selection and caret, drawn on the print itself so they sit right on any surface
     if (!paint && caret?.id === L.id) drawCaret(ctx, L, m);
   }
   ctx.restore();
+}
+/* text along an arc: each glyph stands at its place on the straight line, carried onto the circle and turned with it */
+function drawArcText(ctx, L, m, w, h, paint) {
+  const lsp = hasLS ? L.ls * m.fs : 0;
+  for (const sp of lineSpots(ctx, L, m)) {
+    let i = 0, before = 0;
+    for (const ch of sp.ln) {
+      i += ch.length;
+      const adv = ctx.measureText(sp.ln.slice(0, i)).width - before, at = arcPt(m.g, sp.x + before + (adv - lsp) / 2, sp.y);
+      before += adv;
+      if (!ch.trim()) continue;
+      ctx.save(); ctx.translate(at[0], at[1]); ctx.rotate(at[2]);
+      if (hasLS) ctx.letterSpacing = '0px';
+      ctx.textAlign = 'center'; ctx.fillStyle = paint || layerPaint(ctx, L, L.color, w, h, at);
+      ctx.fillText(ch, 0, 0); ctx.restore();
+    }
+  }
 }
 /* the caret of the text being typed: { id, a, b (selection, string indices), on (shown in this blink) } */
 let caret = null;
@@ -150,22 +213,31 @@ function drawCaret(ctx, L, m) {
   const spots = lineSpots(ctx, L, m), lh = m.fs * L.lh, at = ([l, c]) => spots[l].x + ctx.measureText(spots[l].ln.slice(0, c)).width;
   const a = lineCol(m.lines, Math.min(caret.a, caret.b)), b = lineCol(m.lines, Math.max(caret.a, caret.b));
   ctx.save(); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  // a run x0…x1 of a line, straight or bent along the arc
+  const band = (x0, y0, x1, y1) => {
+    if (!m.g) { ctx.fillRect(x0, y0, x1 - x0, y1 - y0); return; }
+    const g = m.g, [cx, cy] = arcCentre(g), back = g.s < 0, rad = y => Math.max(0, g.R - g.s * y);
+    ctx.beginPath(); ctx.arc(cx, cy, rad(y0), arcAng(g, x0), arcAng(g, x1), back); ctx.arc(cx, cy, rad(y1), arcAng(g, x1), arcAng(g, x0), !back); ctx.fill();
+  };
   if (caret.a !== caret.b) {
     ctx.fillStyle = 'rgba(10,122,161,.35)';
     for (let l = a[0]; l <= b[0]; l++) {
       const x0 = l === a[0] ? at(a) : spots[l].x, x1 = l === b[0] ? at(b) : spots[l].x + ctx.measureText(spots[l].ln).width + m.fs * .25;
-      ctx.fillRect(x0, spots[l].y - lh / 2, Math.max(1, x1 - x0), lh);
+      band(x0, spots[l].y - lh / 2, x0 + Math.max(1, x1 - x0), spots[l].y + lh / 2);
     }
   } else if (caret.on) {
-    const p = lineCol(m.lines, caret.a), w = Math.max(1.5, m.fs * .06);
-    ctx.fillStyle = luminance(L.color) > .6 ? '#0a7aa1' : L.color; ctx.fillRect(at(p) - w / 2, spots[p[0]].y - m.fs * .55, w, m.fs * 1.1);
+    const p = lineCol(m.lines, caret.a), w = Math.max(1.5, m.fs * .06), x = at(p), y = spots[p[0]].y;
+    ctx.fillStyle = luminance(L.color) > .6 ? '#0a7aa1' : L.color;
+    if (m.g) { const [px, py, t] = arcPt(m.g, x, y); ctx.translate(px, py); ctx.rotate(t); ctx.fillRect(-w / 2, -m.fs * .55, w, m.fs * 1.1); }
+    else band(x - w / 2, y - m.fs * .55, x + w / 2, y + m.fs * .55);
   }
   ctx.restore();
 }
 /* the string index nearest to the point (px, py) of a W × H face, in text layer L */
 function textIndexAt(L, W, H, px, py) {
   const m = textMetrics(L, H), r = -(L.rot || 0) * DEG, dx = px - L.x * W, dy = py - L.y * H;
-  const lx = dx * Math.cos(r) - dy * Math.sin(r), ly = dx * Math.sin(r) + dy * Math.cos(r);
+  let lx = dx * Math.cos(r) - dy * Math.sin(r), ly = dx * Math.sin(r) + dy * Math.cos(r);
+  if (m.g) [lx, ly] = arcInv(m.g, lx, ly);
   mctx.font = fontStr(L, m.fs); if (hasLS) mctx.letterSpacing = (L.ls * m.fs) + 'px';
   const spots = lineSpots(mctx, L, m), l = clamp(Math.floor((ly + m.h / 2) / (m.fs * L.lh)), 0, m.lines.length - 1);
   let best = 0, bd = Infinity;

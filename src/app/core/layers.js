@@ -216,8 +216,14 @@ function clickPick(face, L, toggle = false) {
 }
 /* a text layer's words */
 function setText(o, k, L, text) { L.text = text; markFace(o, k); }
+/* the fill of a text or shape layer: plain (kind null), or a 'linear' / 'radial' gradient from its colour to grad.color */
+function setGradient(o, k, L, kind) {
+  if (!kind) delete L.grad;
+  else L.grad = { color: '#ffffff', angle: 90, ...(L.grad || {}), kind };
+  markFace(o, k);
+}
 /* all of the active face's layers selected */
 function selectAllLayers() { const f = activeFaceData(); if (f?.layers.length) setLayerSelection(f.layers.map(L => L.id)); }
 const activeFaceKey = () => (activeObj() && sel.face) || null;
 
-export { activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setLayerSelection, setText, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };
+export { activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setGradient, setLayerSelection, setText, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };
