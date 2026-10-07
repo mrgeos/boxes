@@ -15,10 +15,11 @@ function closeMenu() {
 }
 function outside(e) { if (!stack.some(m => m.el.contains(e.target))) closeMenu(); }
 
-function build(items, x, y, depth) {
+function build(items, x, y, depth, title = '') {
   const el = document.createElement('div');
   el.className = 'ctx'; el.setAttribute('role', 'menu');
-  el.innerHTML = items.map((it, i) => it === 'sep' ? '<div class="ctx-sep" role="separator"></div>'
+  // the title is in the menu before it is measured, so the menu is kept on screen with it
+  el.innerHTML = (title ? `<div class="ctx-h">${esc(title)}</div>` : '') + items.map((it, i) => it === 'sep' ? '<div class="ctx-sep" role="separator"></div>'
     : `<button class="ctx-it" role="menuitem" data-i="${i}" ${it.disabled ? 'disabled aria-disabled="true"' : ''} ${it.sub ? 'aria-haspopup="menu"' : ''}>
         <span class="ctx-ck">${it.checked ? '✓' : ''}</span><span class="ctx-l">${esc(it.label)}</span><span class="ctx-k">${it.sub ? '›' : esc(it.key || '')}</span></button>`).join('');
   document.body.appendChild(el);
@@ -77,8 +78,7 @@ function openMenu(x, y, items, title = '') {
   closeMenu();
   items = items.filter(Boolean).filter((it, i, a) => it !== 'sep' || (i > 0 && a[i - 1] !== 'sep' && i < a.length - 1));   // no stray separators
   if (!items.length) return;
-  root = build(items, x, y, 0);
-  if (title) root.el.insertAdjacentHTML('afterbegin', `<div class="ctx-h">${esc(title)}</div>`);
+  root = build(items, x, y, 0, title);
   addEventListener('pointerdown', outside, true); addEventListener('keydown', onKey, true);
   addEventListener('resize', closeMenu); addEventListener('scroll', closeMenu, true); addEventListener('blur', closeMenu);
   root.el.focus?.();
