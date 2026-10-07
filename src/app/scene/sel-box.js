@@ -21,7 +21,7 @@ const ghostMat = new THREE.LineBasicMaterial({ color: 0xd2453a, transparent: tru
 function showOff(what) {
   const el = $('#offHint'); if (!el) return;
   el.hidden = !what;
-  if (what) el.textContent = what === 'sticker' ? 'Часть наклейки за краем (пунктир) — она не ляжет на упаковку' : 'Часть слоя за краем грани (пунктир) — она не печатается';
+  if (what) el.textContent = { sticker: 'Часть наклейки за краем (пунктир) — она не ляжет на упаковку', band: 'Часть слоя за краем ленты (пунктир) — она не печатается' }[what] || 'Часть слоя за краем грани (пунктир) — она не печатается';
 }
 const LIFT = .4 * S, HLIFT = 1.5 * S, STEP = 1.5;   // off the surface; sampling step along the frame (mm)
 
@@ -200,7 +200,7 @@ function syncSelBox() {
   const keep = l => { l.renderOrder = 6; l.raycast = () => {}; l.userData = { objId: t.o.id, face: null }; lines.push(l); return l; };
   for (const [m, pts] of segs) m.add(keep(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), mat)));
   for (const [m, pts] of ghosts) m.add(keep(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), ghostMat)));
-  showOff(off && (t.st ? 'sticker' : 'layer'));
+  showOff(off && (t.st ? 'sticker' : sel.face === 'sleeve' || sel.face === 'carry' ? 'band' : 'layer'));
   for (const h of handles) if (h.mode === 'rot' || h.mode === 'scale') h.mesh.add(keep(new THREE.Points(new THREE.BufferGeometry().setFromPoints([h.p]), dotMat(h.mode))));
   return true;
 }

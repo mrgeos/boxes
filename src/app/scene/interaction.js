@@ -197,7 +197,8 @@ function initInteraction() {
     down = null;
     if (tool() === 'hand') return;   // the hand only moves the view
     const h = pick(e.clientX, e.clientY);
-    if (!h) return;
+    // a click on empty space drops the selection, as in Figma
+    if (!h) { if (sel.obj || sel.group) select(null); return; }
     const o = state.objects.find(x => x.id === h.objId); if (!o) return;
     const hs = stickerHit(h);
     if (hs) {

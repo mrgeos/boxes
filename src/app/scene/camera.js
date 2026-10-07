@@ -123,7 +123,11 @@ function setRecording(v) { recording = v; }
 /* resizes the view with its box and starts the render loop */
 function initCamera() {
   new ResizeObserver(resize).observe(viewport);
-  controls.addEventListener('start', () => setViewName('custom'));   // only the user's own dragging starts the controls
+  // only the user's own dragging starts the controls; a click that does not move the camera keeps the view's name
+  let userDrag = false;
+  controls.addEventListener('start', () => { userDrag = true; });
+  controls.addEventListener('end', () => { userDrag = false; });
+  controls.addEventListener('change', () => { if (userDrag) setViewName('custom'); });
   // a handler may change materials or the scene directly: draw after any input
   for (const t of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'click', 'drop', 'paste']) addEventListener(t, () => invalidate(), { capture: true, passive: true });
   renderer.domElement.addEventListener('pointermove', () => invalidate(), { passive: true });

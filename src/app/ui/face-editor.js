@@ -1,7 +1,8 @@
 // Окно грани (2D-редактор)
 import { $, DEG } from '../core/util.js';
 import { activeFaceData, activeLayer, activeObj, sel } from '../core/state.js';
-import { faceMM } from '../core/model.js';
+import { faceMM, loopAxis } from '../core/model.js';
+import { layerReach } from '../faces/wrap.js';
 import { RT, markFace, ui } from '../scene/renderer.js';
 import { faceWindow, windowPath } from '../carriers/box.js';
 import { CARRY_PANEL, carryDims, carryOn, carrySheet } from '../carriers/carry.js';
@@ -15,18 +16,23 @@ import { refreshFields } from './fields.js';
 import { rotateItem, scaleItem } from '../core/transform.js';
 
 const ed = $('#editor'), ectx = ed.getContext('2d');
+/* the face is drawn with a margin round it (PAD px), where the part of a layer past its edge shows */
+const PAD = 16;
 const edState = { k: 1, dw: 0, dh: 0, drag: null, guides: [] };
 function drawEditor() {
   const o = activeObj(), wrap = $('#editorWrap');
-  if (!o || !sel.face) { ectx.clearRect(0, 0, ed.width, ed.height); return; }
+  if (!o || !sel.face) { ectx.setTransform(1, 0, 0, 1, 0, 0); ectx.clearRect(0, 0, ed.width, ed.height); return; }
   const rt = RT.get(o.id); const f = rt?.faces[sel.face]; if (!f) return;
   const W = f.canvas.width, H = f.canvas.height;
-  const availW = Math.max(120, wrap.clientWidth - 30), availH = 250;
+  const availW = Math.max(120, wrap.clientWidth - 30 - 2 * PAD), availH = 250;
   const k = Math.min(availW / W, availH / H);
   const dw = Math.round(W * k), dh = Math.round(H * k), dpr = Math.min(devicePixelRatio || 1, 2);
-  if (ed.width !== dw * dpr || ed.height !== dh * dpr) { ed.width = dw * dpr; ed.height = dh * dpr; ed.style.width = dw + 'px'; ed.style.height = dh + 'px'; }
+  const cw = dw + 2 * PAD, ch = dh + 2 * PAD;
+  if (ed.width !== cw * dpr || ed.height !== ch * dpr) { ed.width = cw * dpr; ed.height = ch * dpr; ed.style.width = cw + 'px'; ed.style.height = ch + 'px'; }
   Object.assign(edState, { k, dw, dh, W, H });
-  const c = ectx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, dw, dh);
+  // everything below is drawn in the face's own px (times k): the margin is outside 0…dw, 0…dh
+  const c = ectx, base = () => c.setTransform(dpr, 0, 0, dpr, dpr * PAD, dpr * PAD);
+  base(); c.clearRect(-PAD, -PAD, cw, ch);
   const circle = o.type === 'tube' && sel.face !== 'wrap';
   c.save();
   if (circle) { c.beginPath(); c.arc(dw / 2, dh / 2, dw / 2, 0, Math.PI * 2); c.clip(); }
@@ -82,11 +88,11 @@ function drawEditor() {
     for (const st of o.stickers || []) {
       if (!st.visible) continue;
       for (const pl of placementsFor(o, st)) if (pl.key === sel.face) {
-        const M = pl.M; c.save(); c.setTransform(dpr * sc * M[0], dpr * sc * M[1], dpr * sc * M[2], dpr * sc * M[3], dpr * sc * M[4], dpr * sc * M[5]);
+        const M = pl.M; c.save(); c.setTransform(dpr * sc * M[0], dpr * sc * M[1], dpr * sc * M[2], dpr * sc * M[3], dpr * (sc * M[4] + PAD), dpr * (sc * M[5] + PAD));
         drawSticker(c, st, sc * dpr, false); c.restore();
       }
     }
-    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    base();
   }
   // guides
   c.strokeStyle = '#e6007e'; c.lineWidth = 1;
@@ -98,6 +104,19 @@ function drawEditor() {
     const hw = w * k / 2, hh = h * k / 2, cs = Math.cos(a), sn = Math.sin(a);
     const P = (lx, ly) => [cx + lx * cs - ly * sn, cy + lx * sn + ly * cs];
     const pts = [P(-hw, -hh), P(hw, -hh), P(hw, hh), P(-hw, hh)];
+    // the part past the face's edge is not printed (unless it runs over the edge or round a ring): hatched red
+    const ax = loopAxis(o, sel.face);
+    if (!(L.type === 'image' && L.tile) && !(L.wrap && layerReach(o, sel.face, L).length)) {
+      c.save(); c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); c.clip();
+      c.beginPath(); c.rect(-PAD, -PAD, cw, ch);
+      if (circle) c.arc(dw / 2, dh / 2, dw / 2, 0, Math.PI * 2, true);
+      else c.rect(ax === 'x' ? -PAD : 0, ax === 'y' ? -PAD : 0, ax === 'x' ? cw : dw, ax === 'y' ? ch : dh);
+      c.clip('evenodd');
+      c.fillStyle = 'rgba(210,69,58,.12)'; c.fillRect(-PAD, -PAD, cw, ch);
+      c.strokeStyle = 'rgba(210,69,58,.7)'; c.lineWidth = 1; c.beginPath();
+      for (let x = -PAD - ch; x < cw; x += 5) { c.moveTo(x, -PAD); c.lineTo(x + ch, -PAD + ch); }
+      c.stroke(); c.restore();
+    }
     c.strokeStyle = accentCss; c.lineWidth = 1.5; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); c.stroke();
     const rh = P(0, -hh - 18); const top = P(0, -hh);
     c.beginPath(); c.moveTo(...top); c.lineTo(...rh); c.stroke();
@@ -130,7 +149,7 @@ function snapMove(L, nx, ny, W, H, free) {
   }
   edState.guides = guides; L.x = nx; L.y = ny;
 }
-function edPoint(e) { const r = ed.getBoundingClientRect(); return [(e.clientX - r.left), (e.clientY - r.top)]; }
+function edPoint(e) { const r = ed.getBoundingClientRect(); return [(e.clientX - r.left - PAD), (e.clientY - r.top - PAD)]; }
 const edUp = () => { if (edState.drag) { edState.drag = null; edState.guides = []; ui.editor = true; ui.layers = true; commit(); } };
 
 /* hooks up the 2D editor */
