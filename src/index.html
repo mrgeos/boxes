@@ -88,17 +88,7 @@
 
   <main class="stage" id="stage">
     <div id="viewport"></div>
-    <div class="views" id="views">
-      <button class="btn sm" data-view="front">Спереди</button>
-      <button class="btn sm" data-view="q">3/4</button>
-      <button class="btn sm" data-view="side">Сбоку</button>
-      <button class="btn sm" data-view="top">Сверху</button>
-      <button class="btn sm" data-view="back">Сзади</button>
-      <button class="btn sm" data-view="bottom">Снизу</button>
-      <button class="btn sm" data-view="focus" title="Приблизить выбранный объект (F или двойной клик)">К выбранному</button>
-      <button class="btn sm" data-view="fit" title="Вся сцена (H)">Показать всё</button>
-      <button class="btn sm on" id="orbitLockBtn" aria-pressed="true" title="Вращение, сдвиг и масштаб вокруг выбранного объекта">◎ Вокруг выбранного</button>
-    </div>
+    <div class="views" id="views"><button class="btn sm" id="viewBtn" aria-haspopup="menu" title="Вид: стороны, приближение, вращение вокруг выбранного"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>Вид: <b id="viewName">3/4</b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 15 6-6 6 6"/></svg></button></div>
     <div class="stage-hint" id="stageHint">
       <button id="hideHint" aria-label="Скрыть подсказку">×</button>
       <b>Клик по грани</b> — выбрать её для дизайна. <b>Перетащите выбранный слой</b> прямо по модели.<br>

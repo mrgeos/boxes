@@ -1,6 +1,6 @@
 // Камера, виды, свет сцены, цикл отрисовки
 import * as THREE from 'three';
-import { $, $$, DEG, clamp } from '../core/util.js';
+import { $, DEG, clamp } from '../core/util.js';
 import { activeObj, sel, state } from '../core/state.js';
 import { RT, buildObject, camera, controls, dirtyFaces, fillLight, floor, keyLight, rebuildQueue, renderer, scene, ui, viewport } from './renderer.js';
 import { renderFace } from '../faces/render.js';
@@ -66,7 +66,6 @@ function focusSelected({ frame = false } = {}) {
   if (frame) dist = fit; else dist = clamp(dist, fit * .45, fit * 3.2);
   off.setLength(dist);
   tweenCamera(c.clone().add(off), c);
-  $$('#views .btn[data-view]').forEach(b => b.classList.toggle('on', frame && b.dataset.view === 'focus'));
 }
 function setView(name, instant = false) {
   if (VIEW_DIRS[name]) lastView = name;
@@ -77,13 +76,16 @@ function setView(name, instant = false) {
   const b = onObj ? (objBounds(o.id) || sceneBounds()) : sceneBounds();
   const c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
   tweenCamera(c.clone().add(dir.multiplyScalar(fitDistance(r))), c, instant);
-  $$('#views .btn[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === name));
+  if (VIEW_DIRS[name]) setViewName(name);
 }
+/* which side the camera looks from, shown on the view button: one of VIEW_DIRS, or 'custom' once the user turns it */
+const VIEW_LABEL = { front: 'Спереди', q: '3/4', side: 'Сбоку', top: 'Сверху', back: 'Сзади', bottom: 'Снизу', custom: 'Свой' };
+let viewName = 'q';
+function setViewName(n) { viewName = n; const el = $('#viewName'); if (el) el.textContent = VIEW_LABEL[n] || n; }
 function setOrbitLock(on) {
   orbitLock = on;
   try { localStorage.setItem('box-studio-3d/orbit', on ? 'object' : 'free'); } catch {}
   controls.enablePan = !on;
-  const b = $('#orbitLockBtn'); b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on);
   if (on) focusSelected(); else if (view.x || view.y) tweenCamera(camera.position.clone(), controls.target.clone());
 }
 function updateShadowCam() {
@@ -120,6 +122,7 @@ function setRecording(v) { recording = v; }
 /* resizes the view with its box and starts the render loop */
 function initCamera() {
   new ResizeObserver(resize).observe(viewport);
+  controls.addEventListener('start', () => setViewName('custom'));   // only the user's own dragging starts the controls
   // a handler may change materials or the scene directly: draw after any input
   for (const t of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'click', 'drop', 'paste']) addEventListener(t, () => invalidate(), { capture: true, passive: true });
   renderer.domElement.addEventListener('pointermove', () => invalidate(), { passive: true });
@@ -157,4 +160,4 @@ function initCamera() {
   });
 }
 
-export { accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view };
+export { VIEW_LABEL, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };

@@ -4,7 +4,8 @@ import { activeFaceData, activeObj, sel, state } from '../core/state.js';
 import { faceKeys, faceLabel, netLayout, newObject, newShape, newText, outerKeys } from '../core/model.js';
 import { importImageFile } from '../core/assets.js';
 import { buildObject, markFace, markObj, ui } from '../scene/renderer.js';
-import { orbitLock, sceneBounds, setOrbitLock, setView } from '../scene/camera.js';
+import { VIEW_LABEL, orbitLock, sceneBounds, setOrbitLock, setView, viewName } from '../scene/camera.js';
+import { openMenu } from './menu.js';
 import { select } from '../core/selection.js';
 import { addFontFile, commit, loadProject, openProjectFile, projectJSON, redo, saveFile, undo } from '../core/project.js';
 import { refreshFields } from './fields.js';
@@ -87,8 +88,16 @@ function initWiring() {
   $('#sampleBtn').onclick = () => { loadProject(sampleProject(), { resetHistory: false }); toast('Загружен пример. Вернуть предыдущий — Ctrl+Z'); };
   $('#fontBtn').onclick = () => { $('#fontInput').value = ''; $('#fontInput').click(); };
   $('#fontInput').onchange = e => e.target.files[0] && addFontFile(e.target.files[0]);
-  $$('#views .btn[data-view]').forEach(b => b.onclick = () => setView(b.dataset.view));
-  $('#orbitLockBtn').onclick = () => setOrbitLock(!orbitLock);
+  // the view button: the side the camera looks from now, and in its menu the sides, zoom to the selection or
+  // the whole scene, and whether the camera turns round the selected object
+  $('#viewBtn').onclick = e => {
+    const r = e.currentTarget.getBoundingClientRect(), side = k => ({ label: VIEW_LABEL[k], checked: viewName === k, run: () => setView(k) });
+    const items = [...['front', 'q', 'side', 'top', 'back', 'bottom'].map(side), 'sep',
+      { label: 'К выбранному', key: 'F', disabled: !activeObj(), run: () => setView('focus') }, { label: 'Показать всё', key: 'H', run: () => setView('fit') }, 'sep',
+      { label: 'Вращать вокруг выбранного', checked: orbitLock, run: () => setOrbitLock(!orbitLock) }];
+    const m = openMenu(r.left, r.top, items, 'Вид');
+    if (m) { const h = m.getBoundingClientRect().height; m.style.top = Math.max(4, r.top - h - 6) + 'px'; }   // above the button
+  };
   $('#hideHint').onclick = () => { $('#stageHint').hidden = true; try { localStorage.setItem('box-studio-3d/hint', '1'); } catch {} };
   try { if (localStorage.getItem('box-studio-3d/hint')) $('#stageHint').hidden = true; } catch {}
 }
