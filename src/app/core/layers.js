@@ -1,5 +1,6 @@
 // Несколько слоёв сразу: выбор, перемещение, масштаб и поворот, выравнивание, группы, порядок, копирование
 import { DEG, uid } from './util.js';
+import { getImg } from './assets.js';
 import { activeFaceData, activeObj, sel } from './state.js';
 import { faceMM, facePx, newImage, outerKeys } from './model.js';
 import { applyObjMaterials, markFace } from '../scene/renderer.js';
@@ -259,4 +260,25 @@ function addBackgroundImage(o, k, src, aspect) {
   return L;
 }
 
-export { addBackgroundImage, bgToAllFaces, clearFace, selectBg, setFaceBg, setFaceBgGrad, activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setText, setVisible, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };
+/* ---------- how a picture lies on its face ---------- */
+/* the width (share of the face) a picture fitted in (contain) or filling the face (cover) has */
+function imageFitW(o, k, L, cover) {
+  const [W, H] = facePx(o, k), im = getImg(L.src), a = im ? im.naturalWidth / im.naturalHeight : L.aspect || 1;
+  return (cover ? Math.max(W, H * a) : Math.min(W, H * a)) / W;
+}
+/* 'tile' (a pattern), 'contain', 'cover' (centred, unturned, at that width) or 'free' */
+function imageFitOf(o, k, L) {
+  if (L.tile) return 'tile';
+  if (Math.abs(L.x - .5) > .002 || Math.abs(L.y - .5) > .002 || (L.rot || 0) % 360) return 'free';
+  for (const m of ['contain', 'cover']) if (Math.abs(L.w - imageFitW(o, k, L, m === 'cover')) < .003) return m;
+  return 'free';
+}
+function setImageFit(o, k, L, mode) {
+  // free from a fitted picture: a little smaller than fitted in, so it shows it can be moved
+  if (mode === 'free' && imageFitOf(o, k, { ...L, tile: false }) !== 'free') L.w = imageFitW(o, k, L, false) * .8;
+  L.tile = mode === 'tile';
+  if (mode === 'contain' || mode === 'cover') { L.w = imageFitW(o, k, L, mode === 'cover'); L.x = .5; L.y = .5; L.rot = 0; }
+  markFace(o, k);
+}
+
+export { imageFitOf, setImageFit, addBackgroundImage, bgToAllFaces, clearFace, selectBg, setFaceBg, setFaceBgGrad, activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setText, setVisible, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };

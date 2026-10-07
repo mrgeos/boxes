@@ -330,3 +330,12 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .layer.bgrow .pin-lock{width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:var(--muted);opacity:.6}
 .layer.bgrow .pin-lock svg{width:12px;height:12px}
 #layers .empty{margin-bottom:2px}
+
+/* a picture layer's card: preview, name, print resolution, replace */
+.imgcard{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--field)}
+.imgcard .ic-th{width:44px;height:44px;border-radius:5px;background:var(--checker-b) center/contain no-repeat;border:1px solid var(--line)}
+.imgcard .ic-t{display:flex;flex-direction:column;min-width:0;gap:2px}
+.imgcard .ic-n{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imgcard .hint b.warn{color:var(--warn)}.imgcard .hint b.bad{color:var(--danger)}
+.field.rotf{grid-template-columns:92px minmax(0,1fr) 58px auto}
+.field .flips{display:flex;gap:1px}

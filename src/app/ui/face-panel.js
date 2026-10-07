@@ -14,7 +14,7 @@ import { NONE, addKeyout, hasColorEdits, hasRecolor, removeKeyout, setKeyoutTol,
 import { allFonts, ensureFont } from '../core/fonts.js';
 import { RT, markFace, ui } from '../scene/renderer.js';
 import { pickLayers, select } from '../core/selection.js';
-import { addBackgroundImage, bgToAllFaces, clearFace, selectBg, setFaceBg, setFaceBgGrad, alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setVisible, shiftLayers } from '../core/layers.js';
+import { addBackgroundImage, bgToAllFaces, clearFace, imageFitOf, selectBg, setFaceBg, setFaceBgGrad, setImageFit, alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setVisible, shiftLayers } from '../core/layers.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField } from './fields.js';
 import { MASKS, cropped, editMode, hasPanels, resetCrop, setClipBelow, setClipTo, setEditMode, setMask } from '../core/mask.js';
@@ -291,19 +291,20 @@ function renderLayerProps() {
       ${rangeField('Кегль, % выс.', 'size', .5, 80, .1, 100)}${rangeField('Трекинг', 'ls', -10, 80, 1, 100)}${rangeField('Интерлиньяж', 'lh', .7, 2.5, .01)}
       ${rangeField('Дуга, °', 'arc', -360, 360, 1)}`;
   } else if (L.type === 'image') {
-    const dpi = imageDpi(o, L);
-    html += `<div class="row"><button class="btn sm" id="imgReplace">Заменить…</button><button class="btn sm" id="imgCover">Залить грань</button><button class="btn sm" id="imgFit">Вписать</button></div>
-      <div class="row"><label class="check"><input type="checkbox" data-k="flipX"> Отразить ↔</label><label class="check"><input type="checkbox" data-k="flipY"> Отразить ↕</label></div>
-      <label class="check"><input type="checkbox" data-k="tile"> Повторять узором</label>
-      ${rangeField(L.tile ? 'Размер плитки, %' : 'Ширина, %', 'w', 1, 400, .1, 100)}
-      ${dpi != null ? `<p class="hint">При печати этого размера: <b class="mono">${dpi} dpi</b>${dpi < 150 ? ' — мало для офсета, нужно от 300 dpi' : dpi < 300 ? ' — допустимо, для офсета лучше 300 dpi' : ' — подходит для печати'}.</p>` : ''}`;
+    // what the picture is (a card), then how it lies on the face (with the position below)
+    html += imageCardHTML(o, L);
   } else {
     html += `<div class="field wide"><span class="fl">Форма</span><select data-k="kind" aria-label="Форма"><option value="rect">Прямоугольник</option><option value="ellipse">Эллипс</option></select></div>
       ${rangeField('Ширина, %', 'w', 1, 200, .1, 100)}${rangeField('Высота, %', 'h', 1, 200, .1, 100)}
       ${L.kind === 'rect' ? rangeField('Скругление', 'radius', 0, 100, 1, 100) : ''}${rangeField('Контур (0 — заливка)', 'stroke', 0, 100, 1, 1000)}`;
   }
-  html += `${rangeField('Центр X, %', 'x', -50, 150, .1, 100)}${rangeField('Центр Y, %', 'y', -50, 150, .1, 100)}${rangeField('Поворот, °', 'rot', -180, 180, 1)}
-    ${!(L.type === 'image' && L.tile) && Object.keys(RT.get(o.id)?.frames || {}).length ? '<label class="check" title="Часть слоя за краем грани печатается на соседних гранях, через сгиб. Включается сама, если тянуть слой через ребро на модели"><input type="checkbox" data-k="wrap"> Переходит через рёбра на соседние грани</label>' : ''}
+  const img = L.type === 'image';
+  // a picture's flips sit by its turn, as two toggles
+  const rot = img ? rangeField('Поворот, °', 'rot', -180, 180, 1).replace(/<\/div>$/, `<span class="flips"><button class="vx" id="flipX" aria-pressed="${!!L.flipX}" title="Отразить по горизонтали">${ICON.flipH}</button><button class="vx" id="flipY" aria-pressed="${!!L.flipY}" title="Отразить по вертикали">${ICON.flipV}</button></span></div>`).replace('class="field"', 'class="field rotf"') : rangeField('Поворот, °', 'rot', -180, 180, 1);
+  const pos = `${rangeField('Центр X, %', 'x', -50, 150, .1, 100)}${rangeField('Центр Y, %', 'y', -50, 150, .1, 100)}${rot}
+    ${!(img && L.tile) && Object.keys(RT.get(o.id)?.frames || {}).length ? '<label class="check" title="Часть слоя за краем грани печатается на соседних гранях, через сгиб. Включается сама, если тянуть слой через ребро на модели"><input type="checkbox" data-k="wrap"> Переходит через рёбра на соседние грани</label>' : ''}`;
+  html += img ? `<div class="cut"><h3>Размер и положение</h3>${fitSegHTML(o, L)}${rangeField(L.tile ? 'Размер плитки, %' : 'Ширина, %', 'w', 1, 400, .1, 100)}${pos}</div>` : pos;
+  html += `
     ${materialsHTML(L, effOpts)}
     ${cropHTML(o, L)}`;
   sec.innerHTML = html;
@@ -321,8 +322,8 @@ function renderLayerProps() {
   if (L.type === 'image') {
     $('#imgReplace').onclick = () => pickImage(async file => { const r = await importImageFile(file); const L = activeLayer(); L.src = r.id; L.aspect = r.aspect; L.recolor = {}; markFace(o, sel.face); renderLayers(); renderLayerProps(); commit(); });
     bindVecColors(sec, activeLayer, () => { markFace(o, sel.face); ui.layers = true; }, renderLayerProps);
-    $('#imgCover').onclick = () => fitImage(true);
-    $('#imgFit').onclick = () => fitImage(false);
+    $$('#fitSeg button', sec).forEach(b => b.onclick = () => { setImageFit(o, sel.face, activeLayer(), b.dataset.fit); ui.layers = true; renderLayerProps(); commit(); });
+    for (const ax of ['X', 'Y']) $('#flip' + ax, sec).onclick = () => { const L = activeLayer(); L['flip' + ax] = !L['flip' + ax]; markFace(o, sel.face); ui.layers = true; renderLayerProps(); commit(); };
   }
 }
 /* the fill of a text or shape: plain colour or a gradient from it to a second colour */
@@ -403,12 +404,19 @@ function bindCrop(o, L) {
   $('#clipBelow').onchange = e => { setClipBelow(o, k, L, e.target.checked); done(); };
   $('#clipTo').onchange = e => { setClipTo(o, k, L, e.target.value || null); done(); };
 }
-function fitImage(cover) {
-  const o = activeObj(), L = activeLayer(); if (!L || L.type !== 'image') return;
-  const [W, H] = facePx(o, sel.face); const im = getImg(L.src); const a = im ? im.naturalWidth / im.naturalHeight : L.aspect;
-  const wpx = cover ? Math.max(W, H * a) : Math.min(W, H * a);
-  L.w = wpx / W; L.x = .5; L.y = .5; L.rot = 0;
-  markFace(o, sel.face); renderLayerProps(); ui.layers = true; commit();
+/* a picture's card: what it is (its preview, name, print resolution) and a button to put another one in its place */
+function imageCardHTML(o, L) {
+  const dpi = imageDpi(o, L), u = assets[L.src];
+  const q = dpi == null ? '' : dpi < 150 ? `<b class="bad">${dpi} dpi</b> — мало для офсета, нужно от 300` : dpi < 300 ? `<b class="warn">${dpi} dpi</b> — для офсета лучше 300` : `<b>${dpi} dpi</b> — подходит для печати`;
+  return `<div class="imgcard"><span class="ic-th" ${u ? `style="background-image:url('${u}')"` : ''}></span>
+    <div class="ic-t"><b class="ic-n" title="${esc(layerName(L))}">${esc(layerName(L))}</b><span class="hint mono" title="При печати этого размера">${q}</span></div>
+    <button class="btn sm" id="imgReplace">Заменить…</button></div>`;
+}
+/* how the picture lies on the face: as placed, fitted in, filling the face, or repeated as a pattern */
+function fitSegHTML(o, L) {
+  const cur = imageFitOf(o, sel.face, L);
+  return `<div class="seg" id="fitSeg" role="group" aria-label="Как лежит картинка">${[['free', 'Свободно', 'Как поставили'], ['contain', 'Вписать', 'Целиком внутри грани'], ['cover', 'Залить', 'Покрыть всю грань'], ['tile', 'Узор', 'Повторять картинку узором; ширина — размер плитки']]
+    .map(([k, t, h]) => `<button data-fit="${k}" class="${cur === k ? 'on' : ''}" aria-pressed="${cur === k}" title="${h}">${t}</button>`).join('')}</div>`;
 }
 /* ---------- layer ops ---------- */
 function addLayer(L, face = sel.face, obj = activeObj()) {
