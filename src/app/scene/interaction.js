@@ -9,13 +9,14 @@ import { library } from '../core/library.js';
 import { RT, camera, controls, cvs, markFace, renderer, ui, world } from './renderer.js';
 import { activeSticker, stickerAt, stickerDirty, touchSticker } from '../stickers/placement.js';
 import { applyViewOffset, focusSelected, lockActive, recording, setCamTween, setView, view } from './camera.js';
-import { pickLayers, select, selectLayer } from '../core/selection.js';
+import { pickLayers, select, selectLayer, selectObjectItself } from '../core/selection.js';
 import { boundsOf, clickPick, copyData, moveLayers, pasteData, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
 import { addFontFile, commit, openProjectFile, redo, undo } from '../core/project.js';
 import { refreshFields } from '../ui/fields.js';
 import { addImageToFace, deleteLayer, duplicateLayer, layerCmd, moveLayer, renderFaceTabs, renderLayerProps, renderLayers } from '../ui/face-panel.js';
-import { deleteSticker, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
+import { deleteSticker, extraAction, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
 import { setTab } from '../ui/tabs.js';
+import { isPart } from '../core/extras.js';
 import { handleAt } from './sel-box.js';
 import { startTextEdit } from '../ui/text-edit.js';
 import { rotateItem, scaleItem, sizeOf } from '../core/transform.js';
@@ -32,8 +33,10 @@ function pick(clientX, clientY, only = null) {
   ray.setFromCamera(ndc, camera);
   // hidden and locked objects are passed through (three.js casts rays at hidden meshes too)
   const hits = ray.intersectObjects(only ? [only] : world.children, true);
-  const h = hits.find(x => { const o = state.objects.find(q => q.id === x.object.userData.objId); return !o || (!o.hidden && !o.locked); }); if (!h) return null;
-  const ud = h.object.userData; const face = ud.faces ? ud.faces[h.face.materialIndex] : ud.face;
+  const faceOf = x => { const ud = x.object.userData; return ud.faces ? ud.faces[x.face.materialIndex] : ud.face; };
+  // a locked sleeve or carrier is passed through too
+  const h = hits.find(x => { const o = state.objects.find(q => q.id === x.object.userData.objId), f = faceOf(x); return !o || (!o.hidden && !o.locked && !(isPart(f) && o[f]?.locked)); }); if (!h) return null;
+  const ud = h.object.userData, face = faceOf(h);
   return { objId: ud.objId, face, wall: !!ud.wall, uv: h.uv, mesh: h.object, mi: h.face.materialIndex };
 }
 let down = null, drag3 = null, dragSt = null, xform = null, hoverT = 0;
@@ -42,7 +45,8 @@ function stickerHit(h) {
   const o = state.objects.find(x => x.id === h?.objId);
   if (!o || !h.face || !h.uv || h.wall || !o.stickers?.length) return null;
   const [mw, mh] = faceMM(o, h.face);
-  return stickerAt(o, h.face, h.uv.x * mw, (1 - h.uv.y) * mh);
+  const st = stickerAt(o, h.face, h.uv.x * mw, (1 - h.uv.y) * mh);
+  return st && !st.locked ? st : null;
 }
 /* screen-space pan in orbit-lock mode: right button, Shift/Ctrl/Cmd + left button, or two fingers */
 const touches = new Map();
@@ -298,7 +302,6 @@ function initInteraction() {
     if (hs) {
       if (o.id !== sel.obj || (h.face && h.face !== sel.face)) select(o.id, h.face || undefined, null, { flash: false });
       sel.sticker = hs.id; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers(); ui.editor = true;
-      setTab('stickers');
       return;
     }
     if (sel.sticker) { sel.sticker = null; ui.stickers = true; }
@@ -395,7 +398,7 @@ function initInteraction() {
     if (ST) {
       const o = activeObj();
       if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return deleteSticker(ST.id); }
-      if (e.key === 'Escape') { sel.sticker = null; return renderStickers(); }
+      if (e.key === 'Escape') return selectObjectItself();
       if (e.key.startsWith('Arrow')) {
         e.preventDefault(); const [mw, mh] = faceMM(o, ST.face), mm = e.shiftKey ? 5 : .5;
         if (e.key === 'ArrowLeft') ST.x -= mm / mw; if (e.key === 'ArrowRight') ST.x += mm / mw;
@@ -407,6 +410,12 @@ function initInteraction() {
     const L = activeLayer();
     // no layer: the keys act on the picked objects
     if (!L) {
+      // a sleeve or a carrier picked: the keys act on it, Esc goes back to the object
+      if (sel.part) {
+        if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); extraAction(activeObj(), sel.part, 'del'); }
+        else if (e.key === 'Escape') selectObjectItself();
+        return;
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') { if (picked().length) { e.preventDefault(); deleteIds(picked()); } }
       else if (mod && e.key.toLowerCase() === 'd' && picked().length) { e.preventDefault(); duplicateIds(picked()); }
       return;

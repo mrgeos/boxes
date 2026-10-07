@@ -108,8 +108,9 @@
   <textarea id="textEdit" class="text-edit" spellcheck="false" aria-label="Текст слоя" hidden></textarea>
 
   <aside class="panel props" id="propPanel" data-tab="design" aria-label="Выбранный объект">
-    <div class="ptabs" id="propTabs" role="tablist"><button role="tab" data-tab="shape">Форма</button><button role="tab" data-tab="design">Дизайн</button><button role="tab" data-tab="stickers">Наклейки</button><button role="tab" data-tab="net">Развёртка</button></div>
-    <section class="sec" id="noSelSec" data-tab="none"><div class="empty">Выберите объект на сцене или в списке слева — здесь появятся его форма, дизайн граней, наклейки и развёртка.</div></section>
+    <nav class="crumb" id="propCrumb" aria-label="Где выбранное" hidden></nav>
+    <div class="ptabs" id="propTabs" role="tablist"><button role="tab" data-tab="shape">Форма</button><button role="tab" data-tab="design">Дизайн</button><button role="tab" data-tab="extras">Допы</button><button role="tab" data-tab="net">Развёртка</button></div>
+    <section class="sec" id="noSelSec" data-tab="none"><div class="empty">Выберите объект на сцене или в списке слева — здесь появятся его форма, дизайн граней, допы (наклейки, рукава) и развёртка.</div></section>
     <section class="sec" id="modelSec" data-tab="shape"></section>
     <section class="sec" data-tab="design">
       <div class="sec-h"><h2>Дизайн грани</h2><span class="badge" id="objBadge"></span></div>
@@ -138,7 +139,7 @@
       </div>
     </section>
     <section class="sec" id="layerSec" data-tab="design"></section>
-    <section class="sec" id="stickerSec" data-tab="stickers"></section>
+    <section class="sec" id="stickerSec" data-tab="extras"></section>
     <section class="sec" data-tab="net">
       <div class="sec-h"><h2>Развёртка</h2><span class="mono hint" id="netSize"></span></div>
       <canvas id="net" width="300" height="200" aria-label="Развёртка: клик по панели выбирает грань"></canvas>

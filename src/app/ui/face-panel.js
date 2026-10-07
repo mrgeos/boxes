@@ -2,9 +2,11 @@
 import { $, $$, esc, fmt, toast } from '../core/util.js';
 import { BLENDS, EFFECTS, ICON, SWATCHES } from '../core/constants.js';
 import { activeFaceData, activeLayer, activeObj, assets, sel, state } from '../core/state.js';
-import { faceKeys, faceLabel, faceMM, facePx, netLayout, newImage } from '../core/model.js';
+import { faceKeys, faceLabel, faceMM, facePx, newImage } from '../core/model.js';
 import { getImg, importImageFile } from '../core/assets.js';
 import { library } from '../core/library.js';
+import { extraById, extraName, isPart } from '../core/extras.js';
+import { viewNet } from '../net/net-view.js';
 import { drawLayer, layerBox } from '../faces/render.js';
 import { openMenu } from './menu.js';
 import { hasRecolor, vecColors } from '../core/vector.js';
@@ -19,8 +21,11 @@ import { invalidate } from '../scene/camera.js';
 
 function renderFaceTabs() {
   const o = activeObj();
-  $('#objBadge').textContent = o ? o.name : '';
-  $('#faceTabs').innerHTML = o ? faceKeys(o).map(k => `<button class="chip ${k === sel.face ? 'on' : ''}" data-f="${k}">${faceLabel(o, k)}${o.faces[k].layers.length ? `<span class="cnt">${o.faces[k].layers.length}</span>` : ''}</button>`).join('') : '';
+  $('#objBadge').textContent = o ? (sel.part ? extraName(o, extraById(o, sel.part) || { kind: sel.part, T: {} }) : o.name) : '';
+  // the faces of the object itself, or the one face of the sleeve or carrier picked
+  const keys = o ? (sel.part ? [sel.part] : faceKeys(o).filter(k => !isPart(k))) : [];
+  $('#faceTabs').hidden = keys.length < 2;
+  $('#faceTabs').innerHTML = o ? keys.map(k => `<button class="chip ${k === sel.face ? 'on' : ''}" data-f="${k}">${faceLabel(o, k)}${o.faces[k].layers.length ? `<span class="cnt">${o.faces[k].layers.length}</span>` : ''}</button>`).join('') : '';
   $$('#faceTabs .chip').forEach(b => b.onclick = () => select(sel.obj, b.dataset.f, null, { flash: true }));
   const sel2 = $('#copyTarget');
   sel2.innerHTML = o ? `<option value="">Скопировать дизайн на…</option><option value="*">все внешние грани</option>` + faceKeys(o).filter(k => k !== sel.face).map(k => `<option value="${k}">${faceLabel(o, k)}</option>`).join('') : '';
@@ -29,7 +34,7 @@ function updateFaceMeta() {
   const o = activeObj(); if (!o || !sel.face) { $('#faceMeta').textContent = ''; return; }
   const [mw, mh] = faceMM(o, sel.face), [pw, ph] = facePx(o, sel.face);
   $('#faceMeta').innerHTML = `<span>${faceLabel(o, sel.face)} · ${fmt(mw, 1)} × ${fmt(mh, 1)} мм</span><span>превью ${pw}×${ph} px</span>`;
-  const n = netLayout(o); $('#netSize').textContent = `${fmt(n.W)} × ${fmt(n.H)} мм`;
+  const n = viewNet(o); $('#netSize').textContent = `${fmt(n.W)} × ${fmt(n.H)} мм`;
 }
 function renderFacePanel() {
   const f = activeFaceData();

@@ -8,7 +8,10 @@ import { thumbOf } from './object-thumbs.js';
 import { lidAction, toggleLid } from './context-menus.js';
 import { setTab } from './tabs.js';
 import { renderModel } from './model-panel.js';
-import { select, selectGroup } from '../core/selection.js';
+import { extraById, extraHidden, extraName, extrasOf, renameExtra } from '../core/extras.js';
+import { extraAction, extraActs, extraIcon, renderStickers } from './stickers-panel.js';
+import { refreshTabs } from './tabs.js';
+import { select, selectExtra, selectGroup } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { setView } from '../scene/camera.js';
 
@@ -18,7 +21,8 @@ const dimsText = o => o.type === 'torte' || o.type === 'tube' ? `⌀${fmt(o.dims
 const count = n => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'объект' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'объекта' : 'объектов'}`;
 /* what the buttons act on: the items picked in the list, or the selected object */
 const picked = () => { const ids = sel.multi.filter(id => own(id)); return ids.length ? ids : sel.obj ? [sel.obj] : []; };
-let anchor = null;   // the row a Shift-click range starts from
+let anchor = null;
+const foldedObj = new Set();   // objects whose extras are folded in the list   // the row a Shift-click range starts from
 
 /* rows of the tree, without the insides of closed groups */
 function visibleRows() {
@@ -35,15 +39,30 @@ function renderObjects() {
     const acts = `<span class="acts">${rowActs(hid, lck)}</span>`;
     if (g) return `<div class="${cls}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true">
       <button class="caret" data-open aria-label="${g.open ? 'Свернуть' : 'Развернуть'}" aria-expanded="${g.open}">${g.open ? '▾' : '▸'}</button>${GROUP_ICON}<span class="nm">${esc(g.name)}</span><span class="dm">${count(os.length)}</span>${acts}</div>`;
-    const o = own(id), url = thumbOf(id);
+    const o = own(id), url = thumbOf(id), xs = extrasOf(o), open = !foldedObj.has(id), xOn = id === sel.obj && (sel.sticker || sel.part);
     const th = url ? `<img class="th" src="${url}" alt="">` : `<span class="th">${ICON[o.type] || ICON.box}</span>`;
-    return `<div class="${cls}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true" title="${esc(o.name)} · ${dimsText(o)} мм">
-      ${th}<span class="nm">${esc(o.name)}</span><span class="mods">${objMods(id, o).map(m => `<button class="mod" data-mod="${m.k}" title="${esc(m.t)}" aria-label="${esc(m.t)}">${ICON[m.i]}</button>`).join('')}</span><span class="dm mono">${dimsText(o)}</span>${acts}</div>`;
+    // the object's extras (stickers, a sleeve) under it, one level in; the object row folds them
+    const kids = open ? xs.map(e => `<div class="obj xtra ${xOn === e.id ? 'on' : ''} ${extraHidden(e) ? 'hidden' : ''} ${e.T.locked ? 'locked' : ''}" data-obj="${id}" data-x="${e.id}" style="--d:${depth + 1}" tabindex="0" role="button">
+      <span class="th">${extraIcon(e)}</span><span class="nm">${esc(extraName(o, e))}</span><span class="acts">${extraActs(e)}</span></div>`).join('') : '';
+    return `<div class="${xOn ? cls.replace(' on ', ' kid-on ') : cls}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true" title="${esc(o.name)} · ${dimsText(o)} мм">
+      ${xs.length ? `<button class="caret" data-fold aria-label="${open ? 'Свернуть допы' : 'Развернуть допы'}" aria-expanded="${open}">${open ? '▾' : '▸'}</button>` : '<span class="caret"></span>'}${th}<span class="nm">${esc(o.name)}</span><span class="mods">${objMods(id, o).map(m => `<button class="mod" data-mod="${m.k}" title="${esc(m.t)}" aria-label="${esc(m.t)}">${ICON[m.i]}</button>`).join('')}</span><span class="dm mono">${dimsText(o)}</span>${acts}</div>${kids}`;
   }).join('') || '<div class="empty">Добавьте коробку, стакан или тубус</div>';
-  $$('#objList .obj').forEach(el => {
+  // an extra's row: picks it (as an object of its own); its lock and eye, a double click renames it
+  $$('#objList .obj.xtra').forEach(el => {
+    const o = objById(el.dataset.obj), x = el.dataset.x;
+    el.onclick = e => {
+      const a = e.target.closest('[data-a]')?.dataset.a;
+      if (a) return extraAction(o, x, a);
+      if (e.detail === 2) return renameExtraTree(o.id, x);
+      selectExtra(o.id, x);
+    };
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } };
+  });
+  $$('#objList .obj:not(.xtra)').forEach(el => {
     const id = el.dataset.id;
     el.onclick = e => {
       if (e.target.closest('[data-open]')) { const g = groupById(id); g.open = !g.open; renderObjects(); return; }
+      if (e.target.closest('[data-fold]')) { foldedObj.has(id) ? foldedObj.delete(id) : foldedObj.add(id); renderObjects(); return; }
       const a = e.target.closest('[data-a]')?.dataset.a, mod = e.target.closest('[data-mod]')?.dataset.mod;
       if (a) { const ids = on.has(id) ? [...on] : [id], os = ids.flatMap(objectsIn).map(objById); a === 'vis' ? setHidden(ids, !os.every(o => o.hidden)) : setLocked(ids, !os.every(o => o.locked)); renderObjects(); commit(); return; }
       if (mod) return modAction(id, mod);
@@ -73,7 +92,6 @@ function objMods(id, o) {
   const m = [], lid = lidAction(o), g = parentOf(id);
   if (lid && o.lid > 0) m.push({ k: 'lid', i: 'lidOpen', t: `Открыто. Клик: ${lid[1].toLowerCase()}` });
   if (o.dieline) m.push({ k: 'net', i: 'dieline', t: 'Свой макет развёртки' });
-  if (o.stickers?.length) m.push({ k: 'stickers', i: 'sticker', t: `Наклейки: ${o.stickers.length}` });
   if (g) m.push({ k: 'group', i: 'row', t: `В ряду группы «${g.name}»` });
   return m;
 }
@@ -138,6 +156,19 @@ function leaveGroup(id) {
   renderObjects(); commit();
 }
 
+/* types a new name for an extra right in its row of the tree */
+function renameExtraTree(objId, x) {
+  const o = objById(objId), row = $(`#objList .obj.xtra[data-obj="${objId}"][data-x="${x}"]`), nm = row && $('.nm', row), e = o && extraById(o, x);
+  if (!nm || !e) return false;
+  const inp = document.createElement('input'); inp.className = 'ren'; inp.value = extraName(o, e); inp.setAttribute('aria-label', 'Название');
+  nm.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const end = save => { if (done) return; done = true; if (save) { renameExtra(o, x, inp.value); commit(); } renderObjects(); renderStickers(); refreshTabs(); renderModel(); };
+  inp.onkeydown = ev => { ev.stopPropagation(); if (ev.key === 'Enter') end(true); if (ev.key === 'Escape') end(false); };
+  inp.onblur = () => end(true);
+  for (const t of ['click', 'dblclick', 'pointerdown']) inp.addEventListener(t, ev => ev.stopPropagation());
+  return true;
+}
 /* types a new name for an object or a group right in its row; Enter or a click away keeps it, Esc does not */
 function renameRow(id) {
   const row = $(`#objList .obj[data-id="${id}"]`), nm = row && $('.nm', row); if (!nm || !row.offsetParent) return false;
@@ -184,4 +215,4 @@ function initObjectList() {
   });
 }
 
-export { renameRow, deleteIds, duplicateIds, groupIds, initObjectList, leaveGroup, picked, renderObjects, ungroupIds };
+export { renameExtraTree, renameRow, deleteIds, duplicateIds, groupIds, initObjectList, leaveGroup, picked, renderObjects, ungroupIds };

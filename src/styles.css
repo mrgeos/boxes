@@ -290,3 +290,17 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 /* typing a text in place: an invisible textarea over the layer, only its caret and selection show */
 .text-edit{position:fixed;left:0;top:0;z-index:50;margin:0;border:0;outline:0;box-sizing:content-box;background:transparent;color:transparent;caret-color:transparent!important;resize:none;overflow:hidden;white-space:pre;transform-origin:0 0;box-shadow:none;pointer-events:none}
 .text-edit::selection{background:transparent;color:transparent}
+
+/* the path of a picked extra over the panel's tabs: object › extra */
+.crumb{display:flex;align-items:center;gap:6px;padding:8px 14px 0;font-size:12.5px;min-width:0}
+.crumb .up{all:unset;cursor:pointer;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
+.crumb .up:hover{text-decoration:underline}
+.crumb .sep{color:var(--muted)}
+.crumb b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.obj .caret:empty{cursor:default}
+.obj.xtra{min-height:26px}
+.obj.xtra .th{width:18px;height:18px;color:var(--muted)}
+.obj.xtra .th svg{width:14px;height:14px}
+.obj.xtra .nm{font-size:12.5px}
+.obj.kid-on{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
+#stickerSec .layer .dm{color:var(--muted);font-size:11px}

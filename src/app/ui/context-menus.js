@@ -14,7 +14,7 @@ import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
 import { renderModel } from './model-panel.js';
 import { addImageToFace, deleteLayer, duplicateLayer, moveLayer, renderLayerProps, renderLayers } from './face-panel.js';
-import { deleteSticker, duplicateSticker, renderStickers } from './stickers-panel.js';
+import { deleteSticker, duplicateSticker, extraMenu, renderStickers } from './stickers-panel.js';
 import { swapImage } from './library-panel.js';
 import { ed, edPoint, edState, hitLayer } from './face-editor.js';
 import { addObject, copyFaceDesign } from './wiring.js';
@@ -199,7 +199,12 @@ function initContextMenus() {
     if (!(sel.multi.length > 1 && sel.multi.includes(id))) isGroup(id) ? selectGroup(id) : select(id);
     openMenu(x, y, ...itemMenu(id));
   };
-  list.addEventListener('contextmenu', e => { const el = e.target.closest('.obj'); if (!el) return; e.preventDefault(); rowMenu(el, e.clientX, e.clientY); });
+  list.addEventListener('contextmenu', e => {
+    const el = e.target.closest('.obj'); if (!el) return; e.preventDefault();
+    // an extra of an object (a sticker, a sleeve)
+    if (el.dataset.x) return extraMenu(objById(el.dataset.obj), el.dataset.x, e.clientX, e.clientY);
+    rowMenu(el, e.clientX, e.clientY);
+  });
   list.addEventListener('keydown', e => {
     const el = e.target.closest('.obj'); if (!el || !(e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) return;
     e.preventDefault(); const r = el.getBoundingClientRect(); rowMenu(el, r.left + 24, r.bottom);

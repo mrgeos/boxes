@@ -1,4 +1,4 @@
-// Правая панель: наклейки
+// Правая панель: допы объекта (наклейки, рукава) и настройки выбранной наклейки
 import { $, $$, esc, fmt, uid } from '../core/util.js';
 import { ICON } from '../core/constants.js';
 import { activeObj, sel } from '../core/state.js';
@@ -9,8 +9,16 @@ import { hbOpen } from '../carriers/handle-box.js';
 import { STICKER_FINISH, STICKER_KIND, activeSticker, newSticker, stickerKeys, stickerSize, touchSticker } from '../stickers/placement.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField } from './fields.js';
-import { bindVecColors, renderLayerProps, renderLayers, vecColorsHTML } from './face-panel.js';
+import { bindVecColors, vecColorsHTML } from './face-panel.js';
 import { pickAsset } from './asset-picker.js';
+import { addPart, deleteExtra, duplicateExtra, extraById, extraHidden, extraName, extrasOf, isPart, renameExtra, setExtraHidden, setExtraLocked } from '../core/extras.js';
+import { sleeveOn } from '../carriers/sleeve.js';
+import { carryOn } from '../carriers/carry.js';
+import { select, selectExtra } from '../core/selection.js';
+import { renameExtraTree, renderObjects } from './object-list.js';
+import { refreshTabs } from './tabs.js';
+import { openMenu } from './menu.js';
+import { renderModel } from './model-panel.js';
 
 /* ---------- stickers panel ---------- */
 /* a seal goes across the line where the box opens */
@@ -28,8 +36,8 @@ function sealSpot(o) {
 }
 function addSticker(st) {
   const o = activeObj(); if (!o) return;
-  o.stickers.push(st); sel.sticker = st.id; sel.layer = null;
-  touchSticker(o, st); renderLayers(); renderLayerProps(); renderStickers(); commit();
+  o.stickers.push(st); touchSticker(o, st);
+  selectExtra(o.id, st.id); commit();
 }
 function duplicateSticker(id) {
   const t = activeObj()?.stickers.find(x => x.id === id); if (!t) return;
@@ -41,31 +49,20 @@ function deleteSticker(id) {
   o.stickers = o.stickers.filter(t => t.id !== id); touchSticker(o, { ...st, visible: false });
   for (const k of stickerKeys.get(id) || []) markFace(o, k);
   if (sel.sticker === id) sel.sticker = null;
-  renderStickers(); commit();
+  renderStickers(); renderObjects(); refreshTabs(); commit();
 }
 function renderStickers() {
   ui.lib = true;
+  // the picked sticker shows in the object list and switches the panel's tabs
+  renderObjects(); refreshTabs();
   const sec = $('#stickerSec'), o = activeObj();
   if (!o) { sec.innerHTML = ''; return; }
-  const list = o.stickers || [], st = activeSticker();
-  const kindIcon = t => t.kind === 'circle' ? ICON.ell : t.kind === 'rect' ? ICON.rect : '★';
-  let html = `<div class="sec-h"><h2>Наклейки</h2><span class="hint">${list.length || ''}</span></div>
-    <p class="hint">Наклеиваются поверх печати. Выберите наклейку и тяните её по модели — у ребра она переходит на соседнюю грань, как настоящая.</p>
-    <div class="addrow five">
-      <button class="btn" id="stCircle">${ICON.ell}Круг</button>
-      <button class="btn" id="stRect">${ICON.rect}Прямоуг.</button>
-      <button class="btn" id="stPhoto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/></svg>Фото</button>
-      <button class="btn" id="stCustom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7Z"/></svg>Своя форма</button>
-      <button class="btn" id="stSeal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="20" rx="1"/><path d="M3 12h18" stroke-dasharray="2 2"/></svg>Пломба</button>
-    </div>`;
-  html += list.length ? `<div class="layers">${[...list].reverse().map(t => `<div class="layer ${t.id === sel.sticker ? 'on' : ''} ${t.visible ? '' : 'hidden'}" data-id="${t.id}">
-      <span class="th">${kindIcon(t)}</span><span class="ln">${esc(t.text || (t.bgSrc ? 'Фото' : STICKER_KIND[t.kind]))} · ${fmt(t.w)}×${fmt(stickerSize(t)[1])} мм</span>
-      <span class="badge">${esc(faceLabel(o, t.face))}</span>
-      <span class="acts"><button data-a="vis" aria-label="Видимость">${t.visible ? ICON.eye : ICON.eyeOff}</button><button data-a="dup" aria-label="Дублировать">${ICON.copy}</button><button data-a="del" aria-label="Удалить">${ICON.trash}</button></span></div>`).join('')}</div>`
-    : `<div class="empty">Наклеек пока нет. Круг, прямоугольник, фото (картинка на всю наклейку) или своя форма из PNG/SVG с прозрачным фоном.</div>`;
+  const st = activeSticker();
+  // the object's extras and what can be added; a picked sticker shows its own settings instead
+  let html = st ? `<div class="sec-h"><h2>Наклейка</h2><span class="badge">${esc(faceLabel(o, st.face))}</span></div>` : extrasHTML(o);
   if (st) {
     const custom = st.kind === 'custom';
-    html += `<div class="sec-h" style="margin-top:6px"><h2>Наклейка</h2></div>
+    html += `<div class="field wide"><span class="fl">Название</span><input class="txt" data-k="name" placeholder="${esc(extraName(o, { kind: 'sticker', T: { ...st, name: '' } }))}" aria-label="Название наклейки"></div>
       <div class="field wide"><span class="fl">Форма</span><select data-k="kind">${Object.entries(STICKER_KIND).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       ${rangeField(st.kind === 'circle' ? 'Ширина (Ø), мм' : 'Ширина, мм', 'w', 5, 400, .5)}
       ${custom ? '' : rangeField('Высота, мм', 'h', 5, 400, .5)}
@@ -90,29 +87,12 @@ function renderStickers() {
       <div class="grid2"><button class="btn sm" id="stSealPos">Пломбой на линию открытия</button><button class="btn sm danger" id="stDel">Удалить</button></div>`;
   }
   sec.innerHTML = html;
-  $('#stCircle').onclick = () => addSticker(newSticker('circle', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]));
-  $('#stRect').onclick = () => addSticker(newSticker('rect', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]));
-  $('#stSeal').onclick = () => addSticker(newSticker('rect', 'front', { ...sealSpot(o), w: 22, h: o.type === 'dome' || o.type === 'torte' ? 80 : 50, radius: 2, text: '', fill: '#f3ead6', stroke: '#b8461b', strokeW: .8, finish: 'gloss' }));
-  // a photo sticker: the picture fills a rectangle of its own proportions
-  $('#stPhoto').onclick = e => pickAsset(e.currentTarget, 'Фото на наклейку', r => {
-    const w = 50;
-    addSticker(newSticker('rect', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0], { bgSrc: r.id, w, h: Math.round(w / r.aspect * 2) / 2, radius: 2, text: '' }));
-  });
-  $('#stCustom').onclick = e => pickAsset(e.currentTarget, 'Своя форма: PNG или SVG с прозрачным фоном', r => {
-    addSticker(newSticker('custom', sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0], { src: r.id, aspect: r.aspect, w: 50, outline: 1.5 }));
-  });
-  $$('#stickerSec .layer').forEach(el => el.onclick = e => {
-    const a = e.target.closest('button')?.dataset.a, t = o.stickers.find(x => x.id === el.dataset.id); if (!t) return;
-    if (a === 'del') return deleteSticker(t.id);
-    if (a === 'vis') { t.visible = !t.visible; touchSticker(o, t); renderStickers(); return commit(); }
-    if (a === 'dup') return duplicateSticker(t.id);
-    sel.sticker = t.id; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers();
-  });
-  if (!st) return;
+  if (!st) return bindExtras(sec, o);
   bindFields(sec, activeSticker, k => {
     const t = activeSticker(); if (!t) return;
     if (k === 'kind' && t.kind === 'custom' && !t.src) { $('#stShape')?.click(); }
-    if (k === 'kind' || k === 'face' || k === 'text') { touchSticker(o, t); return renderStickers(); }
+    if (k === 'name') { renderObjects(); refreshTabs(); return; }
+    if (k === 'kind' || k === 'face' || k === 'text') { touchSticker(o, t); renderObjects(); refreshTabs(); return renderStickers(); }
     touchSticker(o, t);
   });
   $('#stDel').onclick = () => deleteSticker(st.id);
@@ -126,10 +106,96 @@ function renderStickers() {
   bindVecColors(sec, activeSticker, t => { const look = RT.get(o.id)?.stickerLook?.get(t.id); if (look) look.key = ''; touchSticker(o, t); });
 }
 
+/* ---------- the object's extras ---------- */
+const EXTRA_ICON = { sleeve: ICON.sleeveX, carry: ICON.carryX };
+const stickerIcon = t => t.kind === 'circle' ? ICON.ell : t.kind === 'rect' ? ICON.rect : ICON.sticker;
+const extraIcon = e => e.kind === 'sticker' ? stickerIcon(e.T) : EXTRA_ICON[e.kind];
+/* lock and eye of an extra's row: on hover, and kept while it is locked or hidden (as for layers) */
+const extraActs = e => { const hid = extraHidden(e), lck = !!e.T.locked; return `<button data-a="lock" class="${lck ? 'pin' : ''}" title="${lck ? 'Разблокировать' : 'Заблокировать: не выбирается и не двигается на модели'}" aria-label="Блокировка">${lck ? ICON.lock : ICON.unlock}</button><button data-a="vis" class="${hid ? 'pin' : ''}" title="${hid ? 'Показать' : 'Скрыть'}" aria-label="Видимость">${hid ? ICON.eyeOff : ICON.eye}</button>`; };
+function extrasHTML(o) {
+  const list = extrasOf(o), sleeveFree = o.type === 'box' && o.lidType !== 'handle' && !sleeveOn(o), carryFree = o.type === 'torte' && !carryOn(o);
+  return `<div class="sec-h"><h2>Допы</h2><span class="hint">${list.length || ''}</span></div>
+    <p class="hint">Наклейки, рукава и другое, что надевается на ${o.type === 'torte' ? 'тортницу' : 'объект'} или клеится на него. Выбранный доп настраивается как отдельный объект.</p>
+    <div class="addrow five">
+      <button class="btn" id="stCircle">${ICON.ell}Круг</button>
+      <button class="btn" id="stRect">${ICON.rect}Прямоуг.</button>
+      <button class="btn" id="stPhoto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>Фото</button>
+      <button class="btn" id="stCustom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7Z"/></svg>Своя</button>
+      <button class="btn" id="stSeal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="20" rx="1"/><path d="M3 12h18" stroke-dasharray="2 2"/></svg>Пломба</button>
+    </div>
+    ${sleeveFree || carryFree ? `<div class="grid2">${sleeveFree ? `<button class="btn sm" id="addSleeve">${ICON.sleeveX}Рукав</button>` : ''}${carryFree ? `<button class="btn sm" id="addCarry">${ICON.carryX}Рукав-переноска</button>` : ''}</div>` : ''}
+    ${list.length ? `<div class="layers" id="extraList">${list.map(e => `<div class="layer ${extraHidden(e) ? 'hidden' : ''} ${e.T.locked ? 'locked' : ''}" data-id="${e.id}">
+      <span class="th">${extraIcon(e)}</span><span class="ln">${esc(extraName(o, e))}</span>${e.kind === 'sticker' ? `<span class="dm mono">${fmt(e.T.w)}×${fmt(stickerSize(e.T)[1])}</span>` : ''}
+      <span class="acts">${extraActs(e)}</span></div>`).join('')}</div>`
+      : `<div class="empty">Допов пока нет. Наклейка — круг, прямоугольник, фото или своя форма из PNG/SVG${sleeveFree ? '; рукав — бумажная лента вокруг коробки' : ''}${carryFree ? '; рукав-переноска — лента под дном с ручкой' : ''}.</div>`}`;
+}
+function bindExtras(sec, o) {
+  const face = () => sel.face && faceKeys(o).includes(sel.face) && !isPart(sel.face) ? sel.face : faceKeys(o)[0];
+  $('#stCircle').onclick = () => addSticker(newSticker('circle', face()));
+  $('#stRect').onclick = () => addSticker(newSticker('rect', face()));
+  $('#stSeal').onclick = () => addSticker(newSticker('rect', 'front', { ...sealSpot(o), w: 22, h: o.type === 'dome' || o.type === 'torte' ? 80 : 50, radius: 2, text: '', fill: '#f3ead6', stroke: '#b8461b', strokeW: .8, finish: 'gloss' }));
+  // a photo sticker: the picture fills a rectangle of its own proportions
+  $('#stPhoto').onclick = e => pickAsset(e.currentTarget, 'Фото на наклейку', r => {
+    const w = 50;
+    addSticker(newSticker('rect', face(), { bgSrc: r.id, w, h: Math.round(w / r.aspect * 2) / 2, radius: 2, text: '' }));
+  });
+  $('#stCustom').onclick = e => pickAsset(e.currentTarget, 'Своя форма: PNG или SVG с прозрачным фоном', r => {
+    addSticker(newSticker('custom', face(), { src: r.id, aspect: r.aspect, w: 50, outline: 1.5 }));
+  });
+  for (const kind of ['sleeve', 'carry']) {
+    const b = $(kind === 'sleeve' ? '#addSleeve' : '#addCarry');
+    if (b) b.onclick = () => { if (addPart(o, kind)) { selectExtra(o.id, kind); renderObjects(); commit(); } };
+  }
+  $$('#extraList .layer').forEach(el => el.onclick = e => {
+    const a = e.target.closest('button')?.dataset.a, id = el.dataset.id;
+    if (a) return extraAction(o, id, a);
+    if (e.detail === 2) return renameExtraRow(o, el);
+    selectExtra(o.id, id);
+  });
+  $$('#extraList .layer').forEach(el => el.oncontextmenu = e => { e.preventDefault(); extraMenu(o, el.dataset.id, e.clientX, e.clientY); });
+}
+/* the buttons and menu items of an extra's row (here and in the object list) */
+function extraAction(o, id, a) {
+  const e = extraById(o, id); if (!e) return;
+  if (a === 'vis') setExtraHidden(o, id, !extraHidden(e));
+  if (a === 'lock') setExtraLocked(o, id, !e.T.locked);
+  if (a === 'dup') { const c = duplicateExtra(o, id); if (c) { selectExtra(o.id, c.id); } }
+  if (a === 'del') {
+    deleteExtra(o, id);
+    if (sel.sticker === id) sel.sticker = null;
+    if (sel.part === id) { sel.part = null; select(o.id, faceKeys(o).find(k => !isPart(k)), null); }
+    for (const k of stickerKeys.get(id) || []) markFace(o, k);
+  }
+  renderStickers(); renderObjects(); refreshTabs(); if (isPart(id)) renderModel(); commit();
+}
+function extraMenu(o, id, x, y) {
+  const e = extraById(o, id); if (!e) return;
+  openMenu(x, y, [
+    { label: 'Выбрать', run: () => selectExtra(o.id, id) },
+    { label: 'Переименовать', run: () => { const row = $(`#extraList .layer[data-id="${id}"]`) ; if (row) renameExtraRow(o, row); else renameExtraTree(o.id, id); } },
+    e.kind === 'sticker' && { label: 'Дублировать', run: () => extraAction(o, id, 'dup') },
+    { label: 'Удалить', run: () => extraAction(o, id, 'del') },
+    'sep',
+    { label: extraHidden(e) ? 'Показать' : 'Скрыть', run: () => extraAction(o, id, 'vis') },
+    { label: e.T.locked ? 'Разблокировать' : 'Заблокировать', run: () => extraAction(o, id, 'lock') },
+  ], extraName(o, e));
+}
+/* types a new name right in the row */
+function renameExtraRow(o, row) {
+  const id = row.dataset.id, e = extraById(o, id), ln = $('.ln', row); if (!e || !ln) return;
+  const inp = document.createElement('input'); inp.className = 'ren'; inp.value = extraName(o, e); inp.setAttribute('aria-label', 'Название');
+  ln.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const end = save => { if (done) return; done = true; if (save) { renameExtra(o, id, inp.value); commit(); } renderStickers(); renderObjects(); refreshTabs(); };
+  inp.onkeydown = ev => { ev.stopPropagation(); if (ev.key === 'Enter') end(true); if (ev.key === 'Escape') end(false); };
+  inp.onblur = () => end(true);
+  for (const t of ['click', 'pointerdown']) inp.addEventListener(t, ev => ev.stopPropagation());
+}
+
 /* a picture put into a sticker (from the library, dropped on it): the shape of a custom one, the background of the others */
 function setStickerImage(o, st, it) {
   if (st.kind === 'custom') { st.src = it.id; st.aspect = it.aspect; st.recolor = {}; } else st.bgSrc = it.id;
   touchSticker(o, st); renderStickers(); commit();
 }
 
-export { addSticker, deleteSticker, duplicateSticker, renderStickers, setStickerImage };
+export { addSticker, deleteSticker, duplicateSticker, extraAction, extraIcon, extraActs, extraMenu, renderStickers, setStickerImage };

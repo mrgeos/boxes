@@ -191,6 +191,7 @@ function applySleeve(o) {
   const rt = RT.get(o.id); if (!rt?.sleeve) return;
   const D = sleeveDims(o), s = clamp(o.sleeve.slide || 0, 0, D.len + D.bw) * S;
   rt.sleeve.position.set(D.ax === 'x' ? s : 0, 0, D.ax === 'z' ? s : 0);
+  rt.sleeve.visible = !o.sleeve.hidden;
 }
 function sleeveColors(o, rt) {
   rt.sleeveIn ??= new THREE.MeshStandardMaterial({ roughness: .9, side: THREE.FrontSide });

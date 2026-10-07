@@ -46,7 +46,7 @@ function initActionBar() {
   $$('#actionBar [data-tool]').forEach(b => { b.onclick = () => setTool(b.dataset.tool); b.title = TOOLS[b.dataset.tool]; });
   $('#abText').onclick = () => { const o = activeObj(); if (!o) return; setTab('design'); const L = newText('Ваш текст'); addLayer(L, face(o), o); startTextEdit(L, '3d', true); };
   $('#abImage').onclick = e => { const o = activeObj(); if (!o) return; pickAsset(e.currentTarget, 'Картинка на грань', r => { setTab('design'); placeLibImage(r, o, face(o)); }); };
-  $('#abSticker').onclick = () => { const o = activeObj(); if (!o) return; setTab('stickers'); addSticker(newSticker('circle', face(o))); };
+  $('#abSticker').onclick = () => { const o = activeObj(); if (!o) return; addSticker(newSticker('circle', face(o))); };
   $('#abLid').onclick = () => { const o = activeObj(); if (o) toggleLid(o).then(renderActionBar); };
   document.addEventListener('keydown', e => {
     if (e.target.closest?.('input,textarea,select,[contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
