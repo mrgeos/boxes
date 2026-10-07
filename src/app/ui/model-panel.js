@@ -16,6 +16,7 @@ import { applyScene, lastView, setView, updateShadowCam } from '../scene/camera.
 import { select } from '../core/selection.js';
 import { groupById, layoutAll, parentOf } from '../core/groups.js';
 import { renderObjects } from './object-list.js';
+import { syncProps } from './tabs.js';
 import { renderGroupPanel } from './group-panel.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField, refreshFields } from './fields.js';
@@ -41,6 +42,7 @@ function carryFields(o) {
 }
 function renderModel() {
   const o = activeObj(), sec = $('#modelSec');
+  syncProps(!!o || !!(sel.group && groupById(sel.group)));
   if (sel.group && groupById(sel.group)) return renderGroupPanel(sec);
   const group = o && parentOf(o.id);
   if (!o) { sec.innerHTML = '<div class="sec-h"><h2>Форма</h2></div><div class="empty">Нет выбранного объекта</div>'; return; }

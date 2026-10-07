@@ -20,10 +20,10 @@ const ids = await (async () => { const { ctx, page } = await openEditor(browser)
 for (const id of ids) {
   // a fresh page per preset, so earlier ones cannot change later pictures
   const { ctx, page, errors } = await openEditor(browser);
-  await addPreset(page, id); await page.click('.rail-btn[data-tab="stickers"]'); await page.click('#stSeal'); await page.waitForTimeout(200);
+  await addPreset(page, id); await page.click('#propTabs [data-tab="stickers"]'); await page.click('#stSeal'); await page.waitForTimeout(200);
   await page.evaluate(() => window.__boxStudio.setView('q', true)); await page.waitForTimeout(900);
   await (await page.$('#stage')).screenshot({ path: `${out}/${id}-3d.png` });
-  await page.click('.rail-btn[data-tab="net"]'); await page.waitForTimeout(300); await (await page.$('#net')).screenshot({ path: `${out}/${id}-net.png` });
+  await page.click('#propTabs [data-tab="net"]'); await page.waitForTimeout(300); await (await page.$('#net')).screenshot({ path: `${out}/${id}-net.png` });
   writeFileSync(`${out}/${id}.svg`, readFileSync(await (await download(page, '#tplBtn')).path()));
   if (errors.length) console.log(`  ${id}: ${errors.join('; ')}`);
   await ctx.close(); process.stdout.write(id + ' ');

@@ -96,7 +96,7 @@ function duplicateIds(ids) {
 function deleteIds(ids) {
   if (!ids.length) return;
   const names = deleteItems(ids);
-  sel.obj = null; sel.group = null; sel.multi = [];
+  sel.group = null; sel.multi = [];   // sel.obj still names the deleted one, so select() sees the change
   const next = state.objects[0];
   select(next?.id ?? null, next ? faceKeys(next)[0] : undefined, null); renderObjects(); commit();
   toast(`Удалено: ${names.join(', ')}. Вернуть — Ctrl+Z`);
