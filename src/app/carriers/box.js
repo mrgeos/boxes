@@ -4,7 +4,9 @@ import { DEG, S, V2, clamp, rrPoly, splitBand } from '../core/util.js';
 import { clearLid, doubleWall, faceMM, netLayout, wallMM } from '../core/model.js';
 import { contactMat } from '../scene/renderer.js';
 import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
-import { bridgeMM, buildHandleBox, frontWinMM, joinWinMM } from './handle-box.js';
+import { bridgeMM, buildHandleBox, frontWinMM, joinWinMM, lidLeaves, lidOpenings } from './handle-box.js';
+import { netPoint } from './box-net.js';
+import { outlineOutside, unionPolys } from '../core/polygon.js';
 
 /* lid outline in mm: an outer-flap lid overhangs the base by the board thickness on the sides and front */
 function lidDimsMM(o) {
@@ -50,7 +52,9 @@ function winMM(o) {
   const r = square ? 0 : clamp(wn.r, 0, Math.max(0, Math.min(ww, wd) / 2 - .5));
   return { place, ww, wd, off, r };
 }
-function faceWindow(o, k) {
+function faceWindow(o, k, raw = false) {
+  // the handle cut out of the lid: the lid's openings take in the leaves (raw: the window alone)
+  if (!raw && (k === 'top' || k === 'inside') && o.lidType === 'handle' && lidLeaves(o)) return leafWindow(o, k);
   const J = joinWinMM(o);
   if (J && k === 'front') { const [mw, mh] = faceMM(o, 'front'); return { x: (mw - J.ww) / 2 / mw, y: 0, w: J.ww / mw, h: (mh - J.yb) / mh, rr: [0, 0, 1, 1], r: J.r / mw, rmm: J.r }; }
   if (o.lidType === 'handle' && k === 'front') {
@@ -91,6 +95,14 @@ function faceWindow(o, k) {
   }
   return fw;
 }
+/* the lid's openings with the handle cut out of it, in face fractions; `keep`: the leaves lying in them on the
+   flat sheet (their board, and its hand holes) */
+function leafWindow(o, k) {
+  const LO = lidOpenings(o), [mw, mh] = faceMM(o, k), f = ([x, y]) => ({ x: (x + mw / 2) / mw, y: k === 'top' ? (mh / 2 - y) / mh : (mh / 2 + y) / mh });
+  const polys = [...(LO.notch ? [LO.notch] : []), ...(LO.holes || [])].map(q => q.map(f));
+  if (!polys.length) return null;
+  return { x: 0, y: 0, w: 1, h: 1, rr: [0, 0, 0, 0], r: 0, polys, keep: LO.leaves.flatMap(l => [l.cut, ...(l.hole ? [l.hole] : [])]).map(q => q.map(f)) };
+}
 function windowPath(c, fw, X, Y, sx, sy) {
   c.beginPath();
   if (fw.polys) for (const q of fw.polys) { q.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](X + v.x * sx, Y + v.y * sy)); c.closePath(); }
@@ -104,23 +116,49 @@ function netWindowPath(c, q, pad, k) {
 }
 /* window cut-outs in dieline mm; pieces that meet across a fold become one opening */
 function netWindows(o, n = netLayout(o)) {
-  const win = winMM(o); if (!win && !frontWinMM(o)) return [];
-  const out = [], J = joinWinMM(o);
+  const win = winMM(o); if (!win && !frontWinMM(o) && !n.leaves) return [];
+  const out = [], J = joinWinMM(o); let leafCut = null;
   if (J) {
     // one opening over the front edge: from the front wall's window bottom to its end on the lid
     const pf = n.panels.find(p => p.key === 'front'), pt = n.panels.find(p => p.key === 'top');
     const sy = (p, fy) => p.y + (p.rot ? 1 - fy : fy) * p.h, ya = sy(pf, (pf.h - J.yb) / pf.h), yb = sy(pt, (pt.h - J.zBack) / pt.h);
     const x0 = pf.x + (pf.w - J.ww) / 2, [y0, y1, r0, r1] = ya < yb ? [ya, yb, J.r, J.rBack] : [yb, ya, J.rBack, J.r];
-    out.push({ x: x0, y: y0, w: J.ww, h: y1 - y0, rr: [1, 1, 1, 1], polys: [rrPoly(x0, y0, x0 + J.ww, y1, r0, r1)] });
+    out.push({ x: x0, y: y0, w: J.ww, h: y1 - y0, rr: [1, 1, 1, 1], polys: [rrPoly(x0, y0, x0 + J.ww, y1, r0, r1)], lid: true });
   }
   for (const p of n.panels) {
     if (J && p.key === 'front') continue;
-    let fw = faceWindow(o, p.key); if (!fw) continue;
+    let fw = faceWindow(o, p.key, true); if (!fw) continue;
     if (J && fw.joinFront) { if (fw.polys.length < 2) continue; fw = { ...fw, polys: fw.polys.slice(1) }; }
-    let fx = fw.x, fy = fw.y, rr = fw.rr;
-    if (p.rot) { fx = 1 - fw.x - fw.w; fy = 1 - fw.y - fw.h; rr = [rr[2], rr[3], rr[0], rr[1]]; }
-    const polys = fw.polys?.map(q => q.map(v => ({ x: p.x + (p.rot ? 1 - v.x : v.x) * p.w, y: p.y + (p.rot ? 1 - v.y : v.y) * p.h })));
-    out.push({ x: p.x + fx * p.w, y: p.y + fy * p.h, w: fw.w * p.w, h: fw.h * p.h, rr: [...rr], polys, rmm: fw.rmm });
+    // the face's window on the sheet, the panel turned by quarter turns: corners and radii go round with it
+    const q = (((p.q ?? (p.rot ? 2 : 0)) % 4) + 4) % 4, [ax, ay] = netPoint(p, fw.x, fw.y), [bx, by] = netPoint(p, fw.x + fw.w, fw.y + fw.h);
+    const rr = [0, 1, 2, 3].map(i => fw.rr[(i + 4 - q) % 4]);
+    const polys = fw.polys?.map(pl => pl.map(v => { const [x, y] = netPoint(p, v.x, v.y); return { x, y }; }));
+    out.push({ x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay), rr, polys, rmm: fw.rmm, lid: p.key === 'top' });
+  }
+  if (n.leaves) {
+    // the handle cut out of the lid: each opening takes in the leaves lying in it; the cut runs round the leaves
+    // (but for their creases) and round the openings where no leaf is
+    const lid = out.filter(q => q.lid), mats = n.leaves.map(l => l.cut);
+    const loops = unionPolys([...lid.flatMap(q => q.polys ? q.polys.map(pl => pl.map(v => [v.x, v.y])) : [rrPoly(q.x, q.y, q.x + q.w, q.y + q.h, q.radii?.[0] ?? win.r, q.radii?.[0] ?? win.r).map(v => [v.x, v.y])]), ...n.leaves.map(l => l.outer)]);
+    out.splice(0, out.length, ...out.filter(q => !q.lid), ...loops.map(lp => {
+      const xs = lp.map(v => v[0]), ys = lp.map(v => v[1]), x = Math.min(...xs), y = Math.min(...ys);
+      return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, rr: [0, 0, 0, 0], rmm: 0, polys: [lp.map(([X, Y]) => ({ x: X, y: Y }))], lid: true };
+    }));
+    // a leaf's outline but for its creases, as polylines
+    const edges = l => {
+      const crease = (a, b) => l.creases.some(c => Math.hypot(c[0] - a[0], c[1] - a[1]) + Math.hypot(c[2] - b[0], c[3] - b[1]) < .01);
+      const runs = [];
+      l.cut.forEach((a, i) => {
+        const b = l.cut[(i + 1) % l.cut.length]; if (crease(a, b)) return;
+        if (runs.length && runs.at(-1).at(-1) === a) runs.at(-1).push(b); else runs.push([a, b]);
+      });
+      if (runs.length > 1 && runs.at(-1).at(-1) === runs[0][0]) runs[0] = [...runs.pop(), ...runs[0].slice(1)];
+      return runs;
+    };
+    leafCut = {
+      cuts: [...loops.flatMap(lp => outlineOutside(lp, mats)), ...n.leaves.flatMap(l => [...edges(l), ...(l.hole ? [[...l.hole, l.hole[0]]] : [])])],
+      creases: n.leaves.flatMap(l => l.creases), keep: n.leaves.flatMap(l => [l.cut, ...(l.hole ? [l.hole] : [])]),
+    };
   }
   for (let i = 0; i < out.length; i++) for (let j = out.length - 1; j > i; j--) {
     let a = out[i], b = out[j]; if (b.y < a.y) [a, b] = [b, a];
@@ -128,11 +166,19 @@ function netWindows(o, n = netLayout(o)) {
       out[i] = { x: a.x, y: a.y, w: a.w, h: a.h + b.h, rr: [a.rr[0], a.rr[1], b.rr[2], b.rr[3]] }; out.splice(j, 1);
     }
   }
-  return out.map(q => ({ ...q, radii: q.rr.map(v => v * (q.rmm ?? win.r)) }));
+  const res = out.map(q => ({ ...q, radii: q.rr.map(v => v * (q.rmm ?? win.r)) }));
+  res.leafCut = leafCut;
+  return res;
 }
 function cutNetWindow(c, o, pad, k) {
   const ws = netWindows(o); if (!ws.length) return;
   c.save(); c.globalCompositeOperation = 'destination-out';
+  if (ws.leafCut) {
+    // the leaves of the handle stay: only the openings round them are cut away
+    c.beginPath(); c.rect(-1e4, -1e4, 2e4, 2e4);
+    for (const q of ws.leafCut.keep) { q.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.closePath(); }
+    c.clip('evenodd');
+  }
   for (const q of ws) { netWindowPath(c, q, pad, k); c.fill(); }
   c.restore();
 }

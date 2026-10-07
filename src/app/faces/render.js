@@ -119,7 +119,7 @@ function renderFace(o, k) {
   // print on a clear PET lid: no board colour, paper grain or kraft, only the layers
   const clear = f.clear = isClearFace(o, k);
   const bf = clear && o.type === 'bag' ? BAG_FILM[o.bagMat] : null;
-  const fin = clear ? bf?.fin || PET_PRINT : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = faceGrain(o, k);
+  const fin = clear ? bf?.fin || PET_PRINT : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : k === 'carry' ? FINISHES[o.carry?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = faceGrain(o, k);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   if (clear) { ctx.clearRect(0, 0, W, H); if (bf?.ground) { ctx.fillStyle = bf.ground; ctx.fillRect(0, 0, W, H); } }
   else { ctx.fillStyle = face.bg; ctx.fillRect(0, 0, W, H); }
@@ -136,8 +136,11 @@ function renderFace(o, k) {
     c.save(); c.translate(ax === 'x' ? it.shift * cw : 0, ax === 'y' ? it.shift * ch : 0); drawLayer(c, it.L, cw, ch, paint, alpha); c.restore();
   };
   // on a ring a layer over one end is drawn again past the other end (shift: whole lengths of the face)
-  const own = face.layers.flatMap(L => [{ L }, ...(ax ? loopShifts(L, W, H, ax).map(shift => ({ L, shift })) : [])]);
-  for (const it of [...own, ...wrapsOnto(o, k)]) {
+  const own = face.layers.flatMap((L, z) => [{ L, z }, ...(ax ? loopShifts(L, W, H, ax).map(shift => ({ L, z, shift })) : [])]);
+  // a part that came over an edge sits in the stack at its place in its own face (the bottom layer of a face is
+  // under the bottom layer of this one), so a pattern spread over several faces stays under the logos of each
+  const items = [...own, ...wrapsOnto(o, k)].map((it, i) => ({ it, i })).sort((a, b) => a.it.z - b.it.z || (!!b.it.from - !!a.it.from) || a.i - b.i).map(x => x.it);
+  for (const it of items) {
     const L = it.L; if (!L.visible) continue;
     if (L.type === 'text') ensureFont(L);
     if (isFoil(L.effect)) fxl.push(it);

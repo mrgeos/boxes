@@ -15,7 +15,7 @@ const SLEEVE_FIN = { matte: 'Матовая бумага', gloss: 'Глянце�
 const SLEEVE_GLUE = 15;
    // mm of glue flap on the die
 const sleeveOn = o => o.type === 'box' && o.lidType !== 'handle' && !!o.sleeve?.on;
-const defaultSleeveHandle = () => ({ on: false, h: 75, r: 18, rf: 10, hole: { w: 70, h: 22, y: 38, r: 11 } });
+const defaultSleeveHandle = () => ({ on: false, join: 'ends', h: 75, r: 18, rf: 10, hole: { w: 70, h: 22, y: 38, r: 11 } });
 const defaultSleeve = dims => ({ on: false, axis: 'x', w: Math.round(dims.w * .5), x: 0, slide: 0, fin: 'matte', handle: defaultSleeveHandle() });
 /* the closed box's outline the sleeve wraps (mm): x half width, z front/back, y top */
 function boxEnvelope(o) {
@@ -47,9 +47,39 @@ function sleeveDims(o) {
   const lens = hh ? [A / 2 - rf + q / 2, hh - rf + q / 2, hh - rf + q / 2, A / 2 - rf + q / 2, Hh, A, Hh] : [A, Hh, A, Hh], stops = [0];
   for (const l of lens) stops.push(stops[stops.length - 1] + l);
   const P = stops[stops.length - 1];
-  // along the band: top straight to sT1, bend to sA0, leaf up to the fold sF, leaf down to sB0, bend to sT2
+  // round the band from the back edge of the top: top straight to sT1, bend to sA0, leaf up to its top sF,
+  // the other leaf down to sB0, bend to sT2 (the geometry below is laid out along this round)
   const sT1 = A / 2 - rf, sA0 = sT1 + q, sF = sA0 + hh - rf, sB0 = sF + hh - rf, sT2 = sB0 + q;
-  return { ax, y0, y1, a0, a1, am: (a0 + a1) / 2, A, Hh, P, bw, c, len, names, lens, stops, st, E, hh, rf, sT1, sA0, sF, sB0, sT2, leaf: hh ? sleeveLeaf(S0.handle, bw, hh, rf) : null };
+  const D = { ax, y0, y1, a0, a1, am: (a0 + a1) / 2, A, Hh, P, bw, c, len, names, lens, stops, round: stops, st, E, hh, rf, sT1, sA0, sF, sB0, sT2, leaf: hh ? sleeveLeaf(S0.handle, bw, hh, rf) : null };
+  // panels printed upside down as the strip reads (top to bottom): the bottom and the back side
+  D.flips = names.map(k => ['bottom', 'back', 'left', 'handleA'].includes(k));
+  if (hh) {
+    // a sleeve with a handle is made the usual way: the strip starts and ends at the top of the handle, its two
+    // ends are the leaves, glued back to back (the hand holes at both ends of the strip, no glue flap). It reads
+    // from the front leaf down: front leaf, top, front, bottom, back, top, back leaf
+    D.ends = true; D.s0 = sF;
+    D.names = [...names.slice(2), ...names.slice(0, 2)]; D.lens = [...lens.slice(2), ...lens.slice(0, 2)];
+    D.stops = [0]; for (const l of D.lens) D.stops.push(D.stops.at(-1) + l);
+    D.flips = D.names.map(k => ['bottom', 'back', 'left', 'handleA'].includes(k));
+  }
+  return D;
+}
+/* a point of the round (s from the back edge of the top) on the strip; `end`: the very top of the back leaf, which
+   is the strip's end rather than its start */
+function sleeveAt(D, s, end = false) {
+  if (!D.ends) return s;
+  const t = s - D.s0;
+  return t < 0 || (t === 0 && end) ? t + D.P : t;
+}
+/* sleeves made before the handle's strip started at its top kept the seam on the back edge of the top: their
+   design moves along the strip so it stays where it was on the box */
+function upgradeSleeve(o) {
+  const H = o.sleeve?.handle; if (!H || H.join) return;
+  H.join = 'ends';
+  if (!H.on) return;
+  const D = sleeveDims(o), dy = D.s0 / D.P, wrap1 = v => v - Math.floor(v);
+  for (const L of o.faces?.sleeve?.layers || []) L.y = wrap1(L.y - dy);
+  for (const st of o.stickers || []) if (st.face === 'sleeve') st.y = wrap1(st.y - dy);
 }
 /* the handle leaf of a sleeve (mm, x across the band from its centre, y up from the top of the box): the
    outline's top corners are rounded, the hand hole sits y above the box */
@@ -66,24 +96,27 @@ function sleeveLeaf(H, bw, hh, rf = 0) {
 const SLEEVE_PANEL = { top: 'верх', front: 'перед', bottom: 'дно', back: 'зад', right: 'правый бок', left: 'левый бок' };
 const sleevePanelLabel = (SD, k) => k === 'topA' ? `верх: ${SD.ax === 'x' ? 'задняя' : 'левая'} половина` : k === 'topB' ? `верх: ${SD.ax === 'x' ? 'передняя' : 'правая'} половина`
   : k === 'handleA' ? `ручка: ${SD.ax === 'x' ? 'задняя' : 'левая'} сторона` : k === 'handleB' ? `ручка: ${SD.ax === 'x' ? 'передняя' : 'правая'} сторона` : SLEEVE_PANEL[k];
-/* the sleeve on the sheet: canvas mm (x across, y along the band from its start), as the outline with the
-   handle's rounded corners, the hand holes and the creases */
+/* the sleeve on the sheet: canvas mm (x across, y along the strip from its start), as the outline (with the
+   handle's rounded corners at both ends), the hand holes, the creases and, for a handle, the leaf that takes
+   the glue on its back */
 function sleeveSheet(SD) {
   const { bw, P, stops, leaf, hh } = SD;
   if (!leaf) return { outline: null, holes: [], creases: stops.slice(1, -1).map(s => [0, s, bw, s]) };
-  const { rf, sA0, sF } = SD, N = 16, up = y => sA0 + y - rf, down = y => sF + hh - y, side = sg => {
+  const { rf } = SD, N = 16, front = y => hh - y, back = y => P - hh + y, foot = hh - rf;
+  // the strip's left (sg -1) or right edge, from its start to its end: the front leaf narrows towards its top
+  // (the strip's start), the back leaf towards its top (the strip's end)
+  const side = sg => {
     const pts = [];
-    for (let i = 0; i <= N; i++) { const y = rf + (hh - rf) * i / N; pts.push([bw / 2 + sg * leaf.half(y), up(y)]); }
-    for (let i = N - 1; i >= 0; i--) { const y = rf + (hh - rf) * i / N; pts.push([bw / 2 + sg * leaf.half(y), down(y)]); }
+    for (let i = 0; i <= N; i++) { const y = hh - (hh - rf) * i / N; pts.push([bw / 2 + sg * leaf.half(y), front(y)]); }
+    for (let i = 0; i <= N; i++) { const y = rf + (hh - rf) * i / N; pts.push([bw / 2 + sg * leaf.half(y), back(y)]); }
     return pts;
   };
-  const L = side(-1), R = side(1).reverse();
-  const outline = [[0, 0], ...L, [0, P + SLEEVE_GLUE], [bw, P + SLEEVE_GLUE], ...R, [bw, 0]];
-  const holes = leaf.hole ? [leaf.hole.map(([x, y]) => [bw / 2 + x, up(y)]), leaf.hole.map(([x, y]) => [bw / 2 + x, down(y)])] : [];
-  const fold = leaf.half(hh);
-  // the bends at the handle's foot are soft (no crease); the fold at its top is narrowed by the corners
-  const creases = stops.slice(1, -1).flatMap((s, i) => i === 0 || i === 2 ? (rf > .5 ? [] : [[0, s, bw, s]]) : i === 1 ? [[bw / 2 - fold, s, bw / 2 + fold, s]] : [[0, s, bw, s]]);
-  return { outline, holes, creases };
+  const outline = [...side(-1), ...side(1).reverse()];
+  const holes = leaf.hole ? [leaf.hole.map(([x, y]) => [bw / 2 + x, front(y)]), leaf.hole.map(([x, y]) => [bw / 2 + x, back(y)])] : [];
+  // the bends at the handle's foot are soft (no crease) unless the radius is about nothing
+  const creases = stops.slice(1, -1).flatMap((s, i) => (i === 0 || i === stops.length - 3) && rf > .5 ? [] : [[0, s, bw, s]]);
+  const glue = side(-1).slice(N + 1).concat(side(1).slice(N + 1).reverse()).filter(([, y]) => y >= P - foot - .01);
+  return { outline, holes, creases, glue };
 }
 function buildSleeve(o, rt) {
   rt.sleeve = null;
@@ -102,11 +135,11 @@ function buildSleeve(o, rt) {
   };
   // the flat parts of the loop, as (a, y) points out by `out`, with their stretch of the band
   const gap = .2, pts = out => ({ TB: [D.a0 - out, D.y1 + out], M1: [D.am - gap - D.rf, D.y1 + out], M2: [D.am + gap + D.rf, D.y1 + out], TF: [D.a1 + out, D.y1 + out], BF: [D.a1 + out, D.y0 - out], BB: [D.a0 - out, D.y0 - out] });
-  const s = D.stops, segs = D.hh ? [['TB', 'M1', s[0], D.sT1], ['M2', 'TF', D.sT2, s[4]], ['TF', 'BF', s[4], s[5]], ['BF', 'BB', s[5], s[6]], ['BB', 'TB', s[6], s[7]]]
+  const s = D.round, segs = D.hh ? [['TB', 'M1', s[0], D.sT1], ['M2', 'TF', D.sT2, s[4]], ['TF', 'BF', s[4], s[5]], ['BF', 'BB', s[5], s[6]], ['BB', 'TB', s[6], s[7]]]
     : [['TB', 'TF', s[0], s[1]], ['TF', 'BF', s[1], s[2]], ['BF', 'BB', s[2], s[3]], ['BB', 'TB', s[3], s[4]]];
   const O = pts(st), I = pts(0);
   for (const [k0, k1, s0, s1] of segs) {
-    const [pa, py] = O[k0], [qa, qy] = O[k1], [ia, iy] = I[k0], [ja, jy] = I[k1], v0 = 1 - s0 / D.P, v1 = 1 - s1 / D.P;
+    const [pa, py] = O[k0], [qa, qy] = O[k1], [ia, iy] = I[k0], [ja, jy] = I[k1], v0 = 1 - sleeveAt(D, s0) / D.P, v1 = 1 - sleeveAt(D, s1) / D.P;
     const ta = qa - pa, ty = qy - py, tl = Math.hypot(ta, ty) || 1, out = toV3(-ty / tl, ta / tl);
     quad([X(L, pa, py), X(R, pa, py), X(R, qa, qy), X(L, qa, qy)], [[0, v0], [1, v0], [1, v1], [0, v1]], mat, 'sleeve', out);
     quad([X(L, ia, iy), X(R, ia, iy), X(R, ja, jy), X(L, ja, jy)], null, rt.sleeveIn, null, out.clone().negate());
@@ -127,7 +160,7 @@ function buildSleeve(o, rt) {
         for (let i = 0; i < N; i++) {
           const t0 = i / N, t1 = (i + 1) / N, [pa, py] = P0(t0), [qa, qy] = P0(t1);
           const ma = (pa + qa) / 2, my = (py + qy) / 2, out = toV3(inward * (ca - ma), inward * (cy - my));
-          const sv0 = sg < 0 ? sa + (sb - sa) * t0 : sb - (sb - sa) * t0, sv1 = sg < 0 ? sa + (sb - sa) * t1 : sb - (sb - sa) * t1, v0 = 1 - sv0 / D.P, v1 = 1 - sv1 / D.P;
+          const sv0 = sg < 0 ? sa + (sb - sa) * t0 : sb - (sb - sa) * t0, sv1 = sg < 0 ? sa + (sb - sa) * t1 : sb - (sb - sa) * t1, v0 = 1 - sleeveAt(D, sv0) / D.P, v1 = 1 - sleeveAt(D, sv1) / D.P;
           quad([X(L, pa, py), X(R, pa, py), X(R, qa, qy), X(L, qa, qy)], face ? [[0, v0], [1, v0], [1, v1], [0, v1]] : null, m, face, out);
         }
       }
@@ -141,7 +174,7 @@ function buildSleeve(o, rt) {
       const geo = new THREE.ShapeGeometry(sh, 16), pos = geo.attributes.position, uv = geo.attributes.uv, base = D.y1 + st;
       for (let i = 0; i < pos.count; i++) {
         const xs = pos.getX(i), ys = pos.getY(i), b = D.c + xs, sp = sg < 0 ? D.sA0 + ys - D.rf : D.sF + D.hh - ys;
-        uv.setXY(i, D.ax === 'x' ? (b - b0) / D.bw : (b1 - b) / D.bw, 1 - sp / D.P);
+        uv.setXY(i, D.ax === 'x' ? (b - b0) / D.bw : (b1 - b) / D.bw, 1 - sleeveAt(D, sp, sg < 0) / D.P);
         const p = X(b, D.am + sg * gap, base + ys); pos.setXYZ(i, p[0] * S, p[1] * S, p[2] * S);
       }
       geo.computeVertexNormals();
@@ -167,6 +200,6 @@ function sleeveColors(o, rt) {
   // the inside of the band is unprinted paper; the cut edges show the paper's colour
   rt.sleeveIn.color.copy(o.sleeve?.fin === 'kraft' ? paper : new THREE.Color('#f6f3ec')); rt.sleeveEdge.color.copy(paper).multiplyScalar(.92);
 }
-const faceGrain = (o, k) => k === 'sleeve' ? (o.sleeve?.fin === 'kraft' ? .45 : .06) : o.grain;
+const faceGrain = (o, k) => k === 'sleeve' ? (o.sleeve?.fin === 'kraft' ? .45 : .06) : k === 'carry' ? (o.carry?.fin === 'kraft' ? .45 : .06) : o.grain;
 
-export { SLEEVE_AXES, SLEEVE_FIN, SLEEVE_GLUE, SLEEVE_PANEL, applySleeve, buildSleeve, defaultSleeve, defaultSleeveHandle, faceGrain, sleeveColors, sleeveDims, sleeveOn, sleevePanelLabel, sleeveSheet };
+export { sleeveAt, sleeveLeaf, upgradeSleeve, SLEEVE_AXES, SLEEVE_FIN, SLEEVE_GLUE, SLEEVE_PANEL, applySleeve, buildSleeve, defaultSleeve, defaultSleeveHandle, faceGrain, sleeveColors, sleeveDims, sleeveOn, sleevePanelLabel, sleeveSheet };

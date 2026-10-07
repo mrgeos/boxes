@@ -6,6 +6,9 @@ import { RT, markObj } from '../scene/renderer.js';
 import { CUP_GLUE, fanOutline, fanXY } from '../carriers/cup.js';
 import { BAG_MATS, bagFilm, bagSVG } from '../carriers/bag.js';
 import { cutNetWindow, netWindows } from '../carriers/box.js';
+import { dieLines } from '../carriers/box-net.js';
+import { carryOn } from '../carriers/carry.js';
+import { paperBagSVG } from '../carriers/paperbag.js';
 import { handleBoxSVG } from '../carriers/handle-box.js';
 import { SLEEVE_GLUE } from '../carriers/sleeve.js';
 import { drawNetPanel, renderFace, setSkipStickers } from '../faces/render.js';
@@ -15,7 +18,7 @@ import { panelPath } from './net-view.js';
 function templateSVG(o) {
   const n = netLayout(o), f = v => +v.toFixed(2);
   let body = '';
-  const label = (p) => { const [mw, mh] = p.fold ? [p.w, p.h] : faceMM(o, p.key), ang = (p.q ?? (p.rot ? 2 : 0)) * 90, pet = isClearFace(o, p.key) ? (o.type === 'bag' ? ` · ${BAG_MATS[o.bagMat].toLowerCase()}` : ' · ПЭТ') : '';
+  const label = (p) => { const [mw, mh] = p.fold ? [p.w, p.h] : faceMM(o, p.key), ang = (p.q ?? (p.rot ? 2 : 0)) * 90, pet = p.reverse ? ' · с оборота' : isClearFace(o, p.key) ? (o.type === 'bag' ? ` · ${BAG_MATS[o.bagMat].toLowerCase()}` : ' · ПЭТ') : '';
     const txt = `${faceLabel(o, p.key).toUpperCase()} · ${fmt(mw, 1)}×${fmt(mh, 1)} мм${pet}`, fs = Math.min(Math.max(3, Math.min(p.w, p.h) * .07), p.w * .92 / (txt.length * .56));
     return `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}"${ang ? ` transform="rotate(${ang} ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''} font-family="Arial, sans-serif" font-size="${f(fs)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(txt)}</text>`; };
   if (o.type === 'bag') body = bagSVG(o, n, f, label);
@@ -42,11 +45,20 @@ function templateSVG(o) {
     if (F.cone) body += `<text x="${f(cx)}" y="${f(cy + fs * 1.6)}" font-family="Arial, sans-serif" font-size="${f(fs * .7)}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">R ${fmt(G.s1, 1)} / ${fmt(G.s0, 1)} мм · угол ${fmt(G.Phi / DEG, 2)}° + нахлёст · высота по образующей ${fmt(G.L, 1)} мм</text>`;
   } else if (o.type === 'tube' || o.type === 'torte') {
     for (const p of n.panels) {
+      if (p.key === 'carry') {
+        // the carrier sleeve: one die-cut band, creased at the folds, the back leaf glued to the front one
+        const poly = q => `<polygon points="${q.map(v => v.map(f).join(',')).join(' ')}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+        body += poly(p.poly) + p.holes.map(poly).join('') + glueZone(p, f)
+          + p.creases.map(l => `<line x1="${f(l[0])}" y1="${f(l[1])}" x2="${f(l[2])}" y2="${f(l[3])}" stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"/>`).join('') + label(p);
+        continue;
+      }
       body += p.circle ? `<circle cx="${f(p.x + p.w / 2)}" cy="${f(p.y + p.h / 2)}" r="${f(p.w / 2)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`
         : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
       body += label(p);
     }
-  } else if (n.hb) body = handleBoxSVG(o, n, f, label);
+  } else if (n.pb) body = paperBagSVG(o, n, f, label);
+  else if (n.hb) body = handleBoxSVG(o, n, f, label);
+  else if (n.v === 2) body = blankSVG(o, n, f, label);
   else {
     const { w, h, d } = o.dims, oy = n.oy;
     // base cut outline (the lid row is cut as separate parts)
@@ -90,15 +102,54 @@ function templateSVG(o) {
     // a sleeve and its glue flap are cut as one outline (the flap's edge is a crease)
     for (const p of n.panels) if (p.part && !p.crease) body += p.poly ? poly(p.poly) + (p.holes || []).map(poly).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h + (p.key === 'sleeve' ? SLEEVE_GLUE : 0))}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
     for (const p of n.panels) { folds.push(...(p.creases || [])); if (p.crease) folds.push([p.x, p.y, p.x + p.w, p.y]); }
+    // the leaf of a handle that is glued to the other one, on its back
+    for (const p of n.panels) if (p.glue?.length) body += `<polygon points="${p.glue.map(v => v.map(f).join(',')).join(' ')}" fill="#f39200" fill-opacity="0.12" stroke="#f39200" stroke-width="0.3" stroke-dasharray="1 1"/><text x="${f(p.x + p.w / 2)}" y="${f(p.glue.reduce((a, v) => a + v[1], 0) / p.glue.length)}" font-family="Arial, sans-serif" font-size="3" fill="#c46f00" text-anchor="middle" dominant-baseline="middle">клей с оборота</text>`;
     body += folds.map(l => `<line x1="${f(l[0])}" y1="${f(l[1])}" x2="${f(l[2])}" y2="${f(l[3])}" stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"/>`).join('');
     for (const p of n.panels) body += p.blank ? `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.max(2.5, Math.min(p.w, p.h) * .3))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(p.blank.toUpperCase())}</text>` : label(p);
   }
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${f(n.W)}mm" height="${f(n.H)}mm" viewBox="0 0 ${f(n.W)} ${f(n.H)}">
-<!-- Box Studio 3D — ${esc(o.name)}. ${o.type === 'bag' ? 'Голубой: рез, пурпурный пунктир: сгиб, зелёный пунктир: запайка (шов), оранжевый: клеевая лента клапана. Клапан, отворот и задняя половина экстендера лежат на развёртке вверх ногами — подписи повёрнуты так же.' + (o.bagStyle === 'block' ? ' Дно показано упрощённо, одной панелью: схему складывания дна сверьте с типографией.' : ' Пакет сложен по дну: перед повёрнут на 180°.') + ' Вылеты добавьте в типографском макете.' : o.type === 'torte' ? 'Зоны печати на прозрачной крышке тортницы (ПЭТ, формованная деталь, не вырубается): стенка в развёртке по средней окружности и круглый верх. Крышка почти цилиндрическая (небольшой конус), поэтому развёртка стенки — прямоугольник. Сверьте с технологом формовки.' : o.type === 'dome' ? 'Голубой: линия реза, пурпурный пунктир: биговка (дно / стенка). Дно в центре, стенки отогнуты от его краёв; стенки расходятся к борту, поэтому углы остаются открытыми — складки и клапаны в углах решаются конструкцией штанцформы. Пунктир голубого: зона печати на прозрачной крышке (ПЭТ, не вырубается). Вылеты 3 мм добавьте в типографском макете.' : o.type === 'cup' ? 'Голубой: линия реза стенки стакана (веер), пурпурный пунктир: край нахлёста на шве. Верхняя дуга — край у бортика, нижняя — у дна. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете.' : 'Голубой: линия реза, пурпурный пунктир: биговка. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете. Крышка с клапаном и ушками крепится к задней стенке и лежит на развёртке вверх ногами — подписи повёрнуты так же.'} -->
+<!-- Box Studio 3D — ${esc(o.name)}. ${o.type === 'paperbag' ? 'Голубой: рез, пурпурный пунктир: биговка. Лист: перед, правый фальц, зад, левый фальц и клеевой клапан в ряд; сверху отворот внутрь, снизу клапаны дна, разрезанные у углов фальцев. По середине фальцев биговка, внизу — диагонали складывания дна. Оранжевым — где с оборота отворота клеятся ножки ручек. Схему дна сверьте с типографией. Вылеты 3 мм добавьте в типографском макете.' : o.type === 'bag' ? 'Голубой: рез, пурпурный пунктир: сгиб, зелёный пунктир: запайка (шов), оранжевый: клеевая лента клапана. Клапан, отворот и задняя половина экстендера лежат на развёртке вверх ногами — подписи повёрнуты так же.' + (o.bagStyle === 'block' ? ' Дно показано упрощённо, одной панелью: схему складывания дна сверьте с типографией.' : ' Пакет сложен по дну: перед повёрнут на 180°.') + ' Вылеты добавьте в типографском макете.' : o.type === 'torte' ? 'Зоны печати на прозрачной крышке тортницы (ПЭТ, формованная деталь, не вырубается): стенка в развёртке по средней окружности и круглый верх. Крышка почти цилиндрическая (небольшой конус), поэтому развёртка стенки — прямоугольник. Сверьте с технологом формовки.' + (carryOn(o) ? ' Рукав-переноска — бумажная вырубка, одна лента: голубой — рез, пурпурный пунктир — биговка. Лента начинается и кончается на верху ручки: её концы — лепестки с проймами, они складываются оборотом друг к другу и склеиваются (оранжевый пунктир: клей с оборота). Подписи стоят на панели дна. Вылеты 3 мм добавьте в типографском макете.' : '') : o.type === 'dome' ? 'Голубой: линия реза, пурпурный пунктир: биговка (дно / стенка). Дно в центре, стенки отогнуты от его краёв; стенки расходятся к борту, поэтому углы остаются открытыми — складки и клапаны в углах решаются конструкцией штанцформы. Пунктир голубого: зона печати на прозрачной крышке (ПЭТ, не вырубается). Вылеты 3 мм добавьте в типографском макете.' : o.type === 'cup' ? 'Голубой: линия реза стенки стакана (веер), пурпурный пунктир: край нахлёста на шве. Верхняя дуга — край у бортика, нижняя — у дна. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете.' : 'Голубой: линия реза, пурпурный пунктир: биговка. Размер монтажной области = размер развёртки. Вылеты 3 мм добавьте в типографском макете. ' + (n.hb ? 'Гильза: перед, крышка, зад, дно и клеевой клапан; торцы закрываются клапанами с замком «язычок в прорезь». ' + (n.leaves ? 'Ручка вырублена из крышки: лепестки лежат в вырезе окна и поднимаются по биговкам у краёв перемычки. Снаружи у поднятой ручки оборот листа, поэтому её дизайн печатается с оборота: серый пунктир «Оборот крышки» показывает, как лепестки лежат на обороте (вид с оборота). Сторона лепестка к другому лепестку — лицо листа, там печать крышки.' : 'Лепестки ручки — отдельные детали.') + ' Подложка — отдельная деталь.' : n.v === 2 ? 'Заготовка — лоток-крест: дно в центре, стенки отогнуты от его краёв; трапеции «клей» в углах — клеевые клапаны передней и задней стенок, они клеятся к внутренней стороне боковых стенок.' + (faceKeys(o).includes('top') && o.lidType !== 'telescope' ? ' Крышка отогнута от верхнего края задней стенки, клапан и ушки — за ней.' : '') + (o.lidType === 'telescope' ? ' Крышка — отдельная заготовка того же вида справа.' : '') + ' Подписи повёрнуты так, как грань лежит на листе.' : 'Крышка с клапаном и ушками крепится к задней стенке и лежит на развёртке вверх ногами — подписи повёрнуты так же.') + (o.sleeve?.on && o.sleeve.handle?.on ? ' Рукав с ручкой — одна лента: её концы — лепестки ручки с проймами, они складываются оборотом друг к другу и склеиваются (оранжевый пунктир: клей с оборота); клеевого клапана нет.' : '')} -->
 <g id="dieline">${body}</g>
 </svg>`;
 }
+/* a box blank laid out as it is made: cut and crease lines from the panels' shared edges, glue flaps, windows */
+function blankSVG(o, n, f, label) {
+  const rect = p => [[p.x, p.y], [p.x + p.w, p.y], [p.x + p.w, p.y + p.h], [p.x, p.y + p.h]];
+  const pieces = [...n.panels.map(p => ({ key: p.key, joins: p.joins, pts: p.poly || rect(p) })), ...(n.tabs || []).map(t => ({ key: 'tab', joins: [t.on], pts: t.pts }))];
+  const { cuts, creases } = dieLines(pieces), wins = netWindows(o, n);
+  const line = (l, stroke, dash) => `<line x1="${f(l[0])}" y1="${f(l[1])}" x2="${f(l[2])}" y2="${f(l[3])}" stroke="${stroke}" stroke-width="0.3"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+  const poly = q => `<polygon points="${q.map(v => v.map(f).join(',')).join(' ')}" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+  let body = cuts.map(l => line(l, '#00a0e3')).join('');
+  for (const q of wins) body += windowPath(q, f);
+  for (const p of n.panels) body += (p.holes || []).map(poly).join('');
+  for (const p of n.panels) if (p.glue?.length) body += glueZone(p, f);
+  body += splitByWindows([...creases, ...n.panels.flatMap(p => p.creases || [])], wins).map(l => line(l, '#e6007e', '2 1.2')).join('');
+  for (const t of n.tabs || []) { const [cx, cy] = t.pts.reduce((a, v) => [a[0] + v[0] / t.pts.length, a[1] + v[1] / t.pts.length], [0, 0]); body += `<text x="${f(cx)}" y="${f(cy)}" font-family="Arial, sans-serif" font-size="2.5" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">клей</text>`; }
+  for (const p of n.panels) body += p.blank ? `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.max(2.5, Math.min(p.w, p.h) * .3))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(p.blank)}</text>` : p.fold ? '' : label(p);
+  return body;
+}
+/* an opening on the sheet: a polygon, or a rectangle with its corner radii */
+function windowPath(q, f) {
+  if (q.polys) return q.polys.map(pl => `<path d="${pl.map((v, i) => `${i ? 'L' : 'M'}${f(v.x)},${f(v.y)}`).join(' ')} Z" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`).join('');
+  const [tl, tr, br, bl] = q.radii, x = q.x, y = q.y, X = q.x + q.w, Y = q.y + q.h, arc = (r, ex, ey) => r ? `A${f(r)},${f(r)} 0 0 1 ${f(ex)},${f(ey)}` : '';
+  return `<path d="M${f(x + tl)},${f(y)} H${f(X - tr)} ${arc(tr, X, y + tr)} V${f(Y - br)} ${arc(br, X - br, Y)} H${f(x + bl)} ${arc(bl, x, Y - bl)} V${f(y + tl)} ${arc(tl, x + tl, y)} Z" fill="none" stroke="#00a0e3" stroke-width="0.3"/>`;
+}
+/* creases stop where a window opening crosses them */
+function splitByWindows(lines, wins) {
+  return lines.flatMap(([x1, y1, x2, y2]) => {
+    const hor = Math.abs(y1 - y2) < 1e-6; let segs = [[Math.min(hor ? x1 : y1, hor ? x2 : y2), Math.max(hor ? x1 : y1, hor ? x2 : y2)]];
+    for (const q of wins) {
+      const inside = hor ? (y1 > q.y + .01 && y1 < q.y + q.h - .01) : (x1 > q.x + .01 && x1 < q.x + q.w - .01);
+      if (!inside) continue;
+      const a = hor ? q.x : q.y, b = hor ? q.x + q.w : q.y + q.h;
+      segs = segs.flatMap(([s0, s1]) => [[s0, Math.min(s1, a)], [Math.max(s0, b), s1]].filter(([u, v]) => v - u > .01));
+    }
+    return segs.map(([u, v]) => hor ? [u, y1, v, y1] : [x1, u, x1, v]);
+  });
+}
+/* the leaf of a handle that is glued to the other one, on its back */
+const glueZone = (p, f) => `<polygon points="${p.glue.map(v => v.map(f).join(',')).join(' ')}" fill="#f39200" fill-opacity="0.12" stroke="#f39200" stroke-width="0.3" stroke-dasharray="1 1"/><text x="${f(p.x + p.w / 2)}" y="${f(p.glue.reduce((a, v) => a + v[1], 0) / p.glue.length)}" font-family="Arial, sans-serif" font-size="3" fill="#c46f00" text-anchor="middle" dominant-baseline="middle">клей с оборота</text>`;
 function exportTemplate() {
   const o = activeObj(); if (!o) return toast('Выберите объект');
   saveFile(`${slug(o.name)}-razvertka-${fmt(netLayout(o).W)}x${fmt(netLayout(o).H)}mm.svg`, new Blob([templateSVG(o)], { type: 'image/svg+xml' }));
@@ -114,9 +165,14 @@ function exportFlat() {
     const fc = rt.faces[p.key]?.canvas, x = p.x * k, y = p.y * k, w = p.w * k, h = p.h * k;
     c.save(); c.beginPath(); panelPath(c, p, 0, 0, k); c.clip();
     if (fc) drawNetPanel(c, fc, p, x, y, w, h); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
-    else if (p.blank && !bagFilm(o)) { c.fillStyle = o.board; c.fillRect(x, y, w, h); }
+    else if (p.blank && !bagFilm(o)) { c.fillStyle = p.reverse ? o.faces.inside?.bg || o.board : o.board; c.fillRect(x, y, w, h); }
     c.restore();
   }
+  // hand holes and the like go through the sheet
+  c.save(); c.globalCompositeOperation = 'destination-out';
+  for (const p of n.panels) for (const hl of p.holes || []) { c.beginPath(); hl.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](X * k, Y * k)); c.closePath(); c.fill(); }
+  c.restore();
+  for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](X * k, Y * k)); c.closePath(); c.fillStyle = o.board || '#ffffff'; c.fill(); }
   cutNetWindow(c, o, 0, k);
   markObj(o);
   out.toBlob(b => saveFile(`${slug(o.name)}-razvertka-dizain.png`, b), 'image/png');

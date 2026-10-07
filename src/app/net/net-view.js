@@ -59,7 +59,14 @@ function drawNet() {
     c.globalCompositeOperation = 'destination-out'; c.fill(); c.restore();
     c.beginPath(); hl.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.closePath(); c.setLineDash([3, 3]); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]);
   }
-  for (const q of netWindows(o, n)) { netWindowPath(c, q, pad, k); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1; c.stroke(); }
+  const ws = netWindows(o, n), line = (pts, dash) => { c.beginPath(); pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.setLineDash(dash); c.stroke(); c.setLineDash([]); };
+  c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1;
+  for (const q of ws) if (!(ws.leafCut && q.lid)) { netWindowPath(c, q, pad, k); c.stroke(); }
+  // the handle cut out of the lid: its leaves lie in the openings, creased to the bridge
+  if (ws.leafCut) {
+    for (const l of ws.leafCut.cuts) line(l, []);
+    c.strokeStyle = 'rgba(230,0,126,.8)'; for (const [a, b, x2, y2] of ws.leafCut.creases) line([[a, b], [x2, y2]], [4, 3]);
+  }
   netGeom = { n, k, pad };
 }
 

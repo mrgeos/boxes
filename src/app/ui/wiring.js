@@ -67,7 +67,7 @@ function initWiring() {
       else toast('Макет развёртки наложен на все грани');
     } catch { toast('Не удалось прочитать файл макета'); }
   };
-  $('#dielineOffBtn').onclick = () => { const o = activeObj(); if (!o) return; o.dieline = null; markObj(o); renderFacePanel(); commit(); };
+  $('#dielineOffBtn').onclick = () => { const o = activeObj(); if (!o) return; o.dieline = null; o.netV = 2; markObj(o); ui.net = true; renderFacePanel(); commit(); };
   $('#tplBtn').onclick = $('#tplBtn2').onclick = () => { closeMenu(); exportTemplate(); };
   $('#flatBtn').onclick = () => { closeMenu(); exportFlat(); };
   $('#pngBtn').onclick = () => { closeMenu(); exportPNG(); };

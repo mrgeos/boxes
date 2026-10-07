@@ -13,7 +13,7 @@ const STICKER_FX = { gloss: [.1, 0], matte: [.78, 0], 'foil-gold': [.22, 1], 'fo
 const STICKER_KIND = { circle: 'Круг / овал', rect: 'Прямоугольник', custom: 'Своя форма (PNG / SVG)' };
 function newSticker(kind, face, extra = {}) {
   return { id: uid(), kind, face, x: .5, y: .5, rot: 0, w: kind === 'rect' ? 60 : 40, h: kind === 'rect' ? 25 : 40, radius: 3,
-    fill: '#ffffff', clear: false, stroke: '#1c1b19', strokeW: 0, src: null, aspect: 1, imgScale: .7, outline: 0,
+    fill: '#ffffff', clear: false, stroke: '#1c1b19', strokeW: 0, src: null, aspect: 1, imgScale: .7, outline: 0, bgSrc: null, bgScale: 1, bgX: 0, bgY: 0,
     text: kind === 'custom' ? '' : 'Спасибо!', textColor: '#1c1b19', textSize: 7, font: 'Caveat', weight: 700,
     finish: 'gloss', thick: .2, tension: .5, visible: true, ...extra };
 }
@@ -30,7 +30,7 @@ function computeFrames(o, rt) {
   if (o.type === 'bag') { rt.frames = rt.bagFrames || null; return; }
   if (o.type === 'dome') { rt.frames = domeFrames(o, rt); return; }
   if (o.type === 'torte') { rt.frames = {}; return; }   // films are laid along sections of the solid (torteSample)
-  if (o.type !== 'box') return;
+  if (o.type !== 'box' && o.type !== 'paperbag') return;
   // frames are taken closed: lid shut, tray pushed in (and the tray is never a neighbour for stickers)
   const saved = o.lid, savedOut = o.tray?.out; o.lid = 0; if (o.tray) o.tray.out = 0; applyLid(o);
   rt.group.updateMatrixWorld(true);

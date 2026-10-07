@@ -168,4 +168,4 @@ function tautSection(pts, r) {
   for (const [i, rho, y] of moved) { pts[i].rho = rho; pts[i].y = y; }
 }
 
-export { TORTE_COLORS, TORTE_FIN, applyTortePreset, buildTorte, torteGeom, torteSample };
+export { TORTE_COLORS, TORTE_FIN, applyTortePreset, buildTorte, torteEnvelope, torteGeom, torteSample };

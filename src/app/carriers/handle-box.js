@@ -1,6 +1,7 @@
 // Коробка для торта с ручкой: гильза, торцы с клапанами, подложка, окна, ручка
 import * as THREE from 'three';
 import { S, V2, arcPts, clamp, dedupe, esc, r1, splitBand } from '../core/util.js';
+import { unionPolys } from '../core/polygon.js';
 import { faceKeys, faceMM } from '../core/model.js';
 import { getImg } from '../core/assets.js';
 import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
@@ -41,27 +42,86 @@ function joinWinMM(o) {
   const zBack = clamp(back, 5, d - 5);
   return { ww: fwn.ww, yb: fwn.cy - fwn.wh / 2, zBack, r: Math.min(fwn.r, fwn.ww / 2 - .5), rBack: Math.min(win ? win.r : fwn.r, fwn.ww / 2 - .5, zBack - .5) };
 }
-function handleShape(w, h, H) {
+/* a leaf's contours (mm, centred, y up): `outer` its outline, `cut` the outline of the board it is made of
+   (on legs: round the legs and back over the hole's arch), `hole` the hand hole when it is closed */
+function leafContours(w, h, H) {
   const P = Math.PI, x0 = -w / 2, x1 = w / 2, y0 = -h / 2, y1 = h / 2;
   const rB = clamp(H.rBot ?? 0, 0, w / 2), rT = clamp(H.rTop ?? 0, 0, Math.min(w / 2, h - rB));
   const outer = [...arcPts(x1 - rB, y0 + rB, rB, -P / 2, 0), ...arcPts(x1 - rT, y1 - rT, rT, 0, P / 2), ...arcPts(x0 + rT, y1 - rT, rT, P / 2, P), ...arcPts(x0 + rB, y0 + rB, rB, P, P * 1.5)];
   const hl = H.hole || {}, hw = clamp(hl.w ?? 0, 0, w - 4), hy = clamp(hl.y ?? 0, 0, h - 6), hh = clamp(hl.h ?? 0, 0, h - hy - 2);
-  if (hw < 1 || hh < 1) return new THREE.Shape(outer.map(p => V2(...p)));
+  if (hw < 1 || hh < 1) return { kind: 'plain', outer, cut: outer, hole: null };
   const hx0 = -hw / 2, hx1 = hw / 2, hb = y0 + hy, ht = hb + hh;
   if (hy < .5) {
     // the hole reaches the bridge: it opens at the bottom and the leaf stands on two legs.
     // One contour: the outline from the right leg round to the left leg, then back over the hole's arch
     const ow = Math.min(hw, w - 2 * Math.max(2, rB)), ox0 = -ow / 2, ox1 = ow / 2, hT = clamp(hl.rTop ?? 0, 0, Math.min(ow / 2, hh));
     const arch = [[ox0, y0], ...arcPts(ox0 + hT, ht - hT, hT, P, P / 2), ...arcPts(ox1 - hT, ht - hT, hT, P / 2, 0)];
-    return new THREE.Shape(dedupe([[ox1, y0], ...outer, ...arch].map(p => V2(...p))));
+    return { kind: 'legs', outer, cut: [[ox1, y0], ...outer, ...arch], hole: null };
   }
   const hB = clamp(hl.rBot ?? 0, 0, hw / 2), hT = clamp(hl.rTop ?? 0, 0, Math.min(hw / 2, hh - hB));
   const hole = [...arcPts(hx1 - hB, hb + hB, hB, -P / 2, 0), ...arcPts(hx1 - hT, ht - hT, hT, 0, P / 2), ...arcPts(hx0 + hT, ht - hT, hT, P / 2, P), ...arcPts(hx0 + hB, hb + hB, hB, P, P * 1.5)];
-  const sh = new THREE.Shape(dedupe(outer.map(p => V2(...p))));
-  sh.holes.push(new THREE.Path(dedupe(hole.map(p => V2(...p)))));
+  return { kind: 'hole', outer, cut: outer, hole };
+}
+function handleShape(w, h, H) {
+  const L = leafContours(w, h, H), v = pts => pts.map(p => V2(...p));
+  if (L.kind === 'plain') return new THREE.Shape(v(L.outer));
+  if (L.kind === 'legs') return new THREE.Shape(dedupe(v(L.cut)));
+  const sh = new THREE.Shape(dedupe(v(L.outer)));
+  sh.holes.push(new THREE.Path(dedupe(v(L.hole))));
   return sh;
 }
-function buildHandle(o, rt, pivot, T, zc, addG) {
+/* The handle is cut out of the lid: on the flat sheet each leaf lies in the lid's opening, creased to an edge of
+   the bridge, the front leaf in front of it with its top towards the lid's front edge, the back one behind.
+   Folded up, a leaf shows the board's reverse on the outside (its face is printed on the back of the sheet)
+   and the lid's print on the side towards the other leaf. Lid coordinates (mm): x to the right, y to the
+   back, the lid's centre at 0, 0. Without a bridge there is nothing to crease them to: null */
+function lidLeaves(o) {
+  if (!o.handle?.on || o.lidType !== 'handle' || bridgeMM(o) < 1) return null;
+  const [pw, ph] = faceMM(o, 'handleFront'), half = bridgeMM(o) / 2, L = leafContours(pw, ph, o.handle), y0 = -ph / 2;
+  return [['handleFront', 1], ['handleBack', -1]].map(([key, sz]) => {
+    const m = ([x, y]) => { const up = Math.abs(y - y0) < 1e-6 ? 0 : y - y0; return sz > 0 ? [x, -half - up] : [-x, half + up]; };
+    const creases = [];
+    L.cut.forEach((a, i) => { const b = L.cut[(i + 1) % L.cut.length]; if (Math.abs(a[1] - y0) < 1e-6 && Math.abs(b[1] - y0) < 1e-6 && Math.abs(a[0] - b[0]) > .01) creases.push([...m(a), ...m(b)]); });
+    return { key, sz, w: pw, h: ph, outer: L.outer.map(m), cut: L.cut.map(m), hole: L.hole && L.hole.map(m), creases };
+  });
+}
+/* the lid's openings (lid mm): the window split by the bridge, and with the handle cut out of the lid the
+   leaves' outlines too (what a leaf leaves behind when it is folded up). A window joined with the front one
+   opens out of the lid's front edge: `notch` is that opening's outline inside the lid, from its left end on
+   the front edge round to its right end */
+function lidOpenings(o) {
+  const { w, d } = o.dims, win = winMM(o), J = joinWinMM(o), bw = bridgeMM(o), leaves = lidLeaves(o);
+  const P = pts => pts.map(v => [v.x, v.y]);
+  let holes = win ? [P(rrectPts(0, -win.off, win.ww, win.wd, win.r))] : [];
+  if (holes.length && bw > 0) holes = splitBand(rrectPts(0, -win.off, win.ww, win.wd, win.r), 0, bw / 2).map(q => q.map(v => [v.x, v.y]));
+  if (J) holes = bw > 0 ? holes.filter(q => q.every(v => v[1] > 0)) : [];
+  let notch = J && P(notchPts(w, d, J.ww / 2, J.zBack, J.rBack, 'bottom'));
+  if (leaves) {
+    const [front, back] = leaves;
+    holes = unionPolys([...holes, ...(J ? [back] : leaves).map(l => l.outer)]);
+    if (J) {
+      // the opening runs on below the front edge, so the union's outline crosses the edge: keep the part inside the lid
+      const below = -d / 2 - 5, region = [...notch, [notch.at(-1)[0], below], [notch[0][0], below]];
+      const U = unionPolys([region, front.outer]).find(l => l.some(v => v[1] < -d / 2));
+      if (U) notch = insideFrom(U, -d / 2);
+    }
+  }
+  return { holes: holes.length ? holes : null, notch: notch || null, leaves };
+}
+/* the part of a closed loop (counter-clockwise) above the line y = Y, from where it goes down through the line on
+   the left round to where it comes up on the right (the way a notch in a bottom edge is drawn) */
+function insideFrom(loop, Y) {
+  const n = loop.length, s = loop.findIndex((v, i) => v[1] < Y && loop[(i + 1) % n][1] >= Y); if (s < 0) return null;
+  const at = (a, b) => [a[0] + (b[0] - a[0]) * (Y - a[1]) / (b[1] - a[1]), Y], out = [at(loop[s], loop[(s + 1) % n])];
+  // counter-clockwise, the loop comes up on the right, runs over the top to the left and goes down there
+  for (let k = 1; k <= n; k++) {
+    const a = loop[(s + k) % n], b = loop[(s + k + 1) % n];
+    out.push(a);
+    if (b[1] < Y) { out.push(at(a, b)); break; }
+  }
+  return out.reverse().filter((v, i, q) => i === 0 || Math.hypot(v[0] - q[i - 1][0], v[1] - q[i - 1][1]) > 1e-6);
+}
+function buildHandle(o, rt, pivot, T, zc, addG, lidMat = null) {
   const [w, h] = faceMM(o, 'handleFront'), up = o.handle.up !== false;
   // the outline is drawn in mm (its hand hole and band have sizes in mm), then scaled into the scene
   const geo = mirror => {
@@ -71,12 +131,24 @@ function buildHandle(o, rt, pivot, T, zc, addG) {
     g.scale(S, S, S);
     return g;
   };
+  // a leaf cut out of the lid: its side towards the other leaf is the lid's print where the leaf lay on the sheet
+  // (lidLeaves: the front one in front of the bridge, top forwards; the back one behind it)
+  const lidGeo = sz => {
+    const g = new THREE.ShapeGeometry(handleShape(w, h, o.handle), 24), pos = g.attributes.position, uv = g.attributes.uv, { w: lw, d: ld } = o.dims;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), t = pos.getY(i) + h / 2, [X, Y] = sz > 0 ? [x, -half - t] : [-x, half + t];
+      uv.setXY(i, X / lw + .5, Y / ld + .5); pos.setX(i, -x);
+    }
+    g.index.array.reverse(); g.scale(S, S, S);
+    return g;
+  };
   // the leaves fold up from the two edges of the bridge and lean in until their tops meet
   const half = Math.max(.5, bridgeMM(o) / 2), lean = Math.asin(clamp((half - .5) / h, 0, .9));
   for (const [key, sz] of [['handleFront', 1], ['handleBack', -1]]) {
     const hinge = new THREE.Group(); hinge.position.set(0, T, zc + sz * half * S); hinge.rotation.x = up ? -sz * lean : sz * (Math.PI / 2 - .02); pivot.add(hinge);
     addG(hinge, geo(false), rt.faces[key].mat, [0, h / 2 * S, 0], [0, sz > 0 ? 0 : Math.PI, 0], { face: key });
-    addG(hinge, geo(true), rt.foldMat, [0, h / 2 * S, -sz * .05 * S], [0, sz > 0 ? Math.PI : 0, 0]);   // the unprinted back of the leaf
+    if (lidMat) addG(hinge, lidGeo(sz), lidMat, [0, h / 2 * S, -sz * .05 * S], [0, sz > 0 ? Math.PI : 0, 0], { face: 'top' });
+    else addG(hinge, geo(true), rt.foldMat, [0, h / 2 * S, -sz * .05 * S], [0, sz > 0 ? Math.PI : 0, 0]);   // the unprinted back of the leaf
   }
 }
 /* ---------- cake box with a handle, opening at the end ----------
@@ -117,13 +189,30 @@ function hbNet(o) {
   let W = XL + w + XR, H = 2 * h + 2 * d + 12;
   const gap = 15, y = H + gap; let x = 0, rowH = 0;
   const part = (key, pw, ph, extra = {}) => { panels.push({ key, x, y, w: pw, h: ph, part: true, ...extra(x, y) }); x += pw + gap; rowH = Math.max(rowH, ph); };
-  for (const k of keys.filter(k => HANDLE_KEYS.includes(k))) {
+  const leaves = lidLeaves(o);
+  // without a bridge the leaves are separate parts
+  if (!leaves) for (const k of keys.filter(k => HANDLE_KEYS.includes(k))) {
     const [pw, ph] = faceMM(o, k), sp = handleShape(pw, ph, o.handle).extractPoints(10);
     part(k, pw, ph, (px, py) => { const m = v => [px + pw / 2 + v.x, py + ph / 2 - v.y]; return { poly: sp.shape.map(m), holes: sp.holes.map(hl => hl.map(m)) }; });
   }
   part('tray', B.trW, B.trD, () => ({}));
+  let sheetLeaves = null;
+  if (leaves) {
+    // the leaves lie in the lid (turned 180° on the sheet: +x of the box on the left); their faces are printed on
+    // the back of the sheet, drawn here as the back is seen: the lid mirrored, beside the tray
+    const onLid = ([lx, ly]) => [XL + w / 2 - lx, h + d / 2 + ly], half = bridgeMM(o) / 2;
+    sheetLeaves = leaves.map(l => ({ key: l.key, outer: l.outer.map(onLid), cut: l.cut.map(onLid), hole: l.hole && l.hole.map(onLid), creases: l.creases.map(([a, b, c, e]) => [...onLid([a, b]), ...onLid([c, e])]) }));
+    const bx = x, by = y, back = ([lx, ly]) => [bx + w / 2 + lx, by + d / 2 + ly];
+    panels.push({ key: 'reverse', blank: 'оборот крышки', part: true, reverse: true, x: bx, y: by, w, h: d });
+    for (const l of leaves) {
+      const front = l.sz > 0;
+      panels.push({ key: l.key, part: true, reverse: true, x: bx + w / 2 - l.w / 2, y: front ? by + d / 2 - half - l.h : by + d / 2 + half, w: l.w, h: l.h, q: front ? 0 : 2,
+        poly: l.cut.map(back), holes: l.hole ? [l.hole.map(back)] : [] });
+    }
+    x += w + gap; rowH = Math.max(rowH, d);
+  }
   W = Math.max(W, x - gap); H = y + rowH;
-  return { W, H, panels, hb: true, tabs, slots };
+  return { W, H, panels, hb: true, tabs, slots, leaves: sheetLeaves };
 }
 /* the handle box's die in SVG: an edge two panels share is a crease, any other edge is cut (except the
    tongues' bases, which crease); tongues, slots, windows and the separate parts */
@@ -153,17 +242,25 @@ function handleBoxSVG(o, n, f, label) {
     }
     return segs.map(([u, v]) => hor ? [u, y1, v, y1] : [x1, u, x1, v]);
   };
+  // the handle cut out of the lid: the leaves' creases on the bridge, the cut round the leaves and the openings
+  const LC = wins.leafCut, pline = pts => `<polyline points="${pts.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${CUT}/>`;
   let body = cut.map(l => line(l, CUT)).join('') + [...fold.values()].flatMap(trim).map(l => line(l, FOLD)).join('');
+  if (LC) body += LC.creases.map(l => line(l, FOLD)).join('') + LC.cuts.map(pline).join('');
   body += n.tabs.map(t => `<polyline points="${t.pts.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${CUT}/>`).join('');
   body += n.slots.map(l => line(l, CUT)).join('');
   for (const q of wins) {
+    if (LC && q.lid) continue;
     if (q.polys) { for (const pl of q.polys) body += `<path d="${pl.map((v, i) => `${i ? 'L' : 'M'}${f(v.x)},${f(v.y)}`).join(' ')} Z" fill="none" ${CUT}/>`; continue; }
     body += `<rect x="${f(q.x)}" y="${f(q.y)}" width="${f(q.w)}" height="${f(q.h)}" rx="${f(Math.min(q.radii[0], q.w / 2, q.h / 2))}" fill="none" ${CUT}/>`;
   }
   const poly = q => `<polygon points="${q.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${CUT}/>`;
-  for (const p of n.panels.filter(p => p.part)) body += p.poly ? poly(p.poly) + (p.holes || []).map(poly).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" ${CUT}/>`;
+  for (const p of n.panels.filter(p => p.part && !p.reverse)) body += p.poly ? poly(p.poly) + (p.holes || []).map(poly).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" ${CUT}/>`;
+  // the back of the sheet where the leaves are printed: not cut, only a guide for the print on the reverse
+  const GUIDE = 'stroke="#9a9a9a" stroke-width="0.3" stroke-dasharray="1.5 1.5"';
+  for (const p of n.panels.filter(p => p.reverse)) body += p.poly ? `<polygon points="${p.poly.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${GUIDE}/>` + (p.holes || []).map(h => `<polygon points="${h.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${GUIDE}/>`).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" ${GUIDE}/>`;
   for (const p of n.panels) {
-    if (p.blank) { if (p.blank.length) body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.max(2.5, Math.min(p.w, p.h) * .12))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle"${p.h > p.w ? ` transform="rotate(-90 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''}>${esc(p.blank.toUpperCase())}</text>`; }
+    if (p.reverse && p.blank) body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + 6)}" font-family="Arial, sans-serif" font-size="4" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(p.blank.toUpperCase())} — ВИД С ОБОРОТА</text>`;
+    else if (p.blank) { if (p.blank.length) body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.max(2.5, Math.min(p.w, p.h) * .12))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle"${p.h > p.w ? ` transform="rotate(-90 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''}>${esc(p.blank.toUpperCase())}</text>`; }
     else body += label(p);
   }
   return body;
@@ -199,12 +296,15 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   if (holes && bridgeMM(o) > 0) holes = splitBand(holes[0], 0, bridgeMM(o) * S / 2).map(q => q.map(v => V2(v.x, v.y)));
   // a window joined with the front one: its front part becomes a notch in the lid's front edge
   // (shape y runs to the back; the front edge is at y = -D/2)
-  const jn = J && notchPts(W, D, J.ww * S / 2, J.zBack * S, J.rBack * S, 'bottom');
+  let jn = J && notchPts(W, D, J.ww * S / 2, J.zBack * S, J.rBack * S, 'bottom');
   if (J && holes) holes = bridgeMM(o) > 0 ? holes.filter(q => q.every(v => v.y > 0)) : [];
   if (holes && !holes.length) holes = null;
+  // the handle cut out of the lid: the openings take in the leaves' outlines
+  const LO = lidLeaves(o) && lidOpenings(o), sv = q => q.map(([x, y]) => V2(x * S, y * S));
+  if (LO) { holes = LO.holes && LO.holes.map(sv); if (J) jn = sv(LO.notch); }
   const lidGeo = (hl, mirror) => {
     if (!jn) return hl ? planeGeoHole(W, D, hl) : new THREE.PlaneGeometry(W, D);
-    const notch = mirror ? notchPts(W, D, J.ww * S / 2, J.zBack * S, J.rBack * S, 'top') : jn;
+    const notch = mirror ? (LO ? jn.map(v => V2(v.x, -v.y)).reverse() : notchPts(W, D, J.ww * S / 2, J.zBack * S, J.rBack * S, 'top')) : jn;
     const outer = mirror ? [V2(-W / 2, -D / 2), V2(W / 2, -D / 2), V2(W / 2, D / 2), ...notch, V2(-W / 2, D / 2)] : [V2(-W / 2, -D / 2), ...notch, V2(W / 2, -D / 2), V2(W / 2, D / 2), V2(-W / 2, D / 2)];
     const sh = new THREE.Shape(dedupe(outer)); for (const h of hl || []) sh.holes.push(new THREE.Path(h));
     const geo = new THREE.ShapeGeometry(sh), pos = geo.attributes.position, uv = geo.attributes.uv;
@@ -220,12 +320,13 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   for (const hole of holes || []) {
     const loop = [...hole, hole[0]];
     addG(lg, ribbonGeo(loop.map(p => [p.x, 0, -p.y]), loop.map(p => [p.x, -T, -p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
-    film(lg, hole, [0, -T / 2, 0], [-P / 2, 0, 0]);
+    if (win) film(lg, hole, [0, -T / 2, 0], [-P / 2, 0, 0]);   // without a window the leaves leave open holes
   }
   add(lg, W, T, rt.edgeMat, [0, -T / 2, -D / 2], [0, P, 0]);
-  if (jn) { const sw = (W - J.ww * S) / 2; for (const sx of [-1, 1]) add(lg, sw, T, rt.edgeMat, [sx * (W - sw) / 2, -T / 2, D / 2], [0, 0, 0]); }
+  if (jn && LO) for (const [a, b] of [[-W / 2, jn[0].x], [jn.at(-1).x, W / 2]]) add(lg, b - a, T, rt.edgeMat, [(a + b) / 2, -T / 2, D / 2], [0, 0, 0]);
+  else if (jn) { const sw = (W - J.ww * S) / 2; for (const sx of [-1, 1]) add(lg, sw, T, rt.edgeMat, [sx * (W - sw) / 2, -T / 2, D / 2], [0, 0, 0]); }
   else add(lg, W, T, rt.edgeMat, [0, -T / 2, D / 2], [0, 0, 0]);
-  if (o.handle?.on) buildHandle(o, rt, lg, 0, 0, addG);
+  if (o.handle?.on) buildHandle(o, rt, lg, 0, 0, addG, LO ? F('top') : null);
   // the ends
   const half = H / 2, fH = half - .15 * S;
   for (const sx of [1, -1]) {
@@ -281,4 +382,4 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   }
 }
 
-export { HANDLE_KEYS, HANDLE_SHAPES, HB_END_KEYS, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, buildHandleBox, defaultFrontWin, defaultHandle, frontWinMM, handleBoxSVG, hbDims, hbNet, hbOpen, joinWinMM };
+export { HANDLE_KEYS, HANDLE_SHAPES, HB_END_KEYS, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, buildHandleBox, defaultFrontWin, defaultHandle, frontWinMM, handleBoxSVG, hbDims, hbNet, hbOpen, joinWinMM, lidLeaves, lidOpenings };

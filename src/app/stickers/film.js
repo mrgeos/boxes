@@ -58,6 +58,15 @@ function drawSticker(c, st, ppm, withShadow = true) {
   } else {
     c.save(); stickerPath(c, st, w, h); c.clip();
     if (!st.clear) { c.fillStyle = foil ? stickerFoil(c, st.finish, w, h) : st.fill; c.fillRect(-w / 2, -h / 2, w, h); }
+    // a background picture fills the shape (cover), zoomed and moved within it
+    const bg = st.bgSrc && artImg(st.bgSrc);
+    if (bg) {
+      const a = bg.naturalWidth / bg.naturalHeight, k = Math.max(1, st.bgScale || 1);
+      let bw = w, bh = w / a; if (bh < h) { bh = h; bw = h * a; }
+      bw *= k; bh *= k;
+      const ox = clamp(st.bgX || 0, -.5, .5) * (bw - w), oy = clamp(st.bgY || 0, -.5, .5) * (bh - h);
+      c.drawImage(bg, -bw / 2 + ox, -bh / 2 + oy, bw, bh);
+    }
     const im = st.src && artImg(st.src, st.recolor);
     if (im) {
       const a = im.naturalWidth / im.naturalHeight, k = st.imgScale || .7;
@@ -97,7 +106,7 @@ function stickerMaterial(params, offset) {
 const stickerMargin = st => (st.kind === 'custom' ? st.outline || 0 : 0) + .5;
 function stickerLook(rt, st) {
   rt.stickerLook ??= new Map();
-  const key = JSON.stringify({ ...st, x: 0, y: 0, face: 0, rot: 0, visible: 0, loaded: !!(st.src && getImg(st.src)) });
+  const key = JSON.stringify({ ...st, x: 0, y: 0, face: 0, rot: 0, visible: 0, loaded: !!(st.src && getImg(st.src)), bgLoaded: !!(st.bgSrc && getImg(st.bgSrc)) });
   let L = rt.stickerLook.get(st.id);
   if (L && L.key === key) return L;
   if (L) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }

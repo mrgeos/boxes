@@ -12,7 +12,7 @@ import { select, selectLayer } from '../core/selection.js';
 import { addFontFile, commit, openProjectFile, redo, undo } from '../core/project.js';
 import { refreshFields } from '../ui/fields.js';
 import { addImageToFace, deleteLayer, duplicateLayer, renderLayerProps, renderLayers } from '../ui/face-panel.js';
-import { deleteSticker, renderStickers } from '../ui/stickers-panel.js';
+import { deleteSticker, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
 import { placeLibImage } from '../ui/library-panel.js';
 import { ed, edPoint, edState, hitLayer } from '../ui/face-editor.js';
 
@@ -181,7 +181,9 @@ function initInteraction() {
     if (!isLibDrag(e)) return; e.preventDefault();
     const it = library.find(x => x.hash === e.dataTransfer.getData('application/x-bs-asset')); if (!it) return;
     if (e.target === cvs) {
-      const h = pick(e.clientX, e.clientY);
+      const h = pick(e.clientX, e.clientY), st = stickerHit(h);
+      // onto a sticker: its picture
+      if (st) { const o = state.objects.find(x => x.id === h.objId); select(o.id, st.face); sel.sticker = st.id; return setStickerImage(o, st, it); }
       if (h?.face && !h.wall) { const o = state.objects.find(x => x.id === h.objId); select(o.id, h.face); return placeLibImage(it, o, h.face, h.uv ? [h.uv.x, 1 - h.uv.y] : null); }
     }
     if (e.target === ed && activeObj()) { const [mx, my] = edPoint(e); return placeLibImage(it, activeObj(), sel.face, [mx / edState.dw, my / edState.dh]); }

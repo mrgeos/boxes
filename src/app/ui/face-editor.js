@@ -4,6 +4,7 @@ import { activeFaceData, activeLayer, activeObj, sel } from '../core/state.js';
 import { faceMM } from '../core/model.js';
 import { RT, markFace, ui } from '../scene/renderer.js';
 import { faceWindow, windowPath } from '../carriers/box.js';
+import { CARRY_PANEL, carryDims, carryOn, carrySheet } from '../carriers/carry.js';
 import { sleeveDims, sleeveOn, sleevePanelLabel, sleeveSheet } from '../carriers/sleeve.js';
 import { layerBox } from '../faces/render.js';
 import { placementsFor } from '../stickers/placement.js';
@@ -38,7 +39,7 @@ function drawEditor() {
     c.save(); c.strokeStyle = 'rgba(230,0,126,.75)'; c.setLineDash([5, 4]); c.lineWidth = 1;
     c.fillStyle = 'rgba(120,110,95,.85)'; c.font = '600 11px Onest, system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
     SD.names.forEach((nm, i) => {
-      const y = SD.stops[i] / SD.P * dh, flip = SD.hh ? i === 2 || i >= 5 : i >= 2;
+      const y = SD.stops[i] / SD.P * dh, flip = SD.flips[i];
       if (i) { c.beginPath(); c.moveTo(0, y); c.lineTo(dw, y); c.stroke(); }
       c.fillText(sleevePanelLabel(SD, nm) + (flip ? ' (вверх ногами)' : ''), 6, y + 5);
     });
@@ -48,10 +49,29 @@ function drawEditor() {
     for (const q of [...(sh.outline ? [sh.outline.filter(([, y]) => y <= SD.P)] : []), ...sh.holes]) { c.beginPath(); q.forEach(([x, y], i) => c[i ? 'lineTo' : 'moveTo'](x * kx, y * ky)); if (q !== sh.outline) c.closePath(); c.stroke(); }
     c.restore();
   }
+  if (sel.face === 'carry' && carryOn(o)) {
+    // the carrier sleeve: where the band folds, which part goes where, the cut of the handle and windows
+    const D = carryDims(o), sh = carrySheet(D), kx = dw / D.bw, ky = dh / D.P;
+    c.save(); c.strokeStyle = 'rgba(230,0,126,.75)'; c.setLineDash([5, 4]); c.lineWidth = 1;
+    c.fillStyle = 'rgba(120,110,95,.85)'; c.font = '600 11px Onest, system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
+    D.names.forEach((nm, i) => {
+      const y = D.stops[i] * ky;
+      if (i) { c.beginPath(); c.moveTo(0, y); c.lineTo(dw, y); c.stroke(); }
+      c.fillText(CARRY_PANEL[nm] + (D.flips[i] ? ' (вверх ногами)' : ''), 6, y + 5);
+    });
+    c.setLineDash([]); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1.2;
+    for (const q of [sh.outline, ...sh.holes]) { c.beginPath(); q.forEach(([x, y], i) => c[i ? 'lineTo' : 'moveTo'](x * kx, y * ky)); c.closePath(); c.stroke(); }
+    c.restore();
+  }
   const fw = faceWindow(o, sel.face);
   if (fw) {
-    c.save(); windowPath(c, fw, 0, 0, dw, dh); c.globalCompositeOperation = 'destination-out'; c.fill(); c.restore();
+    // the handle's leaves lie in the lid's opening on the flat sheet: what is printed there ends up on their inner side
+    const keep = q => { c.beginPath(); q.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](v.x * dw, v.y * dh)); c.closePath(); };
+    c.save();
+    if (fw.keep) { c.beginPath(); c.rect(-1, -1, dw + 2, dh + 2); for (const q of fw.keep) { q.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](v.x * dw, v.y * dh)); c.closePath(); } c.clip('evenodd'); }
+    windowPath(c, fw, 0, 0, dw, dh); c.globalCompositeOperation = 'destination-out'; c.fill(); c.restore();
     c.save(); windowPath(c, fw, 0, 0, dw, dh); c.strokeStyle = 'rgba(0,160,227,.9)'; c.setLineDash([5, 4]); c.lineWidth = 1.2; c.stroke(); c.setLineDash([]);
+    for (const q of fw.keep || []) { keep(q); c.setLineDash([2, 3]); c.stroke(); c.setLineDash([]); }
     c.fillStyle = 'rgba(0,120,170,.85)'; c.font = '600 11px Onest, system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText('окно · плёнка', (fw.x + fw.w / 2) * dw, (fw.y + fw.h / 2) * dh); c.restore();
   }

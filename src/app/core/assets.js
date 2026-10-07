@@ -23,7 +23,7 @@ function onAssetLoaded(id) {
     if (o.dieline === id) markObj(o);
     for (const k in o.faces) if (o.faces[k].layers.some(l => l.src === id)) markFace(o, k);
     if (o.product?.src === id) rebuildQueue.add(o.id);
-    for (const st of o.stickers || []) if (st.src === id) {
+    for (const st of o.stickers || []) if (st.src === id || st.bgSrc === id) {
       tintCache.forEach((_, key) => key.startsWith(id + '|') && tintCache.delete(key));
       const look = RT.get(o.id)?.stickerLook?.get(st.id); if (look) look.key = '';
       touchSticker(o, st);

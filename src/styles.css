@@ -121,6 +121,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .sw{width:20px;height:20px;border-radius:4px;border:1px solid var(--line-2);cursor:pointer;padding:0}
 .sw[aria-pressed=true]{outline:2px solid var(--accent);outline-offset:1px}
 .addrow{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.addrow.five{grid-template-columns:repeat(5,1fr)}
 .addrow .btn{height:auto;padding:6px 4px;flex-direction:column;gap:3px;font-size:11px}
 
 .layers{display:flex;flex-direction:column;gap:3px}
@@ -131,6 +132,8 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .layer .th{width:24px;height:24px;border-radius:4px;flex:none;background:var(--checker-b) center/contain no-repeat;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;font-weight:700;overflow:hidden}
 .layer .th svg{width:14px;height:14px}
 /* asset library */
+.apick{width:300px;padding:8px}
+.apick .lib{max-height:260px;overflow:auto;margin:6px 0 8px;padding:1px}
 .lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
 .lib .it{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:6px;background:var(--checker-b) center/contain no-repeat;background-origin:content-box;padding:4px;cursor:pointer}
 .lib .it:hover,.lib .it:focus-visible{border-color:var(--accent);outline:none}
