@@ -18,7 +18,7 @@ import { deleteSticker, duplicateSticker, renderStickers } from './stickers-pane
 import { swapImage } from './library-panel.js';
 import { ed, edPoint, edState, hitLayer } from './face-editor.js';
 import { addObject, copyFaceDesign } from './wiring.js';
-import { deleteIds, duplicateIds, groupIds, leaveGroup, renderObjects, ungroupIds } from './object-list.js';
+import { deleteIds, duplicateIds, groupIds, leaveGroup, renameRow, renderObjects, ungroupIds } from './object-list.js';
 import { openMenu } from './menu.js';
 
 const MOD = /Mac|iP(hone|ad)/.test(navigator.platform) ? '⌘' : 'Ctrl+';
@@ -87,7 +87,7 @@ function objectItems(o, face = null, layer = null) {
     layer && 'sep',
     { label: 'Дублировать', run: () => duplicateIds([o.id]) },
     { label: 'Удалить', run: () => deleteIds([o.id]) },
-    { label: 'Переименовать', run: () => { select(o.id); rename(); } },
+    { label: 'Переименовать', run: () => { select(o.id); renameRow(o.id) || rename(); } },
     'sep',
     { label: 'Повернуть на 90° влево', run: () => turn(o, 90) },
     { label: 'Повернуть на 90° вправо', run: () => turn(o, -90) },
@@ -109,7 +109,7 @@ function groupMenu(g) {
     'sep',
     { label: 'Дублировать', run: () => duplicateIds([g.id]) },
     { label: 'Удалить', run: () => deleteIds([g.id]) },
-    { label: 'Переименовать', run: () => { selectGroup(g.id); rename(); } },
+    { label: 'Переименовать', run: () => { selectGroup(g.id); renameRow(g.id) || rename(); } },
   ];
 }
 function multiItems(ids) {

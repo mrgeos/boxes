@@ -3,10 +3,12 @@ import { $, $$, esc, fmt, toast } from '../core/util.js';
 import { ICON } from '../core/constants.js';
 import { sel, state } from '../core/state.js';
 import { faceKeys } from '../core/model.js';
-import { deleteItems, duplicateItem, flatTree, groupById, groupItems, isGroup, moveItem, normalizeTree, objectsIn, own, parentOf, setHidden, setLocked, siblingsOf, ungroup } from '../core/groups.js';
+import { deleteItems, duplicateItem, flatTree, groupById, groupItems, isGroup, moveItem, normalizeTree, objectsIn, own, parentOf, renameById, setHidden, setLocked, siblingsOf, ungroup } from '../core/groups.js';
 import { thumbOf } from './object-thumbs.js';
 import { lidAction, toggleLid } from './context-menus.js';
 import { setTab } from './tabs.js';
+import { renderModel } from './model-panel.js';
+import { renderGroupPanel } from './group-panel.js';
 import { select, selectGroup } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { setView } from '../scene/camera.js';
@@ -134,9 +136,36 @@ function leaveGroup(id) {
   renderObjects(); commit();
 }
 
+/* types a new name for an object or a group right in its row; Enter or a click away keeps it, Esc does not */
+function renameRow(id) {
+  const row = $(`#objList .obj[data-id="${id}"]`), nm = row && $('.nm', row); if (!nm || !row.offsetParent) return false;
+  const inp = document.createElement('input'); inp.className = 'ren'; inp.value = own(id).name; inp.setAttribute('aria-label', 'Название');
+  row.draggable = false; nm.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const end = save => {
+    if (done) return; done = true;
+    if (save && inp.value.trim() && inp.value.trim() !== own(id).name) {
+      renameById(id, inp.value);
+      isGroup(id) ? renderGroupPanel() : renderModel();
+      if (id === sel.obj) $('#objBadge').textContent = own(id).name;
+      commit();
+    }
+    renderObjects();
+  };
+  inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') end(true); if (e.key === 'Escape') end(false); };
+  inp.onblur = () => end(true);
+  for (const t of ['click', 'dblclick', 'pointerdown']) inp.addEventListener(t, e => e.stopPropagation());
+  return true;
+}
+
 /* hooks up the object list and its buttons */
 function initObjectList() {
   const list = $('#objList');
+  // a double click on a row renames the object or the group
+  list.addEventListener('dblclick', e => {
+    const row = e.target.closest('.obj'); if (!row || e.target.closest('button, input')) return;
+    e.preventDefault(); renameRow(row.dataset.id);
+  });
   list.addEventListener('dragover', e => {
     if (!isItemDrag(e)) return;
     e.preventDefault(); e.dataTransfer.dropEffect = 'move'; clearMarks();
@@ -158,4 +187,4 @@ function initObjectList() {
   });
 }
 
-export { deleteIds, duplicateIds, groupIds, initObjectList, leaveGroup, picked, renderObjects, ungroupIds };
+export { renameRow, deleteIds, duplicateIds, groupIds, initObjectList, leaveGroup, picked, renderObjects, ungroupIds };

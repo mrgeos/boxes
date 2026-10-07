@@ -25,6 +25,8 @@ function objectsIn(id) { const g = groupById(id); return g ? g.items.flatMap(obj
 /* hidden objects are not drawn (nor in pictures and videos); locked ones are not picked or dragged in the scene.
    ids: objects or groups (all the objects in them) */
 function setHidden(ids, on) { for (const id of ids.flatMap(objectsIn)) { const o = objById(id); if (on) o.hidden = true; else delete o.hidden; applyTransform(o, false); } updateShadowCam(); }
+/* names an object or a group (an empty name keeps the old one) */
+function renameById(id, name) { const t = own(id); if (t && name.trim()) t.name = name.trim().slice(0, 80); }
 function setLocked(ids, on) { for (const id of ids.flatMap(objectsIn)) { const o = objById(id); if (on) o.locked = true; else delete o.locked; } }
 /* every item in list order, depth first */
 function flatTree() { const out = []; const go = (list, depth) => { for (const id of list) { out.push({ id, depth }); const g = groupById(id); if (g) go(g.items, depth + 1); } }; go(state.tree, 0); return out; }
@@ -178,4 +180,4 @@ function duplicateItem(id) {
   return c;
 }
 
-export { GROUP_DEFAULTS, setHidden, setLocked, ancestors, itemFrame, layoutPending, layoutSoon, slotsOf, deleteItems, duplicateItem, flatTree, groupById, groupItems, inside, isGroup, itemBox, layoutAll, moveItem, normalizeTree, objectsIn, own, parentOf, placeOf, rotXZ, siblingsOf, topOf, ungroup };
+export { GROUP_DEFAULTS, renameById, setHidden, setLocked, ancestors, itemFrame, layoutPending, layoutSoon, slotsOf, deleteItems, duplicateItem, flatTree, groupById, groupItems, inside, isGroup, itemBox, layoutAll, moveItem, normalizeTree, objectsIn, own, parentOf, placeOf, rotXZ, siblingsOf, topOf, ungroup };

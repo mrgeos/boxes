@@ -91,6 +91,9 @@ function renderLayers() {
       if (a === 'fold') { const g = el.dataset.g; folded.has(g) ? folded.delete(g) : folded.add(g); return renderLayers(); }
       if (a === 'mod') { pickLayers(unit.map(l => l.id), el.dataset.id); return revealProp(e.target.closest('button').dataset.to); }
       if (a) return rowAction(o, f, unit, a);
+      // a double click renames the layer or the group (the first click redrew the list, so no dblclick comes:
+      // the second click's count tells it)
+      if (e.detail === 2 && !e.shiftKey && !e.ctrlKey && !e.metaKey) return renameRow(o, f, el);
       const ids = unit.map(l => l.id);
       if (e.shiftKey && sel.layer) {
         // a run from the main layer to this row
@@ -105,8 +108,6 @@ function renderLayers() {
       }
       pickLayers(ids, el.dataset.g ? ids.at(-1) : el.dataset.id);
     };
-    // a double click on the name renames the layer or the group
-    $('.ln', el).ondblclick = e => { e.stopPropagation(); renameRow(o, f, el); };
     el.oncontextmenu = e => { e.preventDefault(); rowMenu(o, f, el, e.clientX, e.clientY); };
     el.ondragstart = e => {
       const unit = unitOf(el), sel_ = selectedLayers(f), whole = !!el.dataset.g;

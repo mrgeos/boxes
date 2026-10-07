@@ -280,7 +280,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .layer.dragging{opacity:.45}
 .layer.drop-above{box-shadow:0 -2px 0 var(--accent)}
 .layer.drop-below{box-shadow:0 2px 0 var(--accent)}
-.layer .ren{flex:1;min-width:0;font:inherit;font-size:12.5px;padding:2px 4px;border:1px solid var(--accent);border-radius:4px;background:var(--panel);color:var(--fg)}
+.obj .ren,.layer .ren{flex:1;min-width:0;font:inherit;font-size:12.5px;padding:2px 4px;border:1px solid var(--accent);border-radius:4px;background:var(--panel);color:var(--fg)}
 .abar-al{display:flex;align-items:center;gap:2px;margin:2px 0 8px;flex-wrap:wrap}
 .abar-al button{width:28px;height:28px;border:1px solid transparent;border-radius:6px;background:none;color:var(--fg);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .abar-al button:hover:not(:disabled){background:var(--field);border-color:var(--line)}
