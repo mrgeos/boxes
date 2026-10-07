@@ -126,4 +126,4 @@ function moveLayerOnto(o, A, T, L, G) {
   o.faces[A].layers = o.faces[A].layers.filter(l => l !== L); o.faces[T].layers.push(L);
 }
 
-export { apply, canWrap, drawWrapped, faceMaps, inv, layerReach, moveLayerOnto, wrapTouch, wrapsOnto };
+export { apply, canWrap, drawWrapped, faceMaps, inv, layerMM, layerReach, moveLayerOnto, wrapTouch, wrapsOnto };
