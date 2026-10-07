@@ -1,6 +1,5 @@
 // Кнопки шапки и панелей
 import { $, $$, S, fmt, luminance, slug, toast, uid } from '../core/util.js';
-import { PRESETS } from '../core/constants.js';
 import { activeFaceData, activeObj, sel, state } from '../core/state.js';
 import { faceKeys, faceLabel, netLayout, newObject, newShape, newText, outerKeys } from '../core/model.js';
 import { importImageFile } from '../core/assets.js';
@@ -36,8 +35,6 @@ function closeMenu() { $('#exportMenu').hidden = true; $('#exportBtn').setAttrib
 
 /* hooks up the toolbar and panel buttons */
 function initWiring() {
-  $('#addPreset').innerHTML = PRESETS.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
-  $('#addObjBtn').onclick = () => addObject($('#addPreset').value);
   $('#faceBg').addEventListener('input', e => setFaceBg(e.target.value, false));
   $('#faceBg').addEventListener('change', () => commit());
   $('#bgAllBtn').onclick = () => {

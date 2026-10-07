@@ -4,7 +4,7 @@
 //   node test/snapshots.mjs снимки/после (на новой)
 //   node test/snapshots.mjs --compare снимки/до снимки/после
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { launch, openEditor, addPreset, download } from './browser.mjs';
+import { launch, openEditor, addPreset, download, presetIds } from './browser.mjs';
 
 const args = process.argv.slice(2);
 if (args[0] === '--compare') {
@@ -16,14 +16,14 @@ if (args[0] === '--compare') {
 const out = args[0] || 'snapshots';
 mkdirSync(out, { recursive: true });
 const browser = await launch();
-const ids = await (async () => { const { ctx, page } = await openEditor(browser); const r = await page.$$eval('#addPreset option', o => o.map(x => x.value)); await ctx.close(); return r; })();
+const ids = await (async () => { const { ctx, page } = await openEditor(browser); const r = await presetIds(page); await ctx.close(); return r; })();
 for (const id of ids) {
   // a fresh page per preset, so earlier ones cannot change later pictures
   const { ctx, page, errors } = await openEditor(browser);
-  await addPreset(page, id); await page.click('#stSeal'); await page.waitForTimeout(200);
+  await addPreset(page, id); await page.click('.rail-btn[data-tab="stickers"]'); await page.click('#stSeal'); await page.waitForTimeout(200);
   await page.evaluate(() => window.__boxStudio.setView('q', true)); await page.waitForTimeout(900);
-  await page.screenshot({ path: `${out}/${id}-3d.png`, clip: { x: 276, y: 46, width: 880, height: 800 } });
-  await (await page.$('#net')).screenshot({ path: `${out}/${id}-net.png` });
+  await (await page.$('#stage')).screenshot({ path: `${out}/${id}-3d.png` });
+  await page.click('.rail-btn[data-tab="net"]'); await page.waitForTimeout(300); await (await page.$('#net')).screenshot({ path: `${out}/${id}-net.png` });
   writeFileSync(`${out}/${id}.svg`, readFileSync(await (await download(page, '#tplBtn')).path()));
   if (errors.length) console.log(`  ${id}: ${errors.join('; ')}`);
   await ctx.close(); process.stdout.write(id + ' ');

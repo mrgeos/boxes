@@ -1,4 +1,5 @@
 // Запуск
+import { initTabs } from './ui/tabs.js';
 import * as THREE from 'three';
 import { sel, state } from './core/state.js';
 import { faceMM } from './core/model.js';
@@ -34,6 +35,7 @@ initContextMenus();
 initObjectList();
 initWiring();
 initColorPicker();
+initTabs();
 resize();
 bindScene();
 setOrbitLock(orbitLock);

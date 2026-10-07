@@ -13,6 +13,7 @@ import { addFontFile, commit, openProjectFile, redo, undo } from '../core/projec
 import { refreshFields } from '../ui/fields.js';
 import { addImageToFace, deleteLayer, duplicateLayer, renderLayerProps, renderLayers } from '../ui/face-panel.js';
 import { deleteSticker, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
+import { setTab } from '../ui/tabs.js';
 import { placeLibImage } from '../ui/library-panel.js';
 import { ed, edPoint, edState, hitLayer } from '../ui/face-editor.js';
 
@@ -168,12 +169,15 @@ function initInteraction() {
     if (hs) {
       if (o.id !== sel.obj || (h.face && h.face !== sel.face)) select(o.id, h.face || undefined, null, { flash: false });
       sel.sticker = hs.id; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers(); ui.editor = true;
+      setTab('stickers');
       return;
     }
     if (sel.sticker) { sel.sticker = null; ui.stickers = true; }
     let layerId = null;
     if (h.face && h.uv && !h.wall) { const [W, H] = facePx(o, h.face); layerId = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H)?.id ?? null; }
     select(o.id, h.face || undefined, layerId, { flash: true });
+    // a click on a layer opens its design; a click on a bare face keeps the section that is open
+    if (layerId) setTab('design');
   });
   cvs.addEventListener('pointercancel', () => { if (drag3) { drag3 = null; controls.enabled = true; } if (dragSt) { dragSt = null; controls.enabled = true; } down = null; });
   window.addEventListener('dragover', e => { if (isLibDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });

@@ -32,7 +32,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 var(--ui);-webk
 button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
-.app{display:grid;grid-template-columns:276px minmax(0,1fr) 340px;grid-template-rows:auto minmax(0,1fr);height:100%}
+.app{display:grid;grid-template-columns:76px 340px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:100%}
 .topbar{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;position:relative;z-index:5}
 .brand{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0}
 .brand b{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.01em;white-space:nowrap}
@@ -55,8 +55,27 @@ button,input,select,textarea{font:inherit;color:inherit}
 .btn svg{width:16px;height:16px;flex:none}
 
 .panel{background:var(--panel);overflow:auto;min-height:0}
-.panel.left{border-right:1px solid var(--line)}
-.panel.right{border-left:1px solid var(--line)}
+.panel.side{border-right:1px solid var(--line)}
+.sec[hidden]{display:none}
+/* the rail of sections, left of the panel */
+.rail{display:flex;flex-direction:column;gap:2px;padding:8px 6px;background:var(--panel);border-right:1px solid var(--line);overflow:auto}
+.rail-btn{all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 2px 8px;border-radius:8px;cursor:pointer;color:var(--muted);font-size:10.5px;line-height:1.1;text-align:center}
+.rail-btn svg{width:22px;height:22px}
+.rail-btn:hover{color:var(--fg);background:var(--field)}
+.rail-btn.on{color:var(--accent);background:var(--accent-soft)}
+.rail-btn:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* preset gallery */
+.gal-cats{display:flex;flex-wrap:wrap;gap:4px}
+.gal-cats button{height:26px;padding:0 10px;border:1px solid var(--line);border-radius:13px;background:var(--field);color:var(--fg);font-size:12px;cursor:pointer}
+.gal-cats button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.gal{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.gal-it{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:4px;cursor:pointer;min-width:0}
+.gal-it .th{aspect-ratio:1;border:1px solid var(--line);border-radius:8px;background:var(--checker-b) center/cover no-repeat}
+.gal-it .th.wait{background-image:linear-gradient(110deg,transparent 30%,color-mix(in srgb,var(--fg) 6%,transparent) 50%,transparent 70%);background-size:200% 100%;animation:galwait 1.2s linear infinite}
+@keyframes galwait{to{background-position:-200% 0}}
+.gal-it .nm{font-size:11px;line-height:1.25;color:var(--muted);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.gal-it:hover .th,.gal-it:focus-visible .th{border-color:var(--accent)}
+.gal-it:hover .nm{color:var(--fg)}
 .sec{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
 .sec-h{display:flex;align-items:center;gap:8px;justify-content:space-between}
 .sec-h h2{margin:0;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
@@ -168,13 +187,14 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .seg button.on{background:var(--accent);color:var(--accent-fg)}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:12.5px;box-shadow:var(--shadow);z-index:50;max-width:calc(100% - 32px)}
 
-@media (max-width:1100px){.app{grid-template-columns:248px minmax(0,1fr) 312px}}
+@media (max-width:1100px){.app{grid-template-columns:68px 300px minmax(0,1fr)}}
 @media (max-width:860px){
   html,body{height:auto}
   .app{display:flex;flex-direction:column;height:auto}
   .stage{height:62vh;min-height:360px;order:1}
-  .panel.right{order:2;border:0}
-  .panel.left{order:3;border:0;border-top:1px solid var(--line)}
+  .rail{order:2;flex-direction:row;overflow-x:auto;border:0;border-top:1px solid var(--line);padding:4px}
+  .rail-btn{flex:1 0 64px}
+  .panel.side{order:3;border:0}
   .panel{overflow:visible}
   .stage-hint{display:none}
   .brand small{display:none}

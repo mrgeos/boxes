@@ -12,6 +12,7 @@ export async function launch() {
 export async function openEditor(browser, { offline = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1500, height: 900 }, acceptDownloads: true, offline });
   await ctx.addInitScript(() => {
+    window.__noThumbs = true;
     let s = 12345; Math.random = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
     try { localStorage.clear(); indexedDB.deleteDatabase('box-studio-3d'); } catch {}
   });
@@ -22,10 +23,13 @@ export async function openEditor(browser, { offline = false } = {}) {
   await page.waitForFunction(() => window.__boxStudio?.state.objects.length > 0, null, { timeout: 30000 });
   return { ctx, page, errors };
 }
-/* clears the sample scene and adds one object from a preset */
+/* the ids of all presets, from the gallery */
+export const presetIds = async page => { await page.click('.rail-btn[data-tab="models"]'); return page.$$eval('#galSec .gal-it', a => a.map(x => x.dataset.preset)); };
+/* clears the sample scene and adds one object from a preset (through the gallery) */
 export async function addPreset(page, id) {
+  await page.click('.rail-btn[data-tab="models"]');
   while (await page.locator('#objList .obj').count()) { await page.click('#objList .obj >> nth=0'); await page.click('#delObjBtn'); }
-  await page.selectOption('#addPreset', id); await page.click('#addObjBtn'); await page.waitForTimeout(400);
+  await page.click(`#galSec .gal-it[data-preset="${id}"]`); await page.waitForTimeout(400);
 }
 export async function download(page, button) {
   await page.click('#exportBtn');
