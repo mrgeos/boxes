@@ -197,6 +197,7 @@ function applyTransform(o, shadow = true) {
   const rt = RT.get(o.id); if (!rt) return;
   const before = rt.group.position.clone(), p = placeOf(o);
   rt.group.position.set(p.x * S, 0, p.z * S); rt.group.rotation.y = p.rot * DEG;
+  rt.group.visible = !o.hidden;
   // keep orbiting the selected object while it is being moved
   if (rt.placed && orbitLock && o.id === sel.obj && !camTween && !moving()) { const d = rt.group.position.clone().sub(before); camera.position.add(d); controls.target.add(d); }
   rt.placed = true;

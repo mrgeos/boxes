@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { $, DEG, S, toast } from '../core/util.js';
 import { activeFaceData, activeLayer, activeObj, sel, state } from '../core/state.js';
+import { deleteIds, duplicateIds, picked } from '../ui/object-list.js';
 import { faceKeys, faceMM, facePx, loopAxis } from '../core/model.js';
 import { apply, faceMaps, inv, layerReach, moveLayerOnto } from '../faces/wrap.js';
 import { library } from '../core/library.js';
@@ -29,8 +30,9 @@ function pick(clientX, clientY, only = null) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
+  // hidden and locked objects are passed through (three.js casts rays at hidden meshes too)
   const hits = ray.intersectObjects(only ? [only] : world.children, true);
-  const h = hits[0]; if (!h) return null;
+  const h = hits.find(x => { const o = state.objects.find(q => q.id === x.object.userData.objId); return !o || (!o.hidden && !o.locked); }); if (!h) return null;
   const ud = h.object.userData; const face = ud.faces ? ud.faces[h.face.materialIndex] : ud.face;
   return { objId: ud.objId, face, wall: !!ud.wall, uv: h.uv, mesh: h.object, mi: h.face.materialIndex };
 }
@@ -402,7 +404,13 @@ function initInteraction() {
       }
       return;
     }
-    const L = activeLayer(); if (!L) return;
+    const L = activeLayer();
+    // no layer: the keys act on the picked objects
+    if (!L) {
+      if (e.key === 'Delete' || e.key === 'Backspace') { if (picked().length) { e.preventDefault(); deleteIds(picked()); } }
+      else if (mod && e.key.toLowerCase() === 'd' && picked().length) { e.preventDefault(); duplicateIds(picked()); }
+      return;
+    }
     // Enter: type into the picked text, in place
     if (e.key === 'Enter' && !mod && L.type === 'text' && selectedIds().length === 1) { e.preventDefault(); return startTextEdit(L, '3d'); }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteLayer(L.id); }

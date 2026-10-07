@@ -24,6 +24,7 @@ import { initContextMenus } from './ui/context-menus.js';
 import { sampleProject } from './core/sample.js';
 import { initWiring } from './ui/wiring.js';
 import { initObjectList } from './ui/object-list.js';
+import { initObjectThumbs } from './ui/object-thumbs.js';
 import { initColorPicker } from './ui/color-picker.js';
 
 /* boot: hook up the parts in the order they were built, then load the project */
@@ -34,7 +35,7 @@ initNetView();
 initInteraction();
 initMove();
 initContextMenus();
-initObjectList();
+initObjectList(); initObjectThumbs();
 initWiring();
 initColorPicker();
 initTabs();

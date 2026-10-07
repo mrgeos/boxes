@@ -28,7 +28,7 @@ export const presetIds = async page => { await page.click('.rail-btn[data-tab="a
 /* clears the sample scene and adds one object from a preset (through the gallery) */
 export async function addPreset(page, id) {
   await page.click('.rail-btn[data-tab="models"]');
-  while (await page.locator('#objList .obj').count()) { await page.click('#objList .obj >> nth=0'); await page.click('#delObjBtn'); }
+  while (await page.locator('#objList .obj').count()) { await page.click('#objList .obj >> nth=0'); await page.keyboard.press('Delete'); }
   await page.click('.rail-btn[data-tab="add"]');
   await page.click(`#galSec .gal-it[data-preset="${id}"]`); await page.waitForTimeout(400);
 }

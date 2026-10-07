@@ -4,7 +4,7 @@ import { sel } from '../core/state.js';
 import { groupById, layoutAll, objectsIn, parentOf } from '../core/groups.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField } from './fields.js';
-import { renderObjects } from './object-list.js';
+import { picked, renderObjects, ungroupIds } from './object-list.js';
 
 const DIRS = { x: 'Ряд слева направо', z: 'Ряд сзади вперёд' };
 // align 'start' is the smaller coordinate across the row: the back edge of a row along x, the left one along z
@@ -29,7 +29,7 @@ function renderGroupPanel(sec) {
     layoutAll();
     if (k === 'dir') { commit(); renderGroupPanel(sec); }   // the alignment names depend on the direction
   });
-  $('#ungroupBtn2').onclick = () => $('#ungroupBtn').click();
+  $('#ungroupBtn2').onclick = () => ungroupIds(picked());
 }
 
 export { renderGroupPanel };

@@ -107,12 +107,25 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 
 /* objects */
 .objlist{display:flex;flex-direction:column;gap:4px}
-.obj{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid transparent;border-radius:6px;cursor:pointer}
+.obj{display:flex;align-items:center;gap:6px;padding:2px 4px 2px 8px;min-height:30px;border:1px solid transparent;border-radius:5px;cursor:pointer}
+.obj .th{width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;object-fit:contain}
+.obj .mods{display:flex;gap:1px;flex:none}
+.obj .mods .mod,.obj .acts button{width:20px;height:20px;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:3px;display:flex;align-items:center;justify-content:center;padding:0}
+.obj .mods .mod:hover,.obj .acts button:hover{background:var(--panel);color:var(--accent)}
+.obj .mods svg,.obj .acts svg{width:13px;height:13px}
+.obj .acts{display:flex;flex:none}
+.obj .acts button{visibility:hidden}
+.obj:hover .acts button,.obj:focus-within .acts button,.obj .acts button.pin{visibility:visible}
+.obj .dm{display:none}
+.obj:hover .dm,.obj:focus-visible .dm,.obj.grp .dm{display:inline}
+.obj:hover .mods,.obj:focus-visible .mods{display:none}
+.obj.hidden .nm,.obj.hidden .th{opacity:.45}
+.obj.locked .th{opacity:.7}
 .obj:hover{background:var(--field)}
 .obj.on{border-color:var(--accent);background:var(--accent-soft)}
 .obj .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .obj .dm{color:var(--muted);font-size:11px}
-.obj svg{width:16px;height:16px;flex:none;color:var(--muted)}
+.obj > svg,.obj .th svg{width:16px;height:16px;flex:none;color:var(--muted)}
 .obj{padding-left:calc(8px + var(--d, 0) * 16px);position:relative}
 .obj.grp .nm{font-weight:600}
 .obj .caret{all:unset;cursor:pointer;width:14px;margin-right:-4px;text-align:center;color:var(--muted);font-size:11px;flex:none}

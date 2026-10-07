@@ -17,7 +17,7 @@ import { layoutPending } from '../core/groups.js';
 
 function sceneBounds(onlyActive = false) {
   const b = new THREE.Box3();
-  for (const o of state.objects) { if (onlyActive && o.id !== sel.obj) continue; const rt = RT.get(o.id); if (rt) b.expandByObject(rt.group); }
+  for (const o of state.objects) { if ((onlyActive && o.id !== sel.obj) || o.hidden) continue; const rt = RT.get(o.id); if (rt) b.expandByObject(rt.group); }
   if (b.isEmpty()) b.set(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 1, 1));
   return b;
 }
