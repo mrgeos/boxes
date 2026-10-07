@@ -2,18 +2,19 @@
 import { $, $$, esc, fmt, toast } from '../core/util.js';
 import { BLENDS, EFFECTS, ICON, SWATCHES } from '../core/constants.js';
 import { activeFaceData, activeLayer, activeObj, assets, sel, state } from '../core/state.js';
-import { faceKeys, faceLabel, faceMM, facePx, newImage } from '../core/model.js';
+import { faceKeys, faceLabel, faceMM, facePx, isClearFace, newImage } from '../core/model.js';
 import { getImg, importImageFile } from '../core/assets.js';
 import { library } from '../core/library.js';
 import { extraById, extraName, isPart } from '../core/extras.js';
 import { viewNet } from '../net/net-view.js';
 import { drawLayer, layerBox } from '../faces/render.js';
 import { openMenu } from './menu.js';
+import { pickAsset } from './asset-picker.js';
 import { NONE, addKeyout, hasColorEdits, hasRecolor, removeKeyout, setKeyoutTol, setVecColor, vecColors } from '../core/vector.js';
 import { allFonts, ensureFont } from '../core/fonts.js';
-import { RT, applyObjMaterials, markFace, ui } from '../scene/renderer.js';
+import { RT, markFace, ui } from '../scene/renderer.js';
 import { pickLayers, select } from '../core/selection.js';
-import { alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setVisible, shiftLayers } from '../core/layers.js';
+import { addBackgroundImage, bgToAllFaces, clearFace, selectBg, setFaceBg, setFaceBgGrad, alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setVisible, shiftLayers } from '../core/layers.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField, refreshFields } from './fields.js';
 import { MASKS, cropped, editMode, hasPanels, resetCrop, setClipBelow, setClipTo, setEditMode, setMask } from '../core/mask.js';
@@ -37,18 +38,8 @@ function updateFaceMeta() {
   const n = viewNet(o); $('#netSize').textContent = `${fmt(n.W)} × ${fmt(n.H)} мм`;
 }
 function renderFacePanel() {
-  const f = activeFaceData();
-  $('#faceBg').value = f ? f.bg : '#ffffff';
-  $('#bgSwatches').innerHTML = SWATCHES.map(c => `<button class="sw" style="background:${c}" data-c="${c}" title="${c}" aria-label="Фон ${c}"></button>`).join('');
-  $$('#bgSwatches .sw').forEach(b => b.onclick = () => setFaceBg(b.dataset.c, true));
   $('#dielineOffBtn').hidden = !activeObj()?.dieline;
   updateFaceMeta();
-}
-function setFaceBg(c, doCommit) {
-  const o = activeObj(), f = activeFaceData(); if (!f) return;
-  f.bg = c; $('#faceBg').value = c; markFace(o, sel.face);
-  if (sel.face === 'inside' || sel.face === 'flap' || sel.face === 'sleeve') applyObjMaterials(o);
-  if (doCommit) commit();
 }
 function layerName(L) {
   if (L.name) return L.name;
@@ -68,8 +59,8 @@ let drag = null;
 function renderLayers() {
   const o = activeObj(), f = activeFaceData(), box = $('#layers');
   if (!f) { box.innerHTML = ''; return; }
-  if (!f.layers.length) { box.innerHTML = `<div class="empty">На этой грани пока только фон. Добавьте картинку, текст или плашку — или перетащите файл на грань в 3D.</div>`; return; }
   const picked = new Set(selectedIds()), rows = [], seen = new Set();
+  if (!f.layers.length) rows.push(`<div class="empty">Добавьте картинку, текст или плашку — или перетащите файл на грань в 3D.</div>`);
   for (const L of [...f.layers].reverse()) {
     if (L.group && !seen.has(L.group)) {
       seen.add(L.group);
@@ -85,12 +76,19 @@ function renderLayers() {
       <span class="tw" ${L.clipBelow ? 'title="Обтравка по слою ниже"' : 'aria-hidden="true"'}>${L.clipBelow ? '↳' : ''}</span>${thumbHTML(L)}<span class="ln">${esc(layerName(L))}</span><span class="mods">${mods}</span>
       <span class="acts">${rowActs(L.visible, L.locked)}</span></div>`);
   }
+  // the background: always the bottom row (a clear PET face has none)
+  if (!isClearFace(o, sel.face)) rows.push(bgRowHTML(f));
   box.innerHTML = rows.join('');
+  const bgRow = $('#layers .bgrow');
+  if (bgRow) {
+    bgRow.onclick = () => { selectBg(); renderLayers(); renderLayerProps(); ui.editor = true; };
+    bgRow.oncontextmenu = e => { e.preventDefault(); bgMenu(o, e.clientX, e.clientY); };
+  }
   $$('#layers canvas.th').forEach(c => drawThumb(c, o, f.layers.find(l => l.id === c.closest('.layer').dataset.id)));
   const unitOf = el => el.dataset.g ? f.layers.filter(l => l.group === el.dataset.g) : f.layers.filter(l => l.id === el.dataset.id);
   // the rows' layers top first, for a Shift run
   const order = () => [...f.layers].reverse().map(l => l.id);
-  $$('#layers .layer').forEach(el => {
+  $$('#layers .layer:not(.bgrow)').forEach(el => {
     el.onclick = e => {
       const a = e.target.closest('button')?.dataset.a, unit = unitOf(el);
       if (a === 'fold') { const g = el.dataset.g; folded.has(g) ? folded.delete(g) : folded.add(g); return renderLayers(); }
@@ -280,6 +278,7 @@ function renderMultiProps(sec, o, Ls) {
 function renderLayerProps() {
   const sec = $('#layerSec'), L = activeLayer(), o = activeObj(), many = selectedLayers();
   if (many.length > 1) return renderMultiProps(sec, o, many);
+  if (!L && sel.bg && activeFaceData()) return renderBgProps(sec, o, activeFaceData());
   if (!L) { sec.innerHTML = `<div class="sec-h"><h2>Слой</h2></div><p class="hint">Выберите слой в списке, в окне грани или кликом по модели. Стрелки сдвигают слой, Shift+стрелки — сильнее.</p>`; return; }
   const effOpts = Object.entries(EFFECTS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   let html = `<div class="sec-h"><h2>Слой: ${esc(layerName(L)).slice(0, 24)}</h2><span class="badge">${faceLabel(o, sel.face)}</span></div>${alignBarHTML(1)}`;
@@ -334,11 +333,46 @@ function renderLayerProps() {
   }
 }
 /* the fill of a text or shape: plain colour or a gradient from it to a second colour */
-function gradHTML(L) {
-  const g = L.grad, opt = (v, t) => `<option value="${v}" ${v === (g?.kind || '') ? 'selected' : ''}>${t}</option>`;
+function gradHTML(L, key = 'grad') {
+  const g = L[key], opt = (v, t) => `<option value="${v}" ${v === (g?.kind || '') ? 'selected' : ''}>${t}</option>`;
   return `<div class="row"><select id="gradKind" class="grow" aria-label="Заливка">${opt('', 'Сплошной цвет')}${opt('linear', 'Линейный градиент')}${opt('radial', 'Радиальный градиент')}</select>
-    ${g ? '<input type="color" data-k="grad.color" aria-label="Второй цвет градиента">' : ''}</div>
-    ${g?.kind === 'linear' ? rangeField('Угол градиента, °', 'grad.angle', -180, 180, 1) : ''}`;
+    ${g ? `<input type="color" data-k="${key}.color" aria-label="Второй цвет градиента">` : ''}</div>
+    ${g?.kind === 'linear' ? rangeField('Угол градиента, °', key + '.angle', -180, 180, 1) : ''}`;
+}
+/* ---------- the background row and its settings ---------- */
+const bgCss = f => f.bgGrad ? (f.bgGrad.kind === 'radial' ? `radial-gradient(${f.bg},${f.bgGrad.color})` : `linear-gradient(${(f.bgGrad.angle ?? 90) + 90}deg,${f.bg},${f.bgGrad.color})`) : f.bg;
+function bgRowHTML(f) {
+  return `<div class="layer bgrow ${sel.bg ? 'on' : ''}" style="--d:0" title="Фон грани — всегда внизу, под всеми слоями">
+    <span class="tw"></span><span class="th" style="background:${bgCss(f)}"></span><span class="ln">Фон</span><span class="dm mono">${f.bgGrad ? 'градиент' : esc(f.bg)}</span>
+    <span class="acts"><span class="pin-lock" aria-hidden="true">${ICON.lock}</span></span></div>`;
+}
+function renderBgProps(sec, o, f) {
+  const k = sel.face;
+  sec.innerHTML = `<div class="sec-h"><h2>Фон</h2><span class="badge">${faceLabel(o, k)}</span></div>
+    <p class="hint">Нижний слой грани: цвет бумаги под печатью. Он всегда под остальными слоями и заливает всю грань.</p>
+    <div class="row"><input type="color" data-k="bg" aria-label="Цвет фона"><div class="swatches" id="bgSw">${SWATCHES.map(c => `<button class="sw" style="background:${c}" data-c="${c}" title="${c}" aria-label="Фон ${c}" aria-pressed="${f.bg === c}"></button>`).join('')}</div></div>
+    ${gradHTML(f, 'bgGrad')}
+    <div class="grid2"><button class="btn sm" id="bgAll">На все грани</button><button class="btn sm" id="bgPic">Картинка на фон…</button></div>
+    <div class="grid2"><button class="btn sm danger" id="faceClear" ${f.layers.length ? '' : 'disabled'}>Очистить грань</button></div>`;
+  const redraw = () => { ui.layers = true; ui.editor = true; };
+  bindFields(sec, activeFaceData, key => { if (key === 'bg') setFaceBg(o, k, f.bg); else markFace(o, k); redraw(); });
+  $$('#bgSw .sw', sec).forEach(b => b.onclick = () => { setFaceBg(o, k, b.dataset.c); redraw(); renderLayerProps(); commit(); });
+  $('#gradKind', sec).onchange = e => { setFaceBgGrad(o, k, e.target.value || null); redraw(); renderLayerProps(); commit(); };
+  $('#bgAll', sec).onclick = () => { bgToAllFaces(o, k); renderFaceTabs(); commit(); toast('Фон применён ко всем внешним граням'); };
+  $('#bgPic', sec).onclick = e => pickAsset(e.currentTarget, 'Картинка на фон грани', r => {
+    const L = addBackgroundImage(o, k, r.id, r.aspect); pickLayers([L.id]); renderFaceTabs(); commit();
+  });
+  $('#faceClear', sec).onclick = () => { clearFace(o, k); selectBg(); renderLayers(); renderLayerProps(); renderFaceTabs(); commit(); };
+}
+function bgMenu(o, x, y) {
+  const k = sel.face, f = o.faces[k];
+  selectBg(); renderLayers(); renderLayerProps();
+  openMenu(x, y, [
+    { label: 'Фон на все грани', run: () => { bgToAllFaces(o, k); commit(); toast('Фон применён ко всем внешним граням'); } },
+    { label: 'Картинка на фон…', run: () => $('#bgPic')?.click() },
+    'sep',
+    { label: 'Очистить грань', disabled: !f.layers.length, run: () => $('#faceClear')?.click() },
+  ], 'Фон');
 }
 /* the layer's cut: crop frame of a picture, a mask shape, clipping to the layer below, to the face or the panel */
 function cropHTML(o, L) {
@@ -471,4 +505,4 @@ function initFacePanel() {
   $('#imgInput').onchange = e => { const f = e.target.files[0]; if (f && pickCb) pickCb(f); };
 }
 
-export { addImageToFace, addLayer, layerCmd, bindVecColors, deleteLayer, duplicateLayer, initFacePanel, moveLayer, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers, setFaceBg, updateFaceMeta, vecColorsHTML };
+export { addImageToFace, addLayer, layerCmd, bindVecColors, deleteLayer, duplicateLayer, initFacePanel, moveLayer, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers, updateFaceMeta, vecColorsHTML };

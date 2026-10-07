@@ -13,7 +13,8 @@ import { select, selectGroup, selectLayer } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
 import { renderModel } from './model-panel.js';
-import { addImageToFace, deleteLayer, duplicateLayer, moveLayer, renderLayerProps, renderLayers } from './face-panel.js';
+import { addImageToFace, deleteLayer, duplicateLayer, moveLayer, renderFaceTabs, renderLayerProps, renderLayers } from './face-panel.js';
+import { bgToAllFaces, clearFace } from '../core/layers.js';
 import { deleteSticker, duplicateSticker, extraMenu, renderStickers } from './stickers-panel.js';
 import { swapImage } from './library-panel.js';
 import { ed, edPoint, edState, hitLayer } from './face-editor.js';
@@ -177,9 +178,9 @@ function editorMenu(e) {
     { label: 'Добавить текст', run: click('#addTextBtn') }, { label: 'Добавить картинку', run: click('#addImgBtn') },
     { label: 'Добавить плашку', run: click('#addRectBtn') }, { label: 'Добавить круг', run: click('#addEllBtn') },
     'sep',
-    { label: 'Фон на все грани', run: click('#bgAllBtn') },
+    { label: 'Фон на все грани', run: () => { bgToAllFaces(o, sel.face); commit(); toast('Фон применён ко всем внешним граням'); } },
     others.length && { label: 'Копировать дизайн на', sub: [{ label: 'Все внешние грани', run: () => copyFaceDesign(o, sel.face, others) }, 'sep', ...others.map(k => ({ label: faceLabel(o, k), run: () => copyFaceDesign(o, sel.face, [k]) }))] },
-    { label: 'Очистить грань', disabled: !f.layers.length, run: click('#clearFaceBtn') },
+    { label: 'Очистить грань', disabled: !f.layers.length, run: () => { clearFace(o, sel.face); renderLayers(); renderLayerProps(); renderFaceTabs(); commit(); } },
   ], `Грань «${faceLabel(o, sel.face)}»`);
 }
 

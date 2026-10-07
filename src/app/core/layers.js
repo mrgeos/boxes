@@ -1,8 +1,8 @@
 // Несколько слоёв сразу: выбор, перемещение, масштаб и поворот, выравнивание, группы, порядок, копирование
 import { DEG, uid } from './util.js';
 import { activeFaceData, activeObj, sel } from './state.js';
-import { faceMM, facePx } from './model.js';
-import { markFace } from '../scene/renderer.js';
+import { faceMM, facePx, newImage, outerKeys } from './model.js';
+import { applyObjMaterials, markFace } from '../scene/renderer.js';
 import { layerBox } from '../faces/render.js';
 import { rotateItem, scaleItem, sizeOf } from './transform.js';
 
@@ -21,6 +21,7 @@ function selectedLayers(face = activeFaceData()) {
 }
 /* picks layers: ids (the last is the main one unless main is given) */
 function setLayerSelection(ids, main = ids.at(-1) ?? null) {
+  sel.bg = false;
   sel.layers = ids.length > 1 ? [...ids] : [];
   sel.layer = ids.length ? main : null;
   if (ids.length) sel.sticker = null;
@@ -230,4 +231,32 @@ function setLocked(o, k, Ls, on) { for (const L of Ls) { if (on) L.locked = true
 function setVisible(o, k, Ls, on) { for (const L of Ls) L.visible = on; markFace(o, k); }
 const activeFaceKey = () => (activeObj() && sel.face) || null;
 
-export { activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setText, setVisible, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };
+/* ---------- the face's background: the bottom "layer" of every face (face.bg, face.bgGrad) ---------- */
+/* the background picked in the layer list (its settings shown instead of a layer's) */
+function selectBg() { setLayerSelection([]); sel.bg = true; }
+/* faces whose background shows in the material too (the inside of a box, the flap's back, a sleeve's paper) */
+const BG_MAT = ['inside', 'flap', 'sleeve', 'carry'];
+function setFaceBg(o, k, c) { o.faces[k].bg = c; markFace(o, k); if (BG_MAT.includes(k)) applyObjMaterials(o); }
+/* a gradient from the background colour to bgGrad.color ('linear' with an angle, 'radial'), or plain (null) */
+function setFaceBgGrad(o, k, kind) {
+  const f = o.faces[k];
+  if (!kind) delete f.bgGrad; else f.bgGrad = { color: '#ffffff', angle: 90, ...(f.bgGrad || {}), kind };
+  markFace(o, k);
+}
+/* the background (with its gradient) on all the outer faces */
+function bgToAllFaces(o, k) {
+  const f = o.faces[k];
+  for (const t of outerKeys(o)) { if (t === k) continue; o.faces[t].bg = f.bg; if (f.bgGrad) o.faces[t].bgGrad = { ...f.bgGrad }; else delete o.faces[t].bgGrad; markFace(o, t); }
+  applyObjMaterials(o);
+}
+/* every layer off the face (the background stays) */
+function clearFace(o, k) { o.faces[k].layers = []; delete o.faces[k].groups; setLayerSelection([]); markFace(o, k); }
+/* a picture as the background: an image layer under all the others, covering the face */
+function addBackgroundImage(o, k, src, aspect) {
+  const [W, H] = facePx(o, k), L = newImage(src, aspect);
+  L.w = Math.max(W, H * aspect) / W; L.x = .5; L.y = .5; L.name = 'Фон-картинка';
+  o.faces[k].layers.unshift(L); markFace(o, k);
+  return L;
+}
+
+export { addBackgroundImage, bgToAllFaces, clearFace, selectBg, setFaceBg, setFaceBgGrad, activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setText, setVisible, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };

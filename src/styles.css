@@ -319,3 +319,10 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .obj.xtra .nm{font-size:12.5px}
 .obj.kid-on{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
 #stickerSec .layer .dm{color:var(--muted);font-size:11px}
+
+/* the face's background: the bottom row of the layer list */
+.layer.bgrow .th{border:1px solid var(--line)}
+.layer.bgrow .dm{color:var(--muted);font-size:11px}
+.layer.bgrow .pin-lock{width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:var(--muted);opacity:.6}
+.layer.bgrow .pin-lock svg{width:12px;height:12px}
+#layers .empty{margin-bottom:2px}

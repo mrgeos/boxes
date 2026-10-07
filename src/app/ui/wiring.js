@@ -12,7 +12,7 @@ import { addFontFile, commit, loadProject, openProjectFile, projectJSON, redo, s
 import { refreshFields } from './fields.js';
 import { renderModel } from './model-panel.js';
 import { renderObjects } from './object-list.js';
-import { addImageToFace, addLayer, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers, setFaceBg } from './face-panel.js';
+import { addImageToFace, addLayer, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers } from './face-panel.js';
 import { renderStickers } from './stickers-panel.js';
 import { renderLibrary } from './library-panel.js';
 import { exportPNG, exportVideo, setPngScale } from '../export/image.js';
@@ -30,23 +30,13 @@ function addObject(presetId, at = null) {
 /* copies a face's background and layers onto other faces of the object */
 function copyFaceDesign(o, from, targets) {
   const f = o.faces[from]; if (!f || !targets.length) return;
-  for (const k of targets) { o.faces[k] = { bg: f.bg, layers: f.layers.map(l => ({ ...structuredClone(l), id: uid() })) }; markFace(o, k); }
+  for (const k of targets) { o.faces[k] = { bg: f.bg, ...(f.bgGrad ? { bgGrad: { ...f.bgGrad } } : {}), ...(f.groups ? { groups: { ...f.groups } } : {}), layers: f.layers.map(l => ({ ...structuredClone(l), id: uid() })) }; markFace(o, k); }
   renderFaceTabs(); commit(); toast(`Дизайн скопирован: ${targets.map(k => faceLabel(o, k)).join(', ')}`);
 }
 function closeMenu() { for (const n of ['export', 'file']) { $(`#${n}Menu`).hidden = true; $(`#${n}Btn`).setAttribute('aria-expanded', 'false'); } }
 
 /* hooks up the toolbar and panel buttons */
 function initWiring() {
-  $('#faceBg').addEventListener('input', e => setFaceBg(e.target.value, false));
-  $('#faceBg').addEventListener('change', () => commit());
-  $('#bgAllBtn').onclick = () => {
-    const o = activeObj(), f = activeFaceData(); if (!f) return;
-    for (const k of outerKeys(o)) o.faces[k].bg = f.bg; markObj(o); commit(); toast('Фон применён ко всем внешним граням');
-  };
-  $('#clearFaceBtn').onclick = () => {
-    const o = activeObj(), f = activeFaceData(); if (!f) return;
-    f.layers = []; sel.layer = null; markFace(o, sel.face); renderLayers(); renderLayerProps(); renderFaceTabs(); commit();
-  };
   $('#copyFaceBtn').onclick = () => {
     const o = activeObj(), f = activeFaceData(), t = $('#copyTarget').value; if (!f || !t) return toast('Выберите, куда копировать');
     copyFaceDesign(o, sel.face, t === '*' ? outerKeys(o).filter(k => k !== sel.face) : [t]);

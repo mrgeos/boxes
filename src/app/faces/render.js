@@ -254,7 +254,11 @@ function renderFace(o, k) {
   const fin = clear ? bf?.fin || PET_PRINT : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : k === 'carry' ? FINISHES[o.carry?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = faceGrain(o, k);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   if (clear) { ctx.clearRect(0, 0, W, H); if (bf?.ground) { ctx.fillStyle = bf.ground; ctx.fillRect(0, 0, W, H); } }
-  else { ctx.fillStyle = face.bg; ctx.fillRect(0, 0, W, H); }
+  else {
+    // the background: a colour, or a gradient over the whole face (as a layer's, from the face's middle)
+    ctx.fillStyle = face.bg; ctx.fillRect(0, 0, W, H);
+    if (face.bgGrad) { ctx.save(); ctx.translate(W / 2, H / 2); ctx.fillStyle = layerPaint(ctx, { grad: face.bgGrad }, face.bg, W, H); ctx.fillRect(-W / 2, -H / 2, W, H); ctx.restore(); }
+  }
   if (!clear && o.dieline && outerKeys(o).includes(k)) {
     const im = getImg(o.dieline), net = netLayout(o), p = net.panels.find(p => p.key === k);
     if (im && p?.fan) ctx.drawImage(fanToRect(p.fan, im, W, H, o.dieline), 0, 0);

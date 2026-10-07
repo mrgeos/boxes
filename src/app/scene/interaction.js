@@ -410,6 +410,8 @@ function initInteraction() {
     const L = activeLayer();
     // no layer: the keys act on the picked objects
     if (!L) {
+      // the face's background picked: Esc lets it go; Delete does nothing (it is not the object)
+      if (sel.bg) { if (e.key === 'Escape') selectLayer(null); return; }
       // a sleeve or a carrier picked: the keys act on it, Esc goes back to the object
       if (sel.part) {
         if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); extraAction(activeObj(), sel.part, 'del'); }
