@@ -12,6 +12,7 @@ import { drawSticker } from '../stickers/film.js';
 import { selectLayer } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
+import { rotateItem, scaleItem } from '../core/transform.js';
 
 const ed = $('#editor'), ectx = ed.getContext('2d');
 const edState = { k: 1, dw: 0, dh: 0, drag: null, guides: [] };
@@ -170,13 +171,12 @@ function initFaceEditor() {
     const [mx, my] = edPoint(e), { k, W, H } = edState, L = d.L;
     if (d.mode === 'move') snapMove(L, d.x + (mx - d.mx) / (W * k), d.y + (my - d.my) / (H * k), W, H, e.altKey);
     else if (d.mode === 'scale') {
-      const s = Math.max(.02, Math.hypot(mx - d.cx, my - d.cy) / d.d0);
-      if (L.type === 'image') L.w = d.w * s; else if (L.type === 'text') L.size = d.size * s; else { L.w = d.w * s; L.h = d.h * s; }
+      scaleItem(activeObj(), sel.face, L, d, Math.hypot(mx - d.cx, my - d.cy) / d.d0);
     } else if (d.mode === 'rot') {
       let a = Math.atan2(my - d.cy, mx - d.cx) / DEG + 90;
       if (a > 180) a -= 360;
       if (e.shiftKey) a = Math.round(a / 15) * 15; else for (const s of [-180, -90, 0, 90, 180]) if (Math.abs(a - s) < 3) a = s;
-      L.rot = Math.round(a * 10) / 10;
+      rotateItem(activeObj(), sel.face, L, a);
     }
     markFace(activeObj(), sel.face); refreshFields($('#layerSec'), L);
   });

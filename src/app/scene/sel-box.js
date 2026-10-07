@@ -5,7 +5,8 @@ import { activeLayer, activeObj, sel } from '../core/state.js';
 import { faceKeys, faceMM, loopAxis } from '../core/model.js';
 import { activeSticker, placementsFor, stickerSize } from '../stickers/placement.js';
 import { apply, layerMM, layerReach } from '../faces/wrap.js';
-import { RT, scene } from './renderer.js';
+import { RT, camera, cvs, scene, world } from './renderer.js';
+import { tool } from '../ui/action-bar.js';
 import { recording } from './camera.js';
 
 /* The selected layer (or sticker) gets a thin frame with corner marks, so it is clear on the model what the
@@ -15,7 +16,7 @@ import { recording } from './camera.js';
    out. It is never in a picture of the scene: exports hide it, recording drops it. */
 let lines = [], sig = '', built = null;
 const mat = new THREE.LineBasicMaterial({ color: 0x0a7aa1, transparent: true, opacity: .95 });
-const LIFT = .4 * S, STEP = 1.5;   // off the surface; sampling step along the frame (mm)
+const LIFT = .4 * S, HLIFT = 1.5 * S, STEP = 1.5;   // off the surface; sampling step along the frame (mm)
 
 /* what is selected: the rectangle (its own mm, centred) and a key that changes whenever the frame would */
 function target() {
@@ -51,7 +52,7 @@ function trisOf(mesh, fm) {
 }
 const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), N = new THREE.Vector3(), T = new THREE.Vector3();
 /* the point at (u, v) on a mesh, lifted off it along the surface's normal, in the mesh's own space */
-function onMesh(mesh, tris, u, v) {
+function onMesh(mesh, tris, u, v, lift = LIFT) {
   const e = 1e-5, pos = mesh.geometry.attributes.position, nor = mesh.geometry.attributes.normal;
   for (const t of tris) {
     if (u < t[9] - e || u > t[10] + e || v < t[11] - e || v > t[12] + e) continue;
@@ -62,32 +63,34 @@ function onMesh(mesh, tris, u, v) {
     A.fromBufferAttribute(pos, a); B.fromBufferAttribute(pos, b); C.fromBufferAttribute(pos, c);
     if (nor) N.fromBufferAttribute(nor, a).multiplyScalar(l1).addScaledVector(T.fromBufferAttribute(nor, b), l2).addScaledVector(T.fromBufferAttribute(nor, c), l3);
     else N.subVectors(B, A).cross(T.subVectors(C, A));
-    return new THREE.Vector3().addScaledVector(A, l1).addScaledVector(B, l2).addScaledVector(C, l3).addScaledVector(N.normalize(), LIFT);
+    return new THREE.Vector3().addScaledVector(A, l1).addScaledVector(B, l2).addScaledVector(C, l3).addScaledVector(N.normalize(), lift);
   }
   return null;
 }
-function drop() { for (const l of lines) { l.parent?.remove(l); l.geometry.dispose(); } lines = []; }
+let handles = [];   // [{ mode: 'scale' | 'rot' | 'center' | 'corner', mesh, p }] — 'center' and 'corner' are not drawn
+const dots = {};
+/* the picture of a handle: a white square (scale) or a white dot (turn) with the accent outline, a fixed size on screen */
+function dotMat(mode) {
+  if (dots[mode]) return dots[mode];
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.strokeStyle = '#0a7aa1'; x.lineWidth = 4; x.beginPath();
+  if (mode === 'rot') x.arc(16, 16, 12, 0, Math.PI * 2); else x.rect(5, 5, 22, 22);
+  x.fill(); x.stroke();
+  return dots[mode] = new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), size: mode === 'rot' ? 13 : 11, sizeAttenuation: false, transparent: true, alphaTest: .3 });
+}
+function drop() { for (const l of lines) { l.parent?.remove(l); l.geometry.dispose(); } lines = []; handles = []; }
 const attached = x => { while (x.parent) x = x.parent; return x === scene; };
 
 /* keeps the frame in step with the selection; true when it changed and the scene needs drawing */
 function syncSelBox() {
-  const t = recording ? null : target(), s = t ? t.key : '';
+  const t = recording ? null : target(), grips = t && tool() === 'select', s = t ? t.key + grips : '';
   // a rebuilt object took the frame away with its parts: put it back
   if (s === sig && (!t || t.built === built) && lines.every(attached)) return false;
   sig = s; built = t?.built; drop();
   if (!t) return true;
-  const rt = t.rt, parts = partsOf(t);
-  // the frame as polylines in its own mm: the rectangle and short corner marks just outside it
-  const hw = t.w / 2, hh = t.h / 2, k = Math.min(Math.max(Math.min(t.w, t.h) * .18, 1.5), 6), strokes = [];
-  const run = (x0, y0, x1, y1) => {
-    const n = Math.min(400, Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / STEP))), pts = [];
-    for (let i = 0; i <= n; i++) pts.push([x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n]);
-    strokes.push(pts);
-  };
-  run(-hw, -hh, hw, -hh); run(hw, -hh, hw, hh); run(hw, hh, -hw, hh); run(-hw, hh, -hw, -hh);
-  for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const x = sx * (hw + 1), y = sy * (hh + 1); run(x, y, x - sx * k, y); run(x, y, x, y - sy * k); }
-  const segs = new Map();   // mesh -> ends of its segments
-  for (const { key, M, G } of parts) {
+  const rt = t.rt, surfaces = [];
+  // every face the item is on: its meshes and the way from the item's own mm to a point on each of them
+  for (const { key, M, G } of partsOf(t)) {
     const fm = rt.faces[key]?.mat; if (!fm) continue;
     const meshes = [];
     rt.group.traverse(m => {
@@ -96,34 +99,80 @@ function syncSelBox() {
     });
     if (!meshes.length) continue;
     const [mw, mh] = faceMM(t.o, key), loop = loopAxis(t.o, key), wrap = q => q - Math.floor(q);
-    const at = p => {
+    surfaces.push({ meshes, at: (p, lift) => {
       const q = apply(M, p), [fx, fy] = G ? apply(G, q) : q;
       let u = fx / mw, v = 1 - fy / mh;
       if (loop === 'x') u = wrap(u); else if (loop === 'y') v = wrap(v);
-      return meshes.map(([m, tris]) => onMesh(m, tris, u, v));
-    };
-    for (const pts of strokes) {
-      let prev = at(pts[0]);
-      for (let i = 1; i < pts.length; i++) {
-        const cur = at(pts[i]);
-        meshes.forEach(([m], j) => {
-          // two ends far apart on one mesh are on different pieces of it: no line between them
-          if (!prev[j] || !cur[j] || prev[j].distanceToSquared(cur[j]) > (STEP * 4 * S) ** 2) return;
-          let arr = segs.get(m); if (!arr) segs.set(m, arr = []);
-          arr.push(prev[j], cur[j]);
-        });
-        prev = cur;
-      }
+      return meshes.map(([m, tris]) => onMesh(m, tris, u, v, lift));
+    } });
+  }
+  // the first place a point of the item is on the model; handles stand a little higher, clear of the surface
+  const locate = p => { for (const f of surfaces) { const r = f.at(p, HLIFT); const j = r.findIndex(Boolean); if (j >= 0) return { mesh: f.meshes[j][0], p: r[j] }; } return null; };
+  // the frame as polylines in its own mm: the rectangle, and either handles or short corner marks
+  const hw = t.w / 2, hh = t.h / 2, k = Math.min(Math.max(Math.min(t.w, t.h) * .18, 1.5), 6), strokes = [];
+  const run = (x0, y0, x1, y1) => {
+    const n = Math.min(400, Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / STEP))), pts = [];
+    for (let i = 0; i <= n; i++) pts.push([x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n]);
+    strokes.push(pts);
+  };
+  run(-hw, -hh, hw, -hh); run(hw, -hh, hw, hh); run(hw, hh, -hw, hh); run(-hw, hh, -hw, -hh);
+  const corners = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
+  if (grips) {
+    // scale at the corners, turn on a stalk over the top edge; where that is off the model (past the edge of the
+    // face, in a window), under the bottom edge or beside the item, closer in if need be
+    const R = Math.min(Math.max(Math.max(t.w, t.h) * .12, 6), 25);
+    for (const r of [R, R / 2]) {
+      const way = [[0, -1, hh], [0, 1, hh], [1, 0, hw], [-1, 0, hw]].map(([dx, dy, e]) => [dx, dy, e, locate([dx * (e + r), dy * (e + r)])]).find(w => w[3]);
+      if (!way) continue;
+      const [dx, dy, e, at] = way; run(dx * e, dy * e, dx * (e + r), dy * (e + r)); handles.push({ mode: 'rot', ...at });
+      break;
+    }
+    for (const c of corners) { const h = locate(c); if (h) handles.push({ mode: 'scale', ...h }); }
+    const c = locate([0, 0]); if (c) handles.push({ mode: 'center', ...c });
+  } else for (const [sx, sy] of corners.map(([x, y]) => [Math.sign(x), Math.sign(y)])) { const x = sx * (hw + 1), y = sy * (hh + 1); run(x, y, x - sx * k, y); run(x, y, x, y - sy * k); }
+  // three corners in order tell whether the item is seen mirrored (from the back of the face)
+  for (const c of corners.slice(0, 3)) { const h = locate(c); if (h) handles.push({ mode: 'corner', ...h }); }
+  const segs = new Map();   // mesh -> ends of its segments
+  for (const { meshes, at } of surfaces) for (const pts of strokes) {
+    let prev = at(pts[0]);
+    for (let i = 1; i < pts.length; i++) {
+      const cur = at(pts[i]);
+      meshes.forEach(([m], j) => {
+        // two ends far apart on one mesh are on different pieces of it: no line between them
+        if (!prev[j] || !cur[j] || prev[j].distanceToSquared(cur[j]) > (STEP * 4 * S) ** 2) return;
+        let arr = segs.get(m); if (!arr) segs.set(m, arr = []);
+        arr.push(prev[j], cur[j]);
+      });
+      prev = cur;
     }
   }
-  for (const [m, pts] of segs) {
-    const l = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), mat);
-    l.renderOrder = 6; l.raycast = () => {}; l.userData = { objId: t.o.id, face: null };
-    m.add(l); lines.push(l);
-  }
+  const keep = l => { l.renderOrder = 6; l.raycast = () => {}; l.userData = { objId: t.o.id, face: null }; lines.push(l); return l; };
+  for (const [m, pts] of segs) m.add(keep(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), mat)));
+  for (const h of handles) if (h.mode === 'rot' || h.mode === 'scale') h.mesh.add(keep(new THREE.Points(new THREE.BufferGeometry().setFromPoints([h.p]), dotMat(h.mode))));
   return true;
+}
+/* where a handle is on the screen (client px) and whether it is in sight */
+const ray = new THREE.Raycaster();
+function onScreen(h) {
+  const w = h.p.clone().applyMatrix4(h.mesh.matrixWorld), d = w.distanceTo(camera.position), v = w.clone().project(camera), r = cvs.getBoundingClientRect();
+  ray.set(camera.position, w.clone().sub(camera.position).normalize());
+  const hit = ray.intersectObjects(world.children, true)[0];
+  return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height, seen: v.z < 1 && (!hit || hit.distance > d - 2.5 * S) };
+}
+/* the handle under the pointer, if any: { mode, c: the item's centre on screen, flip: -1 when seen mirrored } */
+function handleAt(x, y) {
+  if (!lines.length || !lines.every(attached)) return null;
+  for (const mode of ['rot', 'scale']) for (const h of handles) {
+    if (h.mode !== mode) continue;
+    const q = onScreen(h); if (!q.seen || Math.hypot(q.x - x, q.y - y) > 10) continue;
+    const c = handles.find(g => g.mode === 'center'), cs = handles.filter(g => g.mode === 'corner').map(onScreen);
+    const cc = c ? onScreen(c) : q;
+    const flip = cs.length === 3 && (cs[1].x - cs[0].x) * (cs[2].y - cs[1].y) - (cs[1].y - cs[0].y) * (cs[2].x - cs[1].x) < 0 ? -1 : 1;
+    return { mode, c: [cc.x, cc.y], flip };
+  }
+  return null;
 }
 /* hides the frame for a picture of the scene; returns a function that brings it back */
 function hideSelBox() { const was = lines.map(l => l.visible); lines.forEach(l => { l.visible = false; }); return () => lines.forEach((l, i) => { l.visible = was[i] ?? true; }); }
 
-export { hideSelBox, syncSelBox };
+export { handleAt, hideSelBox, syncSelBox };

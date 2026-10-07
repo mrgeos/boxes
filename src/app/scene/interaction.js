@@ -1,6 +1,6 @@
 // Мышь, касания, перетаскивание файлов, клавиатура
 import * as THREE from 'three';
-import { $ } from '../core/util.js';
+import { $, DEG } from '../core/util.js';
 import { activeLayer, activeObj, sel, state } from '../core/state.js';
 import { faceKeys, faceMM, facePx, loopAxis } from '../core/model.js';
 import { apply, faceMaps, inv, layerReach, moveLayerOnto } from '../faces/wrap.js';
@@ -14,6 +14,8 @@ import { refreshFields } from '../ui/fields.js';
 import { addImageToFace, deleteLayer, duplicateLayer, renderLayerProps, renderLayers } from '../ui/face-panel.js';
 import { deleteSticker, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
 import { setTab } from '../ui/tabs.js';
+import { handleAt } from './sel-box.js';
+import { rotateItem, scaleItem, sizeOf } from '../core/transform.js';
 import { tool } from '../ui/action-bar.js';
 import { placeLibImage } from '../ui/library-panel.js';
 import { ed, edPoint, edState, hitLayer } from '../ui/face-editor.js';
@@ -28,7 +30,7 @@ function pick(clientX, clientY, only = null) {
   const ud = h.object.userData; const face = ud.faces ? ud.faces[h.face.materialIndex] : ud.face;
   return { objId: ud.objId, face, wall: !!ud.wall, uv: h.uv, mesh: h.object, mi: h.face.materialIndex };
 }
-let down = null, drag3 = null, dragSt = null, hoverT = 0;
+let down = null, drag3 = null, dragSt = null, xform = null, hoverT = 0;
 /* the sticker under a 3D hit, if any */
 function stickerHit(h) {
   const o = state.objects.find(x => x.id === h?.objId);
@@ -90,6 +92,29 @@ function dragLayer(e) {
   markFace(o, drag3.face); refreshFields($('#layerSec'), L);
 }
 
+/* a handle of the selection frame on the model: corners scale the layer or sticker, the dot on the stalk turns it.
+   Both go by the pointer round the item's centre on screen; Shift turns in steps of 15°. */
+function startXform(e, g) {
+  const it = activeLayer() || activeSticker(), dx = e.clientX - g.c[0], dy = e.clientY - g.c[1];
+  xform = { ...g, it, o: activeObj(), face: sel.face, from: sizeOf(it), r0: it.rot || 0, a0: Math.atan2(dy, dx), d0: Math.max(4, Math.hypot(dx, dy)) };
+  controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = g.mode === 'rot' ? 'grabbing' : 'nwse-resize';
+}
+function dragXform(e) {
+  const { it, o, face, c, mode } = xform, dx = e.clientX - c[0], dy = e.clientY - c[1];
+  if (mode === 'scale') scaleItem(o, face, it, xform.from, Math.hypot(dx, dy) / xform.d0);
+  else {
+    let a = xform.r0 + xform.flip * (Math.atan2(dy, dx) - xform.a0) / DEG;
+    a = ((a + 180) % 360 + 360) % 360 - 180;
+    if (e.shiftKey) a = Math.round(a / 15) * 15; else for (const s of [-180, -90, 0, 90, 180]) if (Math.abs(a - s) < 3) a = s;
+    rotateItem(o, face, it, a);
+  }
+  refreshFields($(it.type ? '#layerSec' : '#stickerSec'), it);
+}
+function endXform() {
+  if (!xform.it.type) { stickerDirty.add(xform.o.id); ui.stickers = true; } else { ui.layers = true; ui.editor = true; }
+  xform = null; controls.enabled = true; commit();
+}
+
 /* hooks up the mouse, touch, drag-and-drop and keyboard */
 function initInteraction() {
   cvs.addEventListener('pointerdown', e => {
@@ -120,6 +145,8 @@ function initInteraction() {
     if (recording || e.button !== 0 || pan) return;
     down = { x: e.clientX, y: e.clientY };
     if (tool() !== 'select') return;   // graphics are dragged with the select tool only
+    const g = handleAt(e.clientX, e.clientY);
+    if (g) return startXform(e, g);
     const h = pick(e.clientX, e.clientY), L = activeLayer();
     // a selected sticker is dragged across the model, face to face
     const hs = sel.sticker && h?.objId === sel.obj ? stickerHit(h) : null;
@@ -145,7 +172,10 @@ function initInteraction() {
       return;
     }
     if (drag3) { dragLayer(e); return; }
+    if (xform) { dragXform(e); return; }
     if (e.buttons || e.timeStamp - hoverT < 50 || tool() !== 'select') return; hoverT = e.timeStamp;
+    const g = handleAt(e.clientX, e.clientY);
+    if (g) { cvs.style.cursor = g.mode === 'rot' ? 'grab' : 'nwse-resize'; return; }
     const h = pick(e.clientX, e.clientY); let cur = 'grab';
     if (h?.face) {
       cur = 'pointer';
@@ -156,6 +186,7 @@ function initInteraction() {
     cvs.style.cursor = cur;
   });
   cvs.addEventListener('pointerup', e => {
+    if (xform) { endXform(); cvs.style.cursor = ''; down = null; return; }
     if (dragSt) { stickerDirty.add(dragSt.o.id); dragSt = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.stickers = true; commit(); down = null; return; }
     if (drag3) {
       drag3 = null; controls.enabled = true; cvs.style.cursor = 'move';
@@ -182,7 +213,7 @@ function initInteraction() {
     // a click on a layer opens its design; a click on a bare face keeps the section that is open
     if (layerId) setTab('design');
   });
-  cvs.addEventListener('pointercancel', () => { if (drag3) { drag3 = null; controls.enabled = true; } if (dragSt) { dragSt = null; controls.enabled = true; } down = null; });
+  cvs.addEventListener('pointercancel', () => { if (xform) endXform(); if (drag3) { drag3 = null; controls.enabled = true; } if (dragSt) { dragSt = null; controls.enabled = true; } down = null; });
   window.addEventListener('dragover', e => { if (isLibDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
   window.addEventListener('drop', e => {
     if (!isLibDrag(e)) return; e.preventDefault();
