@@ -41,15 +41,24 @@ function vecColors(srcId) {
 }
 const recolorCache = new Map(), recolorBusy = new Set();
 const hasRecolor = rc => rc && Object.entries(rc).some(([a, b]) => a !== b);
-/* the image to draw for src with its colours swapped; the original until the recoloured raster is ready */
-function artImg(srcId, rc) {
+/* a colour of a vector swapped for 'none' is taken out: that part is not printed, the paper or the layer under it shows */
+const NONE = 'none';
+/* what is done to a picture's colours: swapped or taken out (a vector), keyed out (any picture) */
+const hasColorEdits = T => hasRecolor(T?.recolor) || !!T?.keyout?.length;
+/* the image to draw for src with its colours swapped (a vector) and colours keyed out (keyout: [{ c, tol }]); the
+   original until the recoloured raster is ready */
+function artImg(srcId, rc, keyout = null) {
+  const im = vecImg(srcId, rc);
+  return keyout?.length && im ? keyImg(im, srcId + '|' + JSON.stringify(rc || {}), keyout) : im;
+}
+function vecImg(srcId, rc) {
   const base = getImg(srcId);
   if (!srcId || !vecOf[srcId] || !hasRecolor(rc) || !base) return base;
   const key = srcId + '|' + JSON.stringify(Object.entries(rc).filter(([a, b]) => a !== b).sort());
   if (recolorCache.has(key)) return recolorCache.get(key);
   if (!recolorBusy.has(key)) {
     recolorBusy.add(key);
-    const t = svgText(vecOf[srcId]).replace(VCOL, (m, pre, c) => pre + (rc[c.toLowerCase()] || c)), im = new Image();
+    const t = svgText(vecOf[srcId]).replace(VCOL, (m, pre, c) => { const v = rc[c.toLowerCase()] || c; return pre + (v === NONE ? 'transparent' : v); }), im = new Image();
     im.onload = () => {
       const c = document.createElement('canvas'); c.width = base.naturalWidth; c.height = base.naturalHeight; c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
       c.naturalWidth = c.width; c.naturalHeight = c.height;
@@ -62,4 +71,44 @@ function artImg(srcId, rc) {
   return base;
 }
 
-export { artImg, hasRecolor, normSvg, svgURL, vecColors, vecOf };
+/* a picture with colours keyed out: a pixel near a colour (within tol, 0…1 of the RGB distance) goes clear, with a
+   soft edge just past it so the cut does not look jagged; kept until the picture or the colours change */
+const keyCache = new Map(), SOFT = .06, KEY_MAX = 4096;
+const hexRGB = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+function keyImg(im, base, keyout) {
+  const key = base + '|' + JSON.stringify(keyout), w0 = im.naturalWidth || im.width, h0 = im.naturalHeight || im.height;
+  const got = keyCache.get(key); if (got?.im === im) return got.cv;
+  if (!w0 || !h0) return im;
+  const k = Math.min(1, KEY_MAX / Math.max(w0, h0)), cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(w0 * k)); cv.height = Math.max(1, Math.round(h0 * k));
+  const x = cv.getContext('2d', { willReadFrequently: true }); x.drawImage(im, 0, 0, cv.width, cv.height);
+  const d = x.getImageData(0, 0, cv.width, cv.height), p = d.data, keys = keyout.map(q => [...hexRGB(q.c), Math.max(0, q.tol ?? .15)]), R = 255 * Math.sqrt(3);
+  for (let i = 0; i < p.length; i += 4) {
+    if (!p[i + 3]) continue;
+    let a = 1;
+    for (const [r, g, b, tol] of keys) {
+      const t = (Math.hypot(p[i] - r, p[i + 1] - g, p[i + 2] - b) / R - tol) / SOFT;
+      if (t < 1) a = Math.min(a, Math.max(0, t));
+    }
+    if (a < 1) p[i + 3] = Math.round(p[i + 3] * a);
+  }
+  x.putImageData(d, 0, 0);
+  cv.naturalWidth = cv.width; cv.naturalHeight = cv.height;
+  if (keyCache.size > 24) keyCache.delete(keyCache.keys().next().value);
+  keyCache.set(key, { im, cv });
+  return cv;
+}
+
+/* ---------- actions ---------- */
+/* a picture's colour (of a vector) swapped (to '#rrggbb'), taken out (NONE) or back to its own (null); T: a layer or a sticker */
+function setVecColor(T, from, to) {
+  const rc = { ...(T.recolor || {}) };
+  if (!to || to === from) delete rc[from]; else rc[from] = to;
+  T.recolor = rc;
+}
+/* a colour keyed out of a picture (any picture: a photo's white background, say), its tolerance, or taken back */
+function addKeyout(T, c, tol = .15) { T.keyout = [...(T.keyout || []).filter(q => q.c !== c.toLowerCase()), { c: c.toLowerCase(), tol }]; }
+function setKeyoutTol(T, i, tol) { if (T.keyout?.[i]) T.keyout[i].tol = tol; }
+function removeKeyout(T, i) { T.keyout = (T.keyout || []).filter((_, j) => j !== i); if (!T.keyout.length) delete T.keyout; }
+
+export { NONE, addKeyout, artImg, hasColorEdits, hasRecolor, normSvg, removeKeyout, setKeyoutTol, setVecColor, svgURL, vecColors, vecOf };

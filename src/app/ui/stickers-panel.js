@@ -67,13 +67,13 @@ function renderStickers() {
       ${rangeField(st.kind === 'circle' ? 'Ширина (Ø), мм' : 'Ширина, мм', 'w', 5, 400, .5)}
       ${custom ? '' : rangeField('Высота, мм', 'h', 5, 400, .5)}
       ${st.kind === 'rect' ? rangeField('Скругление, мм', 'radius', 0, 60, .5) : ''}
-      ${custom ? `<div class="row"><button class="btn sm" id="stShape">${st.src ? 'Заменить форму…' : 'Загрузить форму…'}</button></div>${vecColorsHTML(st.src, st.recolor)}${rangeField('Белая окантовка, мм', 'outline', 0, 10, .1)}`
+      ${custom ? `<div class="row"><button class="btn sm" id="stShape">${st.src ? 'Заменить форму…' : 'Загрузить форму…'}</button></div>${vecColorsHTML(st)}${rangeField('Белая окантовка, мм', 'outline', 0, 10, .1)}`
         : `<div class="row"><span class="hint">Фон</span><input type="color" data-k="fill" aria-label="Цвет наклейки"><label class="check"><input type="checkbox" data-k="clear"> Без фона</label></div>
            <div class="row"><button class="btn sm" id="stBg">${st.bgSrc ? 'Заменить картинку фона…' : 'Картинка на фон…'}</button>${st.bgSrc ? '<button class="btn sm" id="stBgOff">Убрать</button>' : ''}</div>
            ${st.bgSrc ? rangeField('Зум фона, %', 'bgScale', 100, 400, 1, 100) + rangeField('Фон по X, %', 'bgX', -50, 50, 1, 100) + rangeField('Фон по Y, %', 'bgY', -50, 50, 1, 100) : ''}
            <div class="row"><span class="hint">Обводка</span><input type="color" data-k="stroke" aria-label="Цвет обводки"><span class="grow"></span></div>${rangeField('Обводка, мм', 'strokeW', 0, 10, .1)}
            <div class="row"><button class="btn sm" id="stImg">${st.src ? 'Заменить логотип…' : 'Логотип поверх фона…'}</button>${st.src ? '<button class="btn sm" id="stImgOff">Убрать</button>' : ''}</div>
-           ${st.src ? rangeField('Логотип, %', 'imgScale', 10, 100, 1, 100) + vecColorsHTML(st.src, st.recolor) : ''}`}
+           ${st.src ? rangeField('Логотип, %', 'imgScale', 10, 100, 1, 100) + vecColorsHTML(st) : ''}`}
       <textarea data-k="text" rows="1" aria-label="Текст наклейки" placeholder="Текст на наклейке"></textarea>
       <div class="grid2"><select data-k="font" aria-label="Шрифт">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
         <div class="row"><input type="color" data-k="textColor" aria-label="Цвет текста"><span class="hint">цвет текста</span></div></div>
@@ -103,7 +103,7 @@ function renderStickers() {
   pickInto($('#stBg'), 'Картинка на фон наклейки', 'bgSrc');
   $('#stImgOff') && ($('#stImgOff').onclick = () => { st.src = null; touchSticker(o, st); renderStickers(); commit(); });
   $('#stBgOff') && ($('#stBgOff').onclick = () => { st.bgSrc = null; touchSticker(o, st); renderStickers(); commit(); });
-  bindVecColors(sec, activeSticker, t => { const look = RT.get(o.id)?.stickerLook?.get(t.id); if (look) look.key = ''; touchSticker(o, t); });
+  bindVecColors(sec, activeSticker, t => { const look = RT.get(o.id)?.stickerLook?.get(t.id); if (look) look.key = ''; touchSticker(o, t); }, renderStickers);
 }
 
 /* ---------- the object's extras ---------- */

@@ -9,7 +9,7 @@ import { extraById, extraName, isPart } from '../core/extras.js';
 import { viewNet } from '../net/net-view.js';
 import { drawLayer, layerBox } from '../faces/render.js';
 import { openMenu } from './menu.js';
-import { hasRecolor, vecColors } from '../core/vector.js';
+import { NONE, addKeyout, hasColorEdits, hasRecolor, removeKeyout, setKeyoutTol, setVecColor, vecColors } from '../core/vector.js';
 import { allFonts, ensureFont } from '../core/fonts.js';
 import { RT, applyObjMaterials, markFace, ui } from '../scene/renderer.js';
 import { pickLayers, select } from '../core/selection.js';
@@ -145,7 +145,7 @@ function layerMods(o, L) {
   if (L.mask) m.push({ i: 'mask', t: 'Маска: ' + (MASKS[L.mask.kind] || '').toLowerCase(), to: '.cut' });
   if (L.clipTo) m.push({ i: 'clip', t: L.clipTo === 'panel' ? 'Обрезана по панели ленты' : 'Обрезана по краю грани', to: '.cut' });
   if (L.type === 'image' && L.tile) m.push({ i: 'tile', t: 'Повторяется узором', to: '[data-k="tile"]' });
-  if (L.type === 'image' && hasRecolor(L.recolor)) m.push({ i: 'recolor', t: 'Цвета вектора заменены', to: '.vcols' });
+  if (L.type === 'image' && hasColorEdits(L)) m.push({ i: 'recolor', t: Object.values(L.recolor || {}).includes(NONE) || L.keyout?.length ? 'Цвета заменены или убраны' : 'Цвета вектора заменены', to: L.keyout?.length ? '.kos' : '.vcols' });
   if (L.grad) m.push({ i: 'grad', t: L.grad.kind === 'radial' ? 'Радиальный градиент' : 'Линейный градиент', to: '#gradKind' });
   if (L.type === 'text' && Math.abs(L.arc || 0) >= 1) m.push({ i: 'arc', t: `По дуге ${Math.round(L.arc)}°`, to: '[data-k="arc"]' });
   if (L.wrap) m.push({ i: 'wrap', t: 'Переходит через рёбра', to: '[data-k="wrap"]' });
@@ -296,7 +296,7 @@ function renderLayerProps() {
     const dpi = imageDpi(o, L);
     html += `<div class="row"><button class="btn sm" id="imgReplace">Заменить…</button><button class="btn sm" id="imgCover">Залить грань</button><button class="btn sm" id="imgFit">Вписать</button></div>
       <div class="row"><label class="check"><input type="checkbox" data-k="flipX"> Отразить ↔</label><label class="check"><input type="checkbox" data-k="flipY"> Отразить ↕</label></div>
-      ${vecColorsHTML(L.src, L.recolor)}
+      ${vecColorsHTML(L)}
       <label class="check"><input type="checkbox" data-k="tile"> Повторять узором</label>
       ${rangeField(L.tile ? 'Размер плитки, %' : 'Ширина, %', 'w', 1, 400, .1, 100)}
       ${dpi != null ? `<p class="hint">При печати этого размера: <b class="mono">${dpi} dpi</b>${dpi < 150 ? ' — мало для офсета, нужно от 300 dpi' : dpi < 300 ? ' — допустимо, для офсета лучше 300 dpi' : ' — подходит для печати'}.</p>` : ''}`;
@@ -328,7 +328,7 @@ function renderLayerProps() {
   $('#delLayerBtn').onclick = () => deleteLayer(L.id);
   if (L.type === 'image') {
     $('#imgReplace').onclick = () => pickImage(async file => { const r = await importImageFile(file); const L = activeLayer(); L.src = r.id; L.aspect = r.aspect; L.recolor = {}; markFace(o, sel.face); renderLayers(); renderLayerProps(); commit(); });
-    bindVecColors(sec, activeLayer, () => { markFace(o, sel.face); ui.layers = true; });
+    bindVecColors(sec, activeLayer, () => { markFace(o, sel.face); ui.layers = true; }, renderLayerProps);
     $('#imgCover').onclick = () => fitImage(true);
     $('#imgFit').onclick = () => fitImage(false);
   }
@@ -413,25 +413,54 @@ async function addImageToFace(file, obj = activeObj(), face = sel.face, at = nul
 let pickCb = null;
 function pickImage(cb) { pickCb = cb; $('#imgInput').value = ''; $('#imgInput').click(); }
 /* ---------- vector colours: one row per colour of the SVG, swapped per layer / sticker ---------- */
-function vecColorsHTML(srcId, rc) {
-  const cols = vecColors(srcId); if (!cols.length) return '';
-  const shown = cols.slice(0, 16);
-  return `<div class="field wide"><span class="fl">Цвета вектора</span><div class="vcols">${shown.map(c => `<label class="vc" title="${c}"><span class="sw" style="background:${c}"></span>→<input type="color" data-vc="${c}" value="${rc?.[c] || c}" aria-label="Заменить ${c}"></label>`).join('')}</div></div>
-    <div class="row"><span class="hint">Всё одним цветом</span><input type="color" id="vcAll" value="${rc?.[cols[0]] || cols[0]}" aria-label="Перекрасить всё"><button class="btn sm" id="vcReset" ${hasRecolor(rc) ? '' : 'disabled'}>Исходные цвета</button></div>
+/* the colours of a picture (a layer's or a sticker's, T): a vector's colours swapped or taken out one by one, and for
+   a raster (a photo, a PNG logo) colours keyed out by a picker; what is taken out is not printed */
+function vecColorsHTML(T) {
+  const cols = vecColors(T.src), rc = T.recolor || {};
+  let html = '';
+  if (cols.length) {
+    const shown = cols.slice(0, 16);
+    html += `<div class="field wide"><span class="fl">Цвета вектора</span><div class="vcols">${shown.map(c => {
+      const off = rc[c] === NONE;
+      return `<span class="vc ${off ? 'off' : ''}" title="${c}"><span class="sw" style="background:${c}"></span>→<input type="color" data-vc="${c}" value="${off ? c : rc[c] || c}" ${off ? 'disabled' : ''} aria-label="Заменить ${c}"><button class="vx" data-vx="${c}" aria-pressed="${off}" title="${off ? 'Вернуть цвет' : 'Убрать цвет: не печатается, видно бумагу или слой ниже'}">${ICON.noColor}</button></span>`;
+    }).join('')}</div></div>
+    <div class="row"><span class="hint">Всё одним цветом</span><input type="color" id="vcAll" value="${rc[cols[0]] && rc[cols[0]] !== NONE ? rc[cols[0]] : cols[0]}" aria-label="Перекрасить всё"><button class="btn sm" id="vcReset" ${hasRecolor(rc) ? '' : 'disabled'}>Исходные цвета</button></div>
     ${cols.length > shown.length ? `<p class="hint">Показаны 16 главных цветов из ${cols.length}; «Всё одним цветом» перекрашивает все.</p>` : ''}`;
+  } else if (T.src) {
+    const ko = T.keyout || [];
+    html += `<div class="field wide"><span class="fl">Убрать цвет</span><div class="kos">${ko.map((q, i) => `<div class="ko"><span class="sw" style="background:${q.c}" title="${q.c}"></span>
+      <input type="range" min="0" max="60" step="1" value="${Math.round(q.tol * 100)}" data-ko="${i}" aria-label="Допуск для ${q.c}" title="Допуск: захватывает близкие оттенки"><span class="mono kt">${Math.round(q.tol * 100)}%</span>
+      <button class="vx" data-kodel="${i}" title="Вернуть цвет">✕</button></div>`).join('') || '<span class="hint">Цвет, убранный с картинки, не печатается: видно бумагу или слой ниже.</span>'}</div></div>
+    <div class="row">${'EyeDropper' in window ? `<button class="btn sm" id="koPick" title="Клик по цвету в любом месте экрана: на модели или в окне грани">${ICON.picker}Пипетка</button>` : ''}<button class="btn sm" id="koWhite">Белый фон</button><input type="color" id="koAdd" value="#ffffff" title="Выбрать цвет, который убрать" aria-label="Убрать цвет"></div>`;
+  }
+  return html;
 }
-function bindVecColors(root, getT, onChange) {
+/* hooks up vecColorsHTML: onChange(T) shows the change, redraw() draws the panel again (a colour added or taken back) */
+function bindVecColors(root, getT, onChange, redraw = () => {}) {
   const cols = () => vecColors(getT()?.src), set = (rc, done) => { const t = getT(); if (!t) return; t.recolor = rc; onChange(t); if (done) commit(); };
+  const edit = (fn, again = false) => { const t = getT(); if (!t) return; fn(t); onChange(t); commit(); if (again) redraw(); };
   $$('[data-vc]', root).forEach(inp => {
-    const go = done => { const t = getT(); const rc = { ...(t.recolor || {}) }; if (inp.value.toLowerCase() === inp.dataset.vc) delete rc[inp.dataset.vc]; else rc[inp.dataset.vc] = inp.value.toLowerCase(); set(rc, done); };
+    const go = done => { const t = getT(); if (!t) return; setVecColor(t, inp.dataset.vc, inp.value.toLowerCase()); onChange(t); if (done) commit(); };
     inp.addEventListener('input', () => go(false)); inp.addEventListener('change', () => go(true));
   });
+  $$('[data-vx]', root).forEach(b => b.onclick = () => edit(t => setVecColor(t, b.dataset.vx, t.recolor?.[b.dataset.vx] === NONE ? null : NONE), true));
   const all = $('#vcAll', root);
   if (all) {
     const go = done => { const rc = Object.fromEntries(cols().map(c => [c, all.value.toLowerCase()])); set(rc, done); $$('[data-vc]', root).forEach(i => { i.value = all.value; }); };
-    all.addEventListener('input', () => go(false)); all.addEventListener('change', () => { go(true); });
+    all.addEventListener('input', () => go(false)); all.addEventListener('change', () => { go(true); redraw(); });
   }
-  const rs = $('#vcReset', root); if (rs) rs.onclick = () => { set({}, true); $$('[data-vc]', root).forEach(i => { i.value = i.dataset.vc; }); rs.disabled = true; };
+  const rs = $('#vcReset', root); if (rs) rs.onclick = () => { set({}, true); redraw(); };
+  // keyed-out colours of a raster
+  const add = c => edit(t => addKeyout(t, c), true);
+  $('#koWhite', root) && ($('#koWhite', root).onclick = () => add('#ffffff'));
+  $('#koAdd', root) && $('#koAdd', root).addEventListener('change', e => add(e.target.value));
+  $('#koPick', root) && ($('#koPick', root).onclick = async () => { try { const r = await new EyeDropper().open(); if (r?.sRGBHex) add(r.sRGBHex.startsWith('#') ? r.sRGBHex : '#' + r.sRGBHex.match(/\d+/g).slice(0, 3).map(v => (+v).toString(16).padStart(2, '0')).join('')); } catch { /* cancelled */ } });
+  $$('[data-ko]', root).forEach(inp => {
+    const i = +inp.dataset.ko, out = inp.nextElementSibling;
+    inp.addEventListener('input', () => { const t = getT(); if (!t) return; setKeyoutTol(t, i, +inp.value / 100); out.textContent = inp.value + '%'; onChange(t); });
+    inp.addEventListener('change', () => commit());
+  });
+  $$('[data-kodel]', root).forEach(b => b.onclick = () => edit(t => removeKeyout(t, +b.dataset.kodel), true));
 }
 function renderFonts() {
   $('#fontList').innerHTML = state.fonts.map(f => `<span class="chip" style="font-family:'${esc(f.name)}'">${esc(f.name)}</span>`).join('');

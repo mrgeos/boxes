@@ -210,6 +210,21 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .vcols{display:flex;flex-wrap:wrap;gap:6px}
 .vc{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--muted)}
 .vc input[type=color]{width:26px;height:22px;padding:0}
+.vc{border:1px solid var(--line);border-radius:5px;padding:2px 2px 2px 4px}
+.vc .sw{width:14px;height:14px;border-radius:3px;border:1px solid var(--line)}
+.vx{width:20px;height:20px;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:3px;display:flex;align-items:center;justify-content:center;padding:0;font-size:11px}
+.vx svg{width:13px;height:13px}
+.vx:hover{background:var(--field);color:var(--fg)}
+.vx[aria-pressed=true]{color:var(--accent)}
+/* a colour taken out: shown on the checkerboard, crossed */
+.vc.off .sw{background:repeating-conic-gradient(var(--checker-a) 0 25%,var(--checker-b) 0 50%) 50% / 6px 6px !important}
+.vc.off input[type=color]{opacity:.35}
+.kos{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ko{display:flex;align-items:center;gap:6px}
+.ko .sw{width:18px;height:18px;border-radius:4px;border:1px solid var(--line);flex:none}
+.ko input[type=range]{flex:1;min-width:0}
+.ko .kt{font-size:11px;color:var(--muted);width:30px;text-align:right}
+.row .btn svg{width:13px;height:13px;margin-right:4px;vertical-align:-2px}
 .layer .acts{display:flex;gap:0}
 .layer .acts button{width:22px;height:22px;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;padding:0}
 .layer .acts button:hover{background:var(--panel);color:var(--fg)}

@@ -132,7 +132,7 @@ function drawLayer(ctx, L, W, H, paint = null, alpha = null, op = null) {
   // a mask shape: in the layer's box, turned with it
   if (L.mask) { ctx.beginPath(); maskPath(ctx, L.mask, w, h); ctx.clip(); }
   if (L.type === 'image') {
-    let im = artImg(L.src, L.recolor);
+    let im = artImg(L.src, L.recolor, L.keyout);
     // a cropped image: only its part is drawn (cut out once into a canvas of its own)
     if (im && cropped(L)) im = cropImg(im, L.crop);
     if (im) {
