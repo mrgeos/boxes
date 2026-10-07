@@ -7,6 +7,7 @@
     "build": "node build.mjs",
     "check": "eslint src/app && node test/check-modules.mjs",
     "test": "npm run check && node build.mjs && node test/run.mjs",
+    "prepush": "npm run check && node build.mjs --check && node test/run.mjs",
     "snapshots": "node test/snapshots.mjs"
   },
   "devDependencies": {

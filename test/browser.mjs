@@ -4,7 +4,6 @@ import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
 
 export const PAGE = 'file://' + fileURLToPath(new URL('../box-studio-3d.html', import.meta.url));
-export const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 
 export async function launch() {
   // Chromium из Playwright (npx playwright install chromium) или указанный в PW_CHROMIUM
