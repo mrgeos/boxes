@@ -3,20 +3,23 @@ import { $, DEG } from '../core/util.js';
 import { activeLayer, activeObj, sel } from '../core/state.js';
 import { facePx } from '../core/model.js';
 import { fontStr } from '../core/fonts.js';
-import { layerBox } from '../faces/render.js';
+import { layerBox, setTextCaret, textIndexAt } from '../faces/render.js';
+import { RT, cvs, markFace } from '../scene/renderer.js';
+import { pick } from '../scene/interaction.js';
 import { invalidate } from '../scene/camera.js';
 import { boxOnScreen } from '../scene/sel-box.js';
 import { deleteLayers, setLayerSelection, setText } from '../core/layers.js';
 import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
-import { ed, edState } from './face-editor.js';
+import { ed, edPoint, edState, hitLayer } from './face-editor.js';
 import { renderFaceTabs, renderLayerProps, renderLayers } from './face-panel.js';
 
-/* A see-through textarea is laid exactly over the text layer, in the layer's own pixels and turned, scaled and
-   put in perspective (CSS matrix3d) onto where the layer is on the screen: in the face window, or on the model
-   (the corners of the selection frame there). Its letters are invisible; what shows is the layer itself, drawn
-   anew at each key, and the textarea gives the caret and the selection. Esc, Ctrl+Enter or a click elsewhere
-   ends it; a text left empty is removed. */
+/* The keys go into a textarea laid over the text layer (in perspective, CSS matrix3d, onto where the layer is on
+   the screen: the face window, or the corners of the selection frame on the model) — it is there for the keyboard
+   and the input of other alphabets only, invisible and not taking the mouse. What shows is the print itself, drawn
+   anew at each key with the caret and the selection on it (faces/render.js), so they sit right on any surface,
+   round walls included. A click on the text puts the caret there, a drag over it selects; a drag elsewhere turns
+   the camera and the typing goes on; a click elsewhere, Esc or Ctrl+Enter ends it. A text left empty is removed. */
 let cur = null;   // { o, k, L, where: '3d' | '2d', raf, before }
 const textEditing = () => !!cur;
 
@@ -43,7 +46,6 @@ function place() {
   ta.style.visibility = '';
   ta.style.font = fontStr(L, fs); ta.style.lineHeight = L.lh * fs + 'px'; ta.style.letterSpacing = (L.ls || 0) * fs + 'px';
   ta.style.textAlign = L.align || 'center'; ta.style.width = w + 'px'; ta.style.height = h + 'px'; ta.style.padding = `0 ${pad}px`;
-  ta.style.caretColor = L.color && L.color !== '#ffffff' ? L.color : '#0a7aa1';
   const [a, b, c, d, e, f, g, hh] = squareToQuad(q);
   // the element's px → the unit square → the screen; the padding sits outside the layer's box
   ta.style.transform = `matrix3d(${a / w},${d / w},0,${g / w},${b / h},${e / h},0,${hh / h},0,0,1,0,${c},${f},0,1) translate(${-pad}px,0)`;
@@ -60,12 +62,23 @@ function startTextEdit(L, where = '3d', all = false) {
   place(); ta.focus();
   if (all) ta.select(); else ta.setSelectionRange(ta.value.length, ta.value.length);
   cur.raf = requestAnimationFrame(loop);
-  invalidate();
+  cur.blink = setInterval(() => { if (cur) { cur.on = !cur.on; showCaret(true); } }, 530);
+  showCaret(true);
+}
+/* the caret and selection onto the print (only when they changed, or for the blink) */
+function showCaret(force = false) {
+  if (!cur) return;
+  const ta = $('#textEdit'), c = { id: cur.L.id, a: ta.selectionStart, b: ta.selectionEnd, on: cur.on !== false };
+  const key = [c.a, c.b, c.on].join();
+  if (!force && key === cur.caretKey) return;
+  if (key.split(',').slice(0, 2).join() !== (cur.caretKey || '').split(',').slice(0, 2).join()) { cur.on = c.on = true; }
+  cur.caretKey = [c.a, c.b, c.on].join();
+  setTextCaret(c); markFace(cur.o, cur.k);
 }
 function stopTextEdit(save = true) {
   if (!cur) return;
   const { o, k, L, before, raf } = cur, ta = $('#textEdit');
-  cur = null; cancelAnimationFrame(raf);
+  clearInterval(cur.blink); cur = null; cancelAnimationFrame(raf); setTextCaret(null); markFace(o, k);
   ta.hidden = true; ta.blur();
   if (!save) setText(o, k, L, before);
   // a text left empty goes away, as in Figma
@@ -84,6 +97,54 @@ function initTextEdit() {
     if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); stopTextEdit(); }
   });
   ta.addEventListener('blur', () => { if (cur) stopTextEdit(); });
+  document.addEventListener('selectionchange', () => showCaret());
+  ta.addEventListener('keyup', () => showCaret());
+  // the mouse over the model and the face window while typing
+  const press = (e, where) => {
+    if (!cur || e.button !== 0) return;
+    const i = indexAt(e, where);
+    if (i == null) { cur.press = { x: e.clientX, y: e.clientY }; return; }
+    // on the text: the caret goes there (Shift: the selection grows to it), a drag selects
+    e.stopImmediatePropagation(); e.preventDefault();
+    const ta = $('#textEdit'), anchor = e.shiftKey ? ta.selectionStart : i;
+    cur.drag = { anchor, target: e.currentTarget }; e.currentTarget.setPointerCapture(e.pointerId);
+    ta.setSelectionRange(Math.min(anchor, i), Math.max(anchor, i)); showCaret();
+  };
+  for (const [el, where] of [[cvs, '3d'], [ed, '2d']]) {
+    el.addEventListener('pointerdown', e => press(e, where), true);
+    // the textarea keeps the keyboard while the camera turns
+    el.addEventListener('mousedown', e => { if (cur) e.preventDefault(); }, true);
+    el.addEventListener('pointermove', e => {
+      if (!cur?.drag) return;
+      const i = indexAt(e, where, true); if (i == null) return;
+      const a = cur.drag.anchor; $('#textEdit').setSelectionRange(Math.min(a, i), Math.max(a, i), i < a ? 'backward' : 'forward'); showCaret();
+    });
+    // a double click on the text selects a word
+    el.addEventListener('dblclick', e => {
+      if (!cur) return;
+      const i = indexAt(e, where); if (i == null) return;
+      e.stopImmediatePropagation(); e.preventDefault();
+      const t = cur.L.text, w = ch => /[\p{L}\p{N}_]/u.test(ch || '');
+      let a = i, b = i; while (a > 0 && w(t[a - 1])) a--; while (b < t.length && w(t[b])) b++;
+      $('#textEdit').setSelectionRange(a, b); showCaret();
+    }, true);
+    el.addEventListener('pointerup', e => {
+      if (!cur) return;
+      if (cur.drag) { cur.drag = null; e.stopImmediatePropagation(); return; }
+      // a click (not a drag) away from the text ends the typing
+      const p = cur.press; cur.press = null;
+      if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) < 5) stopTextEdit();
+    }, true);
+  }
+}
+/* the string index under the pointer, if it is on the text being typed (any: anywhere on its face) */
+function indexAt(e, where, any = false) {
+  const { o, k, L } = cur, [W, H] = facePx(o, k);
+  let p = null;
+  if (where === '2d') { const [mx, my] = edPoint(e); p = [mx / edState.k, my / edState.k]; }
+  else { const h = pick(e.clientX, e.clientY, RT.get(o.id)?.group); if (h?.face === k && h.uv && !h.wall) p = [h.uv.x * W, (1 - h.uv.y) * H]; }
+  if (!p || (!any && !hitLayer({ layers: [L] }, W, H, p[0], p[1]))) return null;
+  return textIndexAt(L, W, H, p[0], p[1]);
 }
 
 export { initTextEdit, startTextEdit, stopTextEdit, textEditing };

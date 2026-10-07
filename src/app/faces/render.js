@@ -1,5 +1,5 @@
 // Печать на гранях: слои, текст, отделка, карты материалов
-import { DEG, clamp } from '../core/util.js';
+import { DEG, clamp, luminance } from '../core/util.js';
 import { FINISHES, FOILS, PET_PRINT, isFoil } from '../core/constants.js';
 import { faceKeys, faceMM, isClearFace, loopAxis, netLayout, outerKeys } from '../core/model.js';
 import { getImg } from '../core/assets.js';
@@ -129,8 +129,48 @@ function drawLayer(ctx, L, W, H, paint = null, alpha = null, op = null) {
     // letterSpacing adds trailing space after the last glyph; nudge centred text back
     const nudge = hasLS && L.align === 'center' ? L.ls * m.fs / 2 : 0;
     m.lines.forEach((ln, i) => ctx.fillText(ln, ax + nudge, -m.h / 2 + m.fs * L.lh * (i + .5)));
+    // the text being typed: its selection and caret, drawn on the print itself so they sit right on any surface
+    if (!paint && caret?.id === L.id) drawCaret(ctx, L, m);
   }
   ctx.restore();
+}
+/* the caret of the text being typed: { id, a, b (selection, string indices), on (shown in this blink) } */
+let caret = null;
+function setTextCaret(c) { caret = c; }
+/* where each line of a text starts (x) and its middle (y), in the layer's own px; ctx has the text's font set */
+function lineSpots(ctx, L, m) {
+  const nudge = hasLS && L.align === 'center' ? L.ls * m.fs / 2 : 0;
+  return m.lines.map((ln, i) => {
+    const lw = ctx.measureText(ln).width;
+    return { ln, x: L.align === 'left' ? -m.w / 2 : L.align === 'right' ? m.w / 2 - lw : nudge - lw / 2, y: -m.h / 2 + m.fs * L.lh * (i + .5) };
+  });
+}
+const lineCol = (lines, i) => { let n = i; for (let l = 0; l < lines.length; l++) { if (n <= lines[l].length) return [l, n]; n -= lines[l].length + 1; } return [lines.length - 1, lines.at(-1).length]; };
+function drawCaret(ctx, L, m) {
+  const spots = lineSpots(ctx, L, m), lh = m.fs * L.lh, at = ([l, c]) => spots[l].x + ctx.measureText(spots[l].ln.slice(0, c)).width;
+  const a = lineCol(m.lines, Math.min(caret.a, caret.b)), b = lineCol(m.lines, Math.max(caret.a, caret.b));
+  ctx.save(); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  if (caret.a !== caret.b) {
+    ctx.fillStyle = 'rgba(10,122,161,.35)';
+    for (let l = a[0]; l <= b[0]; l++) {
+      const x0 = l === a[0] ? at(a) : spots[l].x, x1 = l === b[0] ? at(b) : spots[l].x + ctx.measureText(spots[l].ln).width + m.fs * .25;
+      ctx.fillRect(x0, spots[l].y - lh / 2, Math.max(1, x1 - x0), lh);
+    }
+  } else if (caret.on) {
+    const p = lineCol(m.lines, caret.a), w = Math.max(1.5, m.fs * .06);
+    ctx.fillStyle = luminance(L.color) > .6 ? '#0a7aa1' : L.color; ctx.fillRect(at(p) - w / 2, spots[p[0]].y - m.fs * .55, w, m.fs * 1.1);
+  }
+  ctx.restore();
+}
+/* the string index nearest to the point (px, py) of a W × H face, in text layer L */
+function textIndexAt(L, W, H, px, py) {
+  const m = textMetrics(L, H), r = -(L.rot || 0) * DEG, dx = px - L.x * W, dy = py - L.y * H;
+  const lx = dx * Math.cos(r) - dy * Math.sin(r), ly = dx * Math.sin(r) + dy * Math.cos(r);
+  mctx.font = fontStr(L, m.fs); if (hasLS) mctx.letterSpacing = (L.ls * m.fs) + 'px';
+  const spots = lineSpots(mctx, L, m), l = clamp(Math.floor((ly + m.h / 2) / (m.fs * L.lh)), 0, m.lines.length - 1);
+  let best = 0, bd = Infinity;
+  for (let c = 0; c <= spots[l].ln.length; c++) { const d = Math.abs(spots[l].x + mctx.measureText(spots[l].ln.slice(0, c)).width - lx); if (d < bd) { bd = d; best = c; } }
+  return m.lines.slice(0, l).reduce((t, s) => t + s.length + 1, 0) + best;
 }
 function renderFace(o, k) {
   const rt = RT.get(o.id); if (!rt || !faceKeys(o).includes(k)) return;
@@ -273,4 +313,4 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops, draw) {
 }
 function setSkipStickers(v) { skipStickers = v; }
 
-export { drawLayer, drawNetPanel, layerBox, renderFace, setSkipStickers, tmp };
+export { drawLayer, drawNetPanel, layerBox, renderFace, setTextCaret, textIndexAt, setSkipStickers, tmp };
