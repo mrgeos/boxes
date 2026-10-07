@@ -18,7 +18,7 @@ import { setTab } from '../ui/tabs.js';
 import { handleAt } from './sel-box.js';
 import { startTextEdit } from '../ui/text-edit.js';
 import { rotateItem, scaleItem, sizeOf } from '../core/transform.js';
-import { editDrag, editFrom, editMode, editRects, setEditMode } from '../core/mask.js';
+import { editCursor, editDrag, editFrom, editMode, editRects, setEditMode } from '../core/mask.js';
 import { layerBox } from '../faces/render.js';
 import { tool } from '../ui/action-bar.js';
 import { placeLibImage } from '../ui/library-panel.js';
@@ -127,7 +127,7 @@ function startEdit(e, handle) {
   if (!at) return false;
   const [W, H] = facePx(o, k);
   xform = { edit: editMode(), handle, it: L, o, face: k, from, at, box: layerBox(L, W, H) };
-  controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = handle === 'move' ? 'grabbing' : 'nwse-resize';
+  controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = handle === 'move' ? 'grabbing' : editCursor(handle);
   return true;
 }
 /* is the pointer inside the frame being edited? */
@@ -263,7 +263,7 @@ function initInteraction() {
     if (xform) { dragXform(e); return; }
     if (e.buttons || e.timeStamp - hoverT < 50 || tool() !== 'select') return; hoverT = e.timeStamp;
     const g = handleAt(e.clientX, e.clientY);
-    if (g) { cvs.style.cursor = g.mode === 'rot' ? 'grab' : 'nwse-resize'; return; }
+    if (g) { cvs.style.cursor = g.mode === 'rot' ? 'grab' : g.mode === 'edit' ? editCursor(g.idx) : 'nwse-resize'; return; }
     const h = pick(e.clientX, e.clientY); let cur = 'grab';
     if (h?.face) {
       cur = 'pointer';

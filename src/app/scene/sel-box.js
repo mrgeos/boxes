@@ -6,7 +6,7 @@ import { faceKeys, faceMM, facePx, loopAxis } from '../core/model.js';
 import { activeSticker, placementsFor, stickerSize } from '../stickers/placement.js';
 import { apply, layerMM, layerReach } from '../faces/wrap.js';
 import { RT, camera, cvs, scene, world } from './renderer.js';
-import { editMode, editRects } from '../core/mask.js';
+import { editHandles, editMode, editRects } from '../core/mask.js';
 import { boundsOf, selectedLayers } from '../core/layers.js';
 import { tool } from '../ui/action-bar.js';
 import { recording } from './camera.js';
@@ -100,11 +100,12 @@ const attached = x => { while (x.parent) x = x.parent; return x === scene; };
 
 let handles = [];   // [{ mode: 'scale' | 'rot' | 'center' | 'corner', mesh, p }] — 'center' and 'corner' are not drawn
 const dots = {};
-/* the picture of a handle: a white square (scale) or a white dot (turn) with the accent outline, a fixed size on screen */
+/* the picture of a handle: a white square (scale) or a white dot (turn) with the accent outline, a fixed size on screen;
+   in crop or mask mode (edit) a solid square in the accent */
 function dotMat(mode) {
   if (dots[mode]) return dots[mode];
   const c = document.createElement('canvas'); c.width = c.height = 32;
-  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.strokeStyle = '#0a7aa1'; x.lineWidth = 4; x.beginPath();
+  const x = c.getContext('2d'); x.fillStyle = mode === 'edit' ? '#0a7aa1' : '#fff'; x.strokeStyle = '#0a7aa1'; x.lineWidth = 4; x.beginPath();
   if (mode === 'rot') x.arc(16, 16, 12, 0, Math.PI * 2); else x.rect(5, 5, 22, 22);
   x.fill(); x.stroke();
   return dots[mode] = new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), size: mode === 'rot' ? 13 : 11, sizeAttenuation: false, transparent: true, alphaTest: .3 });
@@ -168,7 +169,7 @@ function syncSelBox() {
   if (er) {
     // crop or mask mode: the frame being edited has handles at its corners, the one round it is dashed
     const out = box(er.outer); out.forEach((c, i) => { dashed.add(strokes.length); run(...c, ...out[(i + 1) % 4]); });
-    corners.forEach((c, i) => { const h = locate(c, true); if (h) handles.push({ mode: 'edit', idx: i, ...h }); });
+    editHandles(er, corners).forEach((c, i) => { const h = locate(c, true); if (h) handles.push({ mode: 'edit', idx: i, ...h }); });
     const c = locate([0, 0], true); if (c) handles.push({ mode: 'center', ...c });
   } else if (grips) {
     // scale at the corners, turn on a stalk over the top edge; where that is off the model (past the edge of the
@@ -222,7 +223,7 @@ function syncSelBox() {
   for (const [m, pts] of segs) m.add(keep(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), mat)));
   for (const [m, pts] of ghosts) m.add(keep(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), ghostMat)));
   showOff(off && (t.st ? 'sticker' : sel.face === 'sleeve' || sel.face === 'carry' ? 'band' : 'layer'));
-  for (const h of handles) if (h.mode === 'rot' || h.mode === 'scale' || h.mode === 'edit') h.mesh.add(keep(new THREE.Points(new THREE.BufferGeometry().setFromPoints([h.p]), dotMat(h.mode === 'rot' ? 'rot' : 'scale'))));
+  for (const h of handles) if (h.mode === 'rot' || h.mode === 'scale' || h.mode === 'edit') h.mesh.add(keep(new THREE.Points(new THREE.BufferGeometry().setFromPoints([h.p]), dotMat(h.mode))));
   return true;
 }
 /* where a handle is on the screen (client px) and whether it is in sight */

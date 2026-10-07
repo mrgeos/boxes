@@ -8,7 +8,7 @@ import { faceWindow, windowPath } from '../carriers/box.js';
 import { CARRY_PANEL, carryDims, carryOn, carrySheet } from '../carriers/carry.js';
 import { sleeveDims, sleeveOn, sleevePanelLabel, sleeveSheet } from '../carriers/sleeve.js';
 import { drawLayer, layerBox } from '../faces/render.js';
-import { clipRect, editDrag, editFrom, editMode, editRects, maskPath, setEditMode, uncropped } from '../core/mask.js';
+import { clipRect, editCursor, editDrag, editFrom, editHandles, editMode, editRects, maskPath, setEditMode, uncropped } from '../core/mask.js';
 import { renderLayerProps } from './face-panel.js';
 import { placementsFor } from '../stickers/placement.js';
 import { drawSticker } from '../stickers/film.js';
@@ -165,9 +165,15 @@ function drawEditor() {
       c.restore();
       c.strokeStyle = accentCss; c.lineWidth = 1; c.setLineDash([4, 3]); poly(outer); c.stroke(); c.setLineDash([]);
       c.lineWidth = 1.5; poly(inner); c.stroke();
-      c.fillStyle = '#fff';
-      for (const p of inner) { c.beginPath(); c.rect(p[0] - 4, p[1] - 4, 8, 8); c.fill(); c.stroke(); }
-      edState.handles = { edit: mode, corners: inner, center: [cx, cy], box: [w, h] };
+      // the handles are solid in the frame's colour: corners square, the middles of the sides short bars along them
+      const hs = editHandles(er, inner);
+      c.fillStyle = accentCss;
+      hs.forEach((p, i) => {
+        c.save(); c.translate(...p); c.rotate(a);
+        if (i < 4) c.fillRect(-4.5, -4.5, 9, 9); else if (i % 2) c.fillRect(-2.5, -8, 5, 16); else c.fillRect(-8, -2.5, 16, 5);
+        c.restore();
+      });
+      edState.handles = { edit: mode, corners: inner, grips: hs, center: [cx, cy], box: [w, h] };
       return;
     }
     c.strokeStyle = accentCss; c.lineWidth = 1.5; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); c.stroke();
@@ -219,7 +225,7 @@ function initFaceEditor() {
     if (L && hd?.edit) {
       // crop or mask mode: a corner resizes the frame, inside it moves (the picture under the crop frame, the mask
       // over the layer); a press elsewhere ends the mode
-      const i = hd.corners.findIndex(p => Math.hypot(mx - p[0], my - p[1]) < 9), inside = inPoly([mx, my], hd.corners);
+      const i = hd.grips.findIndex(p => Math.hypot(mx - p[0], my - p[1]) < 9), inside = inPoly([mx, my], hd.corners);
       if (i >= 0 || inside) {
         ed.setPointerCapture(e.pointerId);
         edState.drag = { mode: 'edit', edit: hd.edit, handle: i >= 0 ? i : 'move', L, mx, my, from: editFrom(L), box: hd.box };
@@ -267,7 +273,8 @@ function initFaceEditor() {
       const f = activeFaceData(); if (!f) return;
       const [mx, my] = edPoint(e), hd = edState.handles;
       let cur = 'default';
-      if (hd?.edit) cur = hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9) ? 'nwse-resize' : inPoly([mx, my], hd.corners) ? 'move' : 'default';
+      const gi = hd?.edit ? hd.grips.findIndex(p => Math.hypot(mx - p[0], my - p[1]) < 9) : -1;
+      if (hd?.edit) cur = gi >= 0 ? editCursor(gi) : inPoly([mx, my], hd.corners) ? 'move' : 'default';
       else if (hd && Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < 9) cur = 'grab';
       else if (hd && hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9)) cur = 'nwse-resize';
       else if (hitLayer(f, edState.W, edState.H, mx / edState.k, my / edState.k)) cur = 'move';

@@ -92,13 +92,20 @@ function editRects(mode, L, W, H, box) {
   if (mode === 'crop') {
     // in the picture's own px: a flipped picture shows them flipped (flip)
     const c = cropOf(L), fw = w / c.w, fh = h / c.h;
-    return { flip: [L.flipX ? -1 : 1, L.flipY ? -1 : 1], inner: [-w / 2, -h / 2, w / 2, h / 2], outer: [-w / 2 - c.x * fw, -h / 2 - c.y * fh, -w / 2 - c.x * fw + fw, -h / 2 - c.y * fh + fh] };
+    return { flip: [L.flipX ? -1 : 1, L.flipY ? -1 : 1], sides: true, inner: [-w / 2, -h / 2, w / 2, h / 2], outer: [-w / 2 - c.x * fw, -h / 2 - c.y * fh, -w / 2 - c.x * fw + fw, -h / 2 - c.y * fh + fh] };
   }
   const m = L.mask; if (!m) return null;
-  return { flip: [1, 1], inner: [(m.x - m.w / 2) * w, (m.y - m.h / 2) * h, (m.x + m.w / 2) * w, (m.y + m.h / 2) * h], outer: [-w / 2, -h / 2, w / 2, h / 2] };
+  return { flip: [1, 1], sides: m.kind === 'rect', inner: [(m.x - m.w / 2) * w, (m.y - m.h / 2) * h, (m.x + m.w / 2) * w, (m.y + m.h / 2) * h], outer: [-w / 2, -h / 2, w / 2, h / 2] };
 }
+/* the cursor over edit handle i */
+const editCursor = i => i < 4 ? 'nwse-resize' : i % 2 ? 'ew-resize' : 'ns-resize';
+/* the frame's handles from its corners (top-left, top-right, bottom-right, bottom-left): the corners, then, when the
+   frame has them (er.sides), the middles of its sides (top, right, bottom, left) */
+const editHandles = (er, corners) => er.sides ? [...corners, ...corners.map((p, i) => { const q = corners[(i + 1) % 4]; return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; })] : corners;
+/* which edges of the frame handle h moves: [left, right, top, bottom] */
+const EDGES = [[1, 0, 1, 0], [0, 1, 1, 0], [0, 1, 0, 1], [1, 0, 0, 1], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1], [1, 0, 0, 0]];
 /* drags the edited frame (the corners as editRects gives them, flip included): handle 0…3 is a corner (top-left, top-right, bottom-right, bottom-left; the opposite one
-   stays), 'move' moves the picture under the crop frame or the mask over the layer. (dx, dy): the pointer's move in
+   stays), 4…7 the middle of a side (top, right, bottom, left; only that side moves), 'move' moves the picture under the crop frame or the mask over the layer. (dx, dy): the pointer's move in
    the layer's own px, from where the drag began; from: editFrom(L) then; box: the layer's box then (px) */
 function editDrag(o, face, L, mode, handle, from, dx, dy, W, H, box) {
   const [w, h] = box, MIN = 4;
@@ -113,8 +120,9 @@ function editDrag(o, face, L, mode, handle, from, dx, dy, W, H, box) {
       const px = clamp(P[0] + dx, x1 - fw, x0), py = clamp(P[1] + dy, y1 - fh, y0);
       L.crop = { x: (x0 - px) / fw, y: (y0 - py) / fh, w: c.w, h: c.h };
     } else {
-      if (handle === 0 || handle === 3) x0 = clamp(x0 + dx, P[0], x1 - MIN); else x1 = clamp(x1 + dx, x0 + MIN, P[0] + fw);
-      if (handle === 0 || handle === 1) y0 = clamp(y0 + dy, P[1], y1 - MIN); else y1 = clamp(y1 + dy, y0 + MIN, P[1] + fh);
+      const [l, r, t, b] = EDGES[handle];
+      if (l) x0 = clamp(x0 + dx, P[0], x1 - MIN); if (r) x1 = clamp(x1 + dx, x0 + MIN, P[0] + fw);
+      if (t) y0 = clamp(y0 + dy, P[1], y1 - MIN); if (b) y1 = clamp(y1 + dy, y0 + MIN, P[1] + fh);
       L.crop = { x: (x0 - P[0]) / fw, y: (y0 - P[1]) / fh, w: (x1 - x0) / fw, h: (y1 - y0) / fh };
       L.w = (x1 - x0) / W;
       moveCentre(L, from, (x0 + x1) / 2, (y0 + y1) / 2, W, H);
@@ -123,8 +131,9 @@ function editDrag(o, face, L, mode, handle, from, dx, dy, W, H, box) {
     const m = from.mask; let [x0, y0, x1, y1] = [(m.x - m.w / 2) * w, (m.y - m.h / 2) * h, (m.x + m.w / 2) * w, (m.y + m.h / 2) * h];
     if (handle === 'move') { x0 += dx; x1 += dx; y0 += dy; y1 += dy; }
     else {
-      if (handle === 0 || handle === 3) x0 = Math.min(x0 + dx, x1 - MIN); else x1 = Math.max(x1 + dx, x0 + MIN);
-      if (handle === 0 || handle === 1) y0 = Math.min(y0 + dy, y1 - MIN); else y1 = Math.max(y1 + dy, y0 + MIN);
+      const [l, r, t, b] = EDGES[handle];
+      if (l) x0 = Math.min(x0 + dx, x1 - MIN); if (r) x1 = Math.max(x1 + dx, x0 + MIN);
+      if (t) y0 = Math.min(y0 + dy, y1 - MIN); if (b) y1 = Math.max(y1 + dy, y0 + MIN);
     }
     L.mask = { ...m, x: (x0 + x1) / 2 / w, y: (y0 + y1) / 2 / h, w: (x1 - x0) / w, h: (y1 - y0) / h };
   }
@@ -141,4 +150,4 @@ function setEditMode(mode) { sel.edit = mode && sel.layer ? { id: sel.layer, mod
 /* a layer's own px in mm of its face (for the frame on the model) */
 const pxPerMM = (o, k, W) => W / faceMM(o, k)[0];
 
-export { MASKS, clipBase, clipRect, cropOf, cropped, editDrag, editFrom, editMode, editRects, hasPanels, maskPath, pxPerMM, resetCrop, setClipBelow, setClipTo, setEditMode, setMask, uncropped };
+export { MASKS, clipBase, clipRect, cropOf, cropped, editCursor, editDrag, editFrom, editHandles, editMode, editRects, hasPanels, maskPath, pxPerMM, resetCrop, setClipBelow, setClipTo, setEditMode, setMask, uncropped };
