@@ -96,8 +96,7 @@ function initWiring() {
     const items = [...['front', 'q', 'side', 'top', 'back', 'bottom'].map(side), 'sep',
       { label: 'К выбранному', key: 'F', disabled: !activeObj(), run: () => setView('focus') }, { label: 'Показать всё', key: 'H', run: () => setView('fit') }, 'sep',
       { label: 'Вращать вокруг выбранного', checked: orbitLock, run: () => setOrbitLock(!orbitLock) }];
-    const m = openMenu(r.left, r.top, items, 'Вид');
-    if (m) { const h = m.getBoundingClientRect().height; m.style.top = Math.max(4, r.top - h - 6) + 'px'; }   // above the button
+    openMenu(r.left, r.bottom + 6, items, 'Вид');   // under the button, in the top bar
   };
   $('#hideHint').onclick = () => { $('#stageHint').hidden = true; try { localStorage.setItem('box-studio-3d/hint', '1'); } catch {} };
   try { if (localStorage.getItem('box-studio-3d/hint')) $('#stageHint').hidden = true; } catch {}

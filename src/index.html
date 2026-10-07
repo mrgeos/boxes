@@ -17,14 +17,14 @@
       <hr>
       <button class="btn ghost" id="saveBtn">Сохранить проект</button>
     </div>
-    <div class="brand">
-      <span class="reg" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-      <b>Box Studio 3D</b>
+    <div class="brand" title="Box Studio 3D">
+      <span class="reg" role="img" aria-label="Box Studio 3D"><i></i><i></i><i></i><i></i></span>
     </div>
-    <div class="tb-group">
+    <div class="tb-group hist">
       <button class="btn icon ghost" id="undoBtn" title="Отменить (Ctrl+Z)" aria-label="Отменить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
       <button class="btn icon ghost" id="redoBtn" title="Повторить (Ctrl+Shift+Z)" aria-label="Повторить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg></button>
     </div>
+    <div class="tb-group views" id="views"><button class="btn ghost" id="viewBtn" aria-haspopup="menu" title="Вид: стороны, приближение, вращение вокруг выбранного"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>Вид: <b id="viewName">3/4</b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button></div>
     <span class="tb-sep"></span>
     <div class="tb-group main">
       <button class="btn primary" id="exportBtn" aria-haspopup="true" aria-expanded="false">Экспорт
@@ -90,7 +90,6 @@
   <main class="stage" id="stage">
     <div id="viewport"></div>
     <div class="off-hint" id="offHint" role="status" hidden></div>
-    <div class="views" id="views"><button class="btn sm" id="viewBtn" aria-haspopup="menu" title="Вид: стороны, приближение, вращение вокруг выбранного"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>Вид: <b id="viewName">3/4</b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 15 6-6 6 6"/></svg></button></div>
     <div class="abar" id="actionBar" role="toolbar" aria-label="Инструменты и действия">
       <button class="ab" data-tool="select" aria-label="Выделение"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l13 8-6 1.5L9 19Z"/></svg></button>
       <button class="ab" data-tool="move" aria-label="Перемещение"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3"/></svg></button>
