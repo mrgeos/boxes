@@ -12,6 +12,7 @@ import { renderLibrary } from '../ui/library-panel.js';
 import { drawEditor } from '../ui/face-editor.js';
 import { drawNet } from '../net/net-view.js';
 import { syncRings } from './move.js';
+import { syncSelBox } from './sel-box.js';
 import { layoutPending } from '../core/groups.js';
 
 function sceneBounds(onlyActive = false) {
@@ -145,6 +146,7 @@ function initCamera() {
     }
     controls.enablePan = !lockActive();
     if (syncRings()) changed = true;
+    if (syncSelBox()) changed = true;
     if (recording) recording.step(now);
     else if (controls.update()) changed = true;
     for (const rt of RT.values()) for (const k in rt.faces) {
