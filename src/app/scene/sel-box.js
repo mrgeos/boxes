@@ -6,6 +6,7 @@ import { faceKeys, faceMM, loopAxis } from '../core/model.js';
 import { activeSticker, placementsFor, stickerSize } from '../stickers/placement.js';
 import { apply, layerMM, layerReach } from '../faces/wrap.js';
 import { RT, camera, cvs, scene, world } from './renderer.js';
+import { editMode, editRects } from '../core/mask.js';
 import { tool } from '../ui/action-bar.js';
 import { recording } from './camera.js';
 
@@ -31,8 +32,10 @@ function target() {
   const st = !activeLayer() && activeSticker(), L = !st && activeLayer();
   if (!st && (!L || !sel.face || !L.visible)) return null;
   const [w, h] = st ? stickerSize(st) : (m => [m.w, m.h])(layerMM(o, sel.face, L));
+  // crop or mask mode: the frame being edited and the one round it (the layer's own mm)
+  const mode = L && editMode(), er = mode && editRects(mode, L, ...faceMM(o, sel.face), [w, h]);
   // a rebuild makes new parts (and new frames for stickers and layers over edges)
-  return { o, rt, st, L, w, h, key: JSON.stringify([o.id, sel.face, st || L, w, h]), built: rt.group.children[0] };
+  return { o, rt, st, L, w, h, er, mode, key: JSON.stringify([o.id, sel.face, st || L, w, h, mode]), built: rt.group.children[0] };
 }
 /* where it goes: parts [{ key, M, G }] map it onto the mm of each face it is on */
 function partsOf({ o, st, L, rt }) {
@@ -150,9 +153,16 @@ function syncSelBox() {
     for (let i = 0; i <= n; i++) pts.push([x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n]);
     strokes.push(pts);
   };
-  run(-hw, -hh, hw, -hh); run(hw, -hh, hw, hh); run(hw, hh, -hw, hh); run(-hw, hh, -hw, -hh);
-  const corners = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
-  if (grips) {
+  const er = t.er, box = ([x0, y0, x1, y1]) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, y]) => [x * er.flip[0], y * er.flip[1]]);
+  const corners = er ? box(er.inner) : [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
+  corners.forEach((c, i) => run(...c, ...corners[(i + 1) % 4]));
+  const dashed = new Set();
+  if (er) {
+    // crop or mask mode: the frame being edited has handles at its corners, the one round it is dashed
+    const out = box(er.outer); out.forEach((c, i) => { dashed.add(strokes.length); run(...c, ...out[(i + 1) % 4]); });
+    corners.forEach((c, i) => { const h = locate(c, true); if (h) handles.push({ mode: 'edit', idx: i, ...h }); });
+    const c = locate([0, 0], true); if (c) handles.push({ mode: 'center', ...c });
+  } else if (grips) {
     // scale at the corners, turn on a stalk over the top edge; where that is off the model (past the edge of the
     // face, in a window), under the bottom edge or beside the item, closer in if need be
     const R = Math.min(Math.max(Math.max(t.w, t.h) * .12, 6), 25);
@@ -170,10 +180,11 @@ function syncSelBox() {
   // three corners in order tell whether the item is seen mirrored (from the back of the face)
   for (const c of corners.slice(0, 3)) { const h = locate(c, true); if (h) handles.push({ mode: 'corner', ...h }); }
   const segs = new Map();   // mesh -> ends of its segments
-  for (const { meshes, at } of surfaces) for (const pts of strokes) {
+  for (const { meshes, at } of surfaces) for (const [si, pts] of strokes.entries()) {
     let prev = at(pts[0]);
     for (let i = 1; i < pts.length; i++) {
       const cur = at(pts[i]);
+      if (dashed.has(si) && i % 2) { prev = cur; continue; }
       meshes.forEach(([m], j) => {
         // two ends far apart on one mesh are on different pieces of it: no line between them
         if (!prev[j] || !cur[j] || prev[j].distanceToSquared(cur[j]) > (STEP * 4 * S) ** 2) return;
@@ -186,6 +197,7 @@ function syncSelBox() {
   // the ghost: every other step of the frame where it is off every face (dashes), joined to the face's edge
   const ghosts = new Map(); let off = false;
   strokes.forEach((pts, si) => {
+    if (dashed.has(si)) return;
     const real = pts.map(p => surfaces.some(f => f.at(p, LIFT).some(Boolean)));
     let g = null;
     for (let i = 1; i < pts.length; i++) {
@@ -201,7 +213,7 @@ function syncSelBox() {
   for (const [m, pts] of segs) m.add(keep(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), mat)));
   for (const [m, pts] of ghosts) m.add(keep(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), ghostMat)));
   showOff(off && (t.st ? 'sticker' : sel.face === 'sleeve' || sel.face === 'carry' ? 'band' : 'layer'));
-  for (const h of handles) if (h.mode === 'rot' || h.mode === 'scale') h.mesh.add(keep(new THREE.Points(new THREE.BufferGeometry().setFromPoints([h.p]), dotMat(h.mode))));
+  for (const h of handles) if (h.mode === 'rot' || h.mode === 'scale' || h.mode === 'edit') h.mesh.add(keep(new THREE.Points(new THREE.BufferGeometry().setFromPoints([h.p]), dotMat(h.mode === 'rot' ? 'rot' : 'scale'))));
   return true;
 }
 /* where a handle is on the screen (client px) and whether it is in sight */
@@ -215,13 +227,13 @@ function onScreen(h) {
 /* the handle under the pointer, if any: { mode, c: the item's centre on screen, flip: -1 when seen mirrored } */
 function handleAt(x, y) {
   if (!lines.length || !lines.every(attached)) return null;
-  for (const mode of ['rot', 'scale']) for (const h of handles) {
+  for (const mode of ['rot', 'scale', 'edit']) for (const h of handles) {
     if (h.mode !== mode) continue;
     const q = onScreen(h); if (!q.seen || Math.hypot(q.x - x, q.y - y) > 10) continue;
     const c = handles.find(g => g.mode === 'center'), cs = handles.filter(g => g.mode === 'corner').map(onScreen);
     const cc = c ? onScreen(c) : q;
     const flip = cs.length === 3 && (cs[1].x - cs[0].x) * (cs[2].y - cs[1].y) - (cs[1].y - cs[0].y) * (cs[2].x - cs[1].x) < 0 ? -1 : 1;
-    return { mode, c: [cc.x, cc.y], flip };
+    return { mode, c: [cc.x, cc.y], flip, idx: h.idx };
   }
   return null;
 }

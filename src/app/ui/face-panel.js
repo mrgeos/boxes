@@ -10,6 +10,8 @@ import { RT, applyObjMaterials, markFace, ui } from '../scene/renderer.js';
 import { select, selectLayer } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField, refreshFields } from './fields.js';
+import { MASKS, cropped, editMode, hasPanels, resetCrop, setClipBelow, setClipTo, setEditMode, setMask } from '../core/mask.js';
+import { invalidate } from '../scene/camera.js';
 
 function renderFaceTabs() {
   const o = activeObj();
@@ -61,8 +63,9 @@ function renderLayers() {
     const dpi = L.type === 'image' ? imageDpi(o, L) : null;
     const badge = L.effect !== 'none' ? `<span class="badge">${EFFECT_SHORT[L.effect]}</span>`
       : dpi != null ? `<span class="badge ${dpi < 150 ? 'warn' : 'ok'} mono" title="Разрешение при печати">${dpi} dpi</span>` : '';
-    return `<div class="layer ${L.id === sel.layer ? 'on' : ''} ${L.visible ? '' : 'hidden'}" data-id="${L.id}">
-      ${th}<span class="ln">${esc(layerName(L))}</span>${badge}
+    const cut = (L.mask ? ' · маска' : '') + (cropped(L) ? ' · кадр' : '') + (L.clipTo ? ' · обрезан' : '');
+    return `<div class="layer ${L.id === sel.layer ? 'on' : ''} ${L.visible ? '' : 'hidden'} ${L.clipBelow ? 'clipped' : ''}" data-id="${L.id}" ${cut || L.clipBelow ? `title="${L.clipBelow ? 'Обтравка по слою ниже' : ''}${cut}"` : ''}>
+      ${L.clipBelow ? '<span class="clip-mark" aria-hidden="true">↳</span>' : ''}${th}<span class="ln">${esc(layerName(L))}</span>${badge}
       <span class="acts">
         <button data-a="vis" title="${L.visible ? 'Скрыть' : 'Показать'}" aria-label="Видимость">${L.visible ? ICON.eye : ICON.eyeOff}</button>
         <button data-a="up" title="Выше" aria-label="Выше">${ICON.up}</button>
@@ -114,6 +117,7 @@ function renderLayerProps() {
     ${!(L.type === 'image' && L.tile) && Object.keys(RT.get(o.id)?.frames || {}).length ? '<label class="check" title="Часть слоя за краем грани печатается на соседних гранях, через сгиб. Включается сама, если тянуть слой через ребро на модели"><input type="checkbox" data-k="wrap"> Переходит через рёбра на соседние грани</label>' : ''}
     <div class="field wide"><span class="fl">Отделка</span><select data-k="effect">${effOpts}</select></div>
     <div class="field wide"><span class="fl">Наложение</span><select data-k="blend">${Object.entries(BLENDS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+    ${cropHTML(o, L)}
     <div class="grid2"><button class="btn sm" id="centerBtn">По центру</button><button class="btn sm danger" id="delLayerBtn">Удалить слой</button></div>`;
   sec.innerHTML = html;
   bindFields(sec, activeLayer, (k) => {
@@ -125,6 +129,7 @@ function renderLayerProps() {
     if (k === 'w' && L.type === 'image') ui.layers = true;
     markFace(activeObj(), sel.face);
   });
+  bindCrop(o, L);
   $('#centerBtn').onclick = () => { const L = activeLayer(); L.x = .5; L.y = .5; markFace(o, sel.face); refreshFields(sec, L); commit(); };
   $('#delLayerBtn').onclick = () => deleteLayer(L.id);
   if (L.type === 'image') {
@@ -133,6 +138,30 @@ function renderLayerProps() {
     $('#imgCover').onclick = () => fitImage(true);
     $('#imgFit').onclick = () => fitImage(false);
   }
+}
+/* the layer's cut: crop frame of a picture, a mask shape, clipping to the layer below, to the face or the panel */
+function cropHTML(o, L) {
+  const m = L.mask, mode = editMode(), f = activeFaceData(), bottom = f.layers.indexOf(L) === 0;
+  const opt = (v, t, cur) => `<option value="${v}" ${v === (cur || '') ? 'selected' : ''}>${t}</option>`;
+  return `<div class="cut"><h3>Обрезка</h3>
+    ${L.type === 'image' && !L.tile ? `<div class="row"><button class="btn sm ${mode === 'crop' ? 'on' : ''}" id="cropBtn" title="Двойной клик по картинке в окне грани или на модели">${mode === 'crop' ? 'Готово' : 'Кадрировать'}</button>${cropped(L) ? '<button class="btn sm" id="cropReset">Сбросить кадр</button>' : ''}</div>` : ''}
+    <div class="row"><select id="maskKind" class="grow" aria-label="Маска">${opt('', 'Без маски', m?.kind)}${Object.entries(MASKS).map(([k, t]) => opt(k, 'Маска: ' + t.toLowerCase(), m?.kind)).join('')}</select>
+      ${m ? `<button class="btn sm ${mode === 'mask' ? 'on' : ''}" id="maskEdit">${mode === 'mask' ? 'Готово' : 'Править'}</button>` : ''}</div>
+    ${m?.kind === 'rect' ? rangeField('Скругление', 'mask.r', 0, 100, 1, 100) : ''}
+    ${m?.kind === 'polygon' ? rangeField('Углов', 'mask.n', 3, 16, 1) : ''}
+    ${m?.kind === 'star' ? rangeField('Лучей', 'mask.n', 3, 24, 1) + rangeField('Глубина лучей, %', 'mask.inner', 5, 95, 1, 100) : ''}
+    <label class="check" title="${bottom ? 'Под этим слоем нет других' : 'Слой виден только там, где есть слой под ним (как обтравочная маска в Photoshop)'}"><input type="checkbox" id="clipBelow" ${L.clipBelow ? 'checked' : ''} ${bottom ? 'disabled' : ''}> Обтравка по слою ниже</label>
+    <div class="field wide"><span class="fl">Обрезать по</span><select id="clipTo">${opt('', 'не обрезать', L.clipTo)}${opt('face', 'краю грани', L.clipTo)}${hasPanels(o, sel.face) ? opt('panel', 'панели ленты', L.clipTo) : ''}</select></div></div>`;
+}
+function bindCrop(o, L) {
+  const k = sel.face, done = () => { ui.editor = true; ui.layers = true; renderLayerProps(); commit(); };
+  const toggle = mode => { setEditMode(editMode() === mode ? null : mode); ui.editor = true; invalidate(); renderLayerProps(); };
+  $('#cropBtn') && ($('#cropBtn').onclick = () => toggle('crop'));
+  $('#cropReset') && ($('#cropReset').onclick = () => { resetCrop(o, k, L); setEditMode(null); done(); });
+  $('#maskEdit') && ($('#maskEdit').onclick = () => toggle('mask'));
+  $('#maskKind').onchange = e => { setMask(o, k, L, e.target.value || null); setEditMode(e.target.value ? 'mask' : null); done(); };
+  $('#clipBelow').onchange = e => { setClipBelow(o, k, L, e.target.checked); done(); };
+  $('#clipTo').onchange = e => { setClipTo(o, k, L, e.target.value || null); done(); };
 }
 function fitImage(cover) {
   const o = activeObj(), L = activeLayer(); if (!L || L.type !== 'image') return;

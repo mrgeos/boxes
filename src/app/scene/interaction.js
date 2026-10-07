@@ -1,6 +1,6 @@
 // Мышь, касания, перетаскивание файлов, клавиатура
 import * as THREE from 'three';
-import { $, DEG } from '../core/util.js';
+import { $, DEG, S } from '../core/util.js';
 import { activeLayer, activeObj, sel, state } from '../core/state.js';
 import { faceKeys, faceMM, facePx, loopAxis } from '../core/model.js';
 import { apply, faceMaps, inv, layerReach, moveLayerOnto } from '../faces/wrap.js';
@@ -16,6 +16,8 @@ import { deleteSticker, renderStickers, setStickerImage } from '../ui/stickers-p
 import { setTab } from '../ui/tabs.js';
 import { handleAt } from './sel-box.js';
 import { rotateItem, scaleItem, sizeOf } from '../core/transform.js';
+import { editDrag, editFrom, editMode, editRects, setEditMode } from '../core/mask.js';
+import { layerBox } from '../faces/render.js';
 import { tool } from '../ui/action-bar.js';
 import { placeLibImage } from '../ui/library-panel.js';
 import { ed, edPoint, edState, hitLayer } from '../ui/face-editor.js';
@@ -94,12 +96,58 @@ function dragLayer(e) {
 
 /* a handle of the selection frame on the model: corners scale the layer or sticker, the dot on the stalk turns it.
    Both go by the pointer round the item's centre on screen; Shift turns in steps of 15°. */
+/* where the pointer is on face k of object o, in the face's px: on the face's plane where it has one (so also
+   past its edge), else on the surface under the pointer */
+const plane = new THREE.Plane(), hitP = new THREE.Vector3(), MW = new THREE.Matrix4();
+function facePoint(e, o, k) {
+  const [W, H] = facePx(o, k), [mw, mh] = faceMM(o, k), F = RT.get(o.id)?.frames?.[k];
+  if (F) {
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, camera);
+    F.parent.updateMatrixWorld(); MW.multiplyMatrices(F.parent.matrixWorld, F.pinv);
+    const c = F.c.clone().multiplyScalar(S).applyMatrix4(MW), n = F.n.clone().transformDirection(MW);
+    if (!ray.ray.intersectPlane(plane.setFromNormalAndCoplanarPoint(n, c), hitP)) return null;
+    const p = hitP.applyMatrix4(MW.clone().invert()).divideScalar(S).sub(F.c);
+    return [(p.dot(F.u) + F.w / 2) * W / mw, (F.h / 2 - p.dot(F.v)) * H / mh];
+  }
+  const h = pick(e.clientX, e.clientY, RT.get(o.id).group);
+  return h?.face === k && h.uv ? [h.uv.x * W, (1 - h.uv.y) * H] : null;
+}
+/* the pointer in the layer's own px (from its centre then, unturned) */
+function layerLocal(e, o, k, from, rot) {
+  const p = facePoint(e, o, k); if (!p) return null;
+  const [W, H] = facePx(o, k), a = -rot * DEG, ex = p[0] - from.x * W, ey = p[1] - from.y * H;
+  return [ex * Math.cos(a) - ey * Math.sin(a), ex * Math.sin(a) + ey * Math.cos(a)];
+}
+/* crop or mask mode on the model: a corner handle resizes the frame, a drag inside it moves */
+function startEdit(e, handle) {
+  const o = activeObj(), L = activeLayer(), k = sel.face, from = editFrom(L), at = layerLocal(e, o, k, from, L.rot);
+  if (!at) return false;
+  const [W, H] = facePx(o, k);
+  xform = { edit: editMode(), handle, it: L, o, face: k, from, at, box: layerBox(L, W, H) };
+  controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = handle === 'move' ? 'grabbing' : 'nwse-resize';
+  return true;
+}
+/* is the pointer inside the frame being edited? */
+function inEditFrame(e) {
+  const o = activeObj(), L = activeLayer(), mode = editMode(); if (!o || !L || !mode) return false;
+  const [W, H] = facePx(o, sel.face), box = layerBox(L, W, H), er = editRects(mode, L, W, H, box), p = layerLocal(e, o, sel.face, L, L.rot);
+  if (!er || !p) return false;
+  const [x, y] = [p[0] * er.flip[0], p[1] * er.flip[1]], [x0, y0, x1, y1] = er.inner;
+  return x >= x0 && x <= x1 && y >= y0 && y <= y1;
+}
 function startXform(e, g) {
   const it = activeLayer() || activeSticker(), dx = e.clientX - g.c[0], dy = e.clientY - g.c[1];
   xform = { ...g, it, o: activeObj(), face: sel.face, from: sizeOf(it), r0: it.rot || 0, a0: Math.atan2(dy, dx), d0: Math.max(4, Math.hypot(dx, dy)) };
   controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = g.mode === 'rot' ? 'grabbing' : 'nwse-resize';
 }
 function dragXform(e) {
+  if (xform.edit) {
+    const { o, face, it, from, at, box } = xform, p = layerLocal(e, o, face, from, from.rot ?? it.rot); if (!p) return;
+    const [W, H] = facePx(o, face);
+    editDrag(o, face, it, xform.edit, xform.handle, from, p[0] - at[0], p[1] - at[1], W, H, box);
+    refreshFields($('#layerSec'), it); return;
+  }
   const { it, o, face, c, mode } = xform, dx = e.clientX - c[0], dy = e.clientY - c[1];
   if (mode === 'scale') scaleItem(o, face, it, xform.from, Math.hypot(dx, dy) / xform.d0);
   else {
@@ -138,6 +186,9 @@ function initInteraction() {
    window.addEventListener('pointercancel', endPan);
   cvs.addEventListener('dblclick', e => {
     const h = pick(e.clientX, e.clientY); if (!h) return setView('fit');
+    // a double click on the selected picture: its crop frame
+    const L = activeLayer();
+    if (L?.type === 'image' && !L.tile && tool() === 'select' && layerUnder(h, L)) { setEditMode(editMode() === 'crop' ? null : 'crop'); renderLayerProps(); ui.editor = true; return; }
     if (h.objId !== sel.obj) select(h.objId, h.face || undefined, null, { flash: true });
     focusSelected({ frame: true });
   });
@@ -146,7 +197,12 @@ function initInteraction() {
     down = { x: e.clientX, y: e.clientY };
     if (tool() !== 'select') return;   // graphics are dragged with the select tool only
     const g = handleAt(e.clientX, e.clientY);
-    if (g) return startXform(e, g);
+    if (editMode()) {
+      // crop or mask mode: corners and the inside edit; a press elsewhere ends the mode
+      if (g?.mode === 'edit' && startEdit(e, g.idx)) return;
+      if (inEditFrame(e) && startEdit(e, 'move')) return;
+      setEditMode(null); renderLayerProps(); ui.editor = true;
+    } else if (g) return startXform(e, g);
     const h = pick(e.clientX, e.clientY), L = activeLayer();
     // a selected sticker is dragged across the model, face to face
     const hs = sel.sticker && h?.objId === sel.obj ? stickerHit(h) : null;
@@ -255,6 +311,8 @@ function initInteraction() {
     if (mod && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); redo(); return; }
     if (e.key === 'Escape') { $('#exportMenu').hidden = true; $('#exportBtn').setAttribute('aria-expanded', 'false'); }
     if (typing) return;
+    // Enter or Esc ends crop or mask mode
+    if (editMode() && (e.key === 'Escape' || e.key === 'Enter')) { e.preventDefault(); setEditMode(null); renderLayerProps(); ui.editor = true; return; }
     if (!mod && !e.altKey) {
       const key = e.key.toLowerCase();
       if (key === 'f' || key === 'а') { e.preventDefault(); return activeObj() ? focusSelected({ frame: true }) : setView('fit'); }

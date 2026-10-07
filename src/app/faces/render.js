@@ -12,10 +12,11 @@ import { faceGrain } from '../carriers/sleeve.js';
 import { STICKER_FX, placementsFor } from '../stickers/placement.js';
 import { drawSticker, stickerMask, stickerShadow } from '../stickers/film.js';
 import { drawWrapped, wrapsOnto } from './wrap.js';
+import { clipBase, clipRect, cropOf, cropped, maskPath } from '../core/mask.js';
 
 /* the copies of a layer a ring face needs: +1 when it runs over the start of the face, -1 over its end */
 function loopShifts(L, W, H, ax) {
-  if (L.type === 'image' && L.tile) return [];
+  if ((L.type === 'image' && L.tile) || L.clipTo) return [];
   const [w, h] = layerBox(L, W, H), r = L.rot * DEG, c = ax === 'x' ? L.x * W : L.y * H, len = ax === 'x' ? W : H;
   const ext = ax === 'x' ? (Math.abs(w * Math.cos(r)) + Math.abs(h * Math.sin(r))) / 2 : (Math.abs(w * Math.sin(r)) + Math.abs(h * Math.cos(r))) / 2;
   return [...(c - ext < 0 ? [1] : []), ...(c + ext > len ? [-1] : [])];
@@ -45,13 +46,28 @@ function textMetrics(L, H) {
   return { fs, lines, w: Math.max(mw, fs * .3), h: fs * L.lh * lines.length };
 }
 function layerBox(L, W, H) {
-  if (L.type === 'image') { const im = getImg(L.src); const a = im ? im.naturalWidth / im.naturalHeight : (L.aspect || 1); const w = L.w * W; return [w, w / a]; }
+  if (L.type === 'image') {
+    // a cropped image: the box is the part shown
+    const im = getImg(L.src), c = cropOf(L), a = (im ? im.naturalWidth / im.naturalHeight : (L.aspect || 1)) * c.w / c.h, w = L.w * W;
+    return [w, w / a];
+  }
   if (L.type === 'shape') return [L.w * W, L.h * H];
   const m = textMetrics(L, H); return [m.w, m.h];
 }
+/* the shown part of a cropped picture, kept while the picture and its crop stay the same */
+const cropCache = new WeakMap();
+function cropImg(im, c) {
+  const key = [c.x, c.y, c.w, c.h].join(), got = cropCache.get(im);
+  if (got?.key === key) return got.cv;
+  const nw = im.naturalWidth || im.width, nh = im.naturalHeight || im.height;
+  const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(c.w * nw)); cv.height = Math.max(1, Math.round(c.h * nh));
+  cv.getContext('2d').drawImage(im, c.x * nw, c.y * nh, c.w * nw, c.h * nh, 0, 0, cv.width, cv.height);
+  cropCache.set(im, { key, cv });
+  return cv;
+}
 const tmp = document.createElement('canvas');
  const tctx = tmp.getContext('2d');
-const tileC = document.createElement('canvas');
+const tileC = document.createElement('canvas'), clipC = document.createElement('canvas');
 function foilPaint(ctx, effect, W, H) {
   if (effect === 'foil-holo') {
     const g = ctx.createLinearGradient(0, 0, W, H);
@@ -63,16 +79,20 @@ function foilPaint(ctx, effect, W, H) {
   g.addColorStop(0, a); g.addColorStop(.45, b); g.addColorStop(.7, a); g.addColorStop(1, c);
   return g;
 }
-/* draws a layer into a face-sized context; `paint` overrides its colours (silhouette) */
-function drawLayer(ctx, L, W, H, paint = null, alpha = null) {
+/* draws a layer into a face-sized context; `paint` overrides its colours (silhouette), `op` its blending */
+function drawLayer(ctx, L, W, H, paint = null, alpha = null, op = null) {
   if (!L.visible) return;
   const [w, h] = layerBox(L, W, H);
   ctx.save();
   ctx.globalAlpha = alpha ?? L.opacity;
-  ctx.globalCompositeOperation = paint ? 'source-over' : (L.blend || 'source-over');
+  ctx.globalCompositeOperation = op || (paint ? 'source-over' : (L.blend || 'source-over'));
   ctx.translate(L.x * W, L.y * H); ctx.rotate(L.rot * DEG);
+  // a mask shape: in the layer's box, turned with it
+  if (L.mask) { ctx.beginPath(); maskPath(ctx, L.mask, w, h); ctx.clip(); }
   if (L.type === 'image') {
-    const im = artImg(L.src, L.recolor);
+    let im = artImg(L.src, L.recolor);
+    // a cropped image: only its part is drawn (cut out once into a canvas of its own)
+    if (im && cropped(L)) im = cropImg(im, L.crop);
     if (im) {
       ctx.scale(L.flipX ? -1 : 1, L.flipY ? -1 : 1);
       let src = im;
@@ -130,10 +150,25 @@ function renderFace(o, k) {
   }
   // the face's own layers, then the parts of neighbours' layers that run over an edge onto it
   const fxl = [], ax = loopAxis(o, k);
+  const plain = (c, it, cw, ch, paint, alpha, op) => {
+    if (it.from) return drawWrapped(c, o, k, it, cw, (x, L, sw, sh) => drawLayer(x, L, sw, sh, paint, alpha, op));
+    const r = clipRect(o, k, it.L, cw, ch);
+    c.save();
+    if (r) { c.beginPath(); c.rect(...r); c.clip(); }
+    if (it.shift) c.translate(ax === 'x' ? it.shift * cw : 0, ax === 'y' ? it.shift * ch : 0);
+    drawLayer(c, it.L, cw, ch, paint, alpha, op); c.restore();
+  };
+  // a clipped layer is drawn on its own, kept only where the layer it clips to is, then put on the face
   const draw = (c, it, cw, ch, paint, alpha) => {
-    if (it.from) return drawWrapped(c, o, k, it, cw, (x, L, sw, sh) => drawLayer(x, L, sw, sh, paint, alpha));
-    if (!it.shift) return drawLayer(c, it.L, cw, ch, paint, alpha);
-    c.save(); c.translate(ax === 'x' ? it.shift * cw : 0, ax === 'y' ? it.shift * ch : 0); drawLayer(c, it.L, cw, ch, paint, alpha); c.restore();
+    const base = clipBase(o.faces[it.from || k], it.L);
+    if (!base) return plain(c, it, cw, ch, paint, alpha);
+    if (!base.visible) return;
+    clipC.width = cw; clipC.height = ch; const x = clipC.getContext('2d');
+    plain(x, it, cw, ch, paint, 1, 'source-over');
+    plain(x, { ...it, L: base }, cw, ch, '#000', 1, 'destination-in');
+    c.save(); c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = alpha ?? it.L.opacity; c.globalCompositeOperation = paint ? 'source-over' : (it.L.blend || 'source-over');
+    c.drawImage(clipC, 0, 0); c.restore();
   };
   // on a ring a layer over one end is drawn again past the other end (shift: whole lengths of the face)
   const own = face.layers.flatMap((L, z) => [{ L, z }, ...(ax ? loopShifts(L, W, H, ax).map(shift => ({ L, z, shift })) : [])]);
@@ -238,4 +273,4 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops, draw) {
 }
 function setSkipStickers(v) { skipStickers = v; }
 
-export { drawNetPanel, layerBox, renderFace, setSkipStickers, tmp };
+export { drawLayer, drawNetPanel, layerBox, renderFace, setSkipStickers, tmp };

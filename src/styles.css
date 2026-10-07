@@ -242,3 +242,10 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .ctx-l{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ctx-k{flex:none;color:var(--muted);font-family:var(--mono);font-size:11px;padding-left:12px}
 .ctx-sep{height:1px;margin:4px 6px;background:var(--line)}
+
+/* the layer's cut */
+.cut{border-top:1px solid var(--line);margin-top:10px;padding-top:8px;display:grid;gap:6px}
+.cut h3{margin:0;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.cut .btn.on{border-color:var(--accent);color:var(--accent)}
+.layer.clipped{padding-left:18px}
+.layer .clip-mark{color:var(--muted);font-size:12px;margin-right:-2px}

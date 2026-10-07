@@ -7,7 +7,9 @@ import { RT, markFace, ui } from '../scene/renderer.js';
 import { faceWindow, windowPath } from '../carriers/box.js';
 import { CARRY_PANEL, carryDims, carryOn, carrySheet } from '../carriers/carry.js';
 import { sleeveDims, sleeveOn, sleevePanelLabel, sleeveSheet } from '../carriers/sleeve.js';
-import { layerBox } from '../faces/render.js';
+import { drawLayer, layerBox } from '../faces/render.js';
+import { clipRect, editDrag, editFrom, editMode, editRects, maskPath, setEditMode, uncropped } from '../core/mask.js';
+import { renderLayerProps } from './face-panel.js';
 import { placementsFor } from '../stickers/placement.js';
 import { drawSticker } from '../stickers/film.js';
 import { selectLayer } from '../core/selection.js';
@@ -112,13 +114,35 @@ function drawEditor() {
       if (fw) windowPath(c, fw, 0, 0, dw, dh); else c.beginPath();
       for (const q of fw?.keep || []) { q.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](v.x * dw, v.y * dh)); c.closePath(); }
       c.rect(-PAD, -PAD, cw, ch);
-      if (circle) c.arc(dw / 2, dh / 2, dw / 2, 0, Math.PI * 2, true);
+      const cr = clipRect(o, sel.face, L, W, H);   // cut to the face or to a panel of the band
+      if (cr) c.rect(cr[0] * k, cr[1] * k, cr[2] * k, cr[3] * k);
+      else if (circle) c.arc(dw / 2, dh / 2, dw / 2, 0, Math.PI * 2, true);
       else c.rect(ax === 'x' ? -PAD : 0, ax === 'y' ? -PAD : 0, ax === 'x' ? cw : dw, ax === 'y' ? ch : dh);
       c.clip('evenodd');
       c.fillStyle = 'rgba(210,69,58,.12)'; c.fillRect(-PAD, -PAD, cw, ch);
       c.strokeStyle = 'rgba(210,69,58,.7)'; c.lineWidth = 1; c.beginPath();
       for (let x = -PAD - ch; x < cw; x += 5) { c.moveTo(x, -PAD); c.lineTo(x + ch, -PAD + ch); }
       c.stroke(); c.restore();
+    }
+    const mode = editMode(), er = mode && editRects(mode, L, W, H, [w, h]);
+    if (er) {
+      // crop or mask mode: what is cut away shows faintly round the frame being edited
+      const [fx, fy] = er.flip, Q = (x, y) => P(x * k * fx, y * k * fy), rect = ([x0, y0, x1, y1]) => [Q(x0, y0), Q(x1, y0), Q(x1, y1), Q(x0, y1)];
+      const inner = rect(er.inner), outer = rect(er.outer), poly = q => { c.beginPath(); q.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); };
+      c.save(); c.translate(cx, cy); c.rotate(a);
+      c.beginPath(); c.rect(-1e4, -1e4, 2e4, 2e4);
+      if (mode === 'mask') { c.save(); c.scale(k, k); maskPath(c, L.mask, w, h); c.restore(); }
+      else { c.scale(fx, fy); c.rect(er.inner[0] * k, er.inner[1] * k, (er.inner[2] - er.inner[0]) * k, (er.inner[3] - er.inner[1]) * k); }
+      c.clip('evenodd');
+      c.setTransform(dpr * k, 0, 0, dpr * k, dpr * PAD, dpr * PAD);
+      drawLayer(c, mode === 'crop' ? uncropped(L, W, H) : { ...L, mask: null }, W, H, null, .35);
+      c.restore();
+      c.strokeStyle = accentCss; c.lineWidth = 1; c.setLineDash([4, 3]); poly(outer); c.stroke(); c.setLineDash([]);
+      c.lineWidth = 1.5; poly(inner); c.stroke();
+      c.fillStyle = '#fff';
+      for (const p of inner) { c.beginPath(); c.rect(p[0] - 4, p[1] - 4, 8, 8); c.fill(); c.stroke(); }
+      edState.handles = { edit: mode, corners: inner, center: [cx, cy], box: [w, h] };
+      return;
     }
     c.strokeStyle = accentCss; c.lineWidth = 1.5; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); c.stroke();
     const rh = P(0, -hh - 18); const top = P(0, -hh);
@@ -129,6 +153,7 @@ function drawEditor() {
     edState.handles = { corners: pts, rot: rh, center: [cx, cy] };
   } else edState.handles = null;
 }
+const inPoly = ([x, y], q) => { let r = false; for (let i = 0, j = q.length - 1; i < q.length; j = i++) if ((q[i][1] > y) !== (q[j][1] > y) && x < (q[j][0] - q[i][0]) * (y - q[i][1]) / (q[j][1] - q[i][1]) + q[i][0]) r = !r; return r; };
 function hitLayer(face, W, H, px, py) {
   for (let i = face.layers.length - 1; i >= 0; i--) {
     const L = face.layers[i]; if (!L.visible) continue;
@@ -162,7 +187,18 @@ function initFaceEditor() {
     const [mx, my] = edPoint(e), { k, W, H } = edState, px = mx / k, py = my / k;
     const L = activeLayer(), hd = edState.handles;
     let mode = null;
-    if (L && hd) {
+    if (L && hd?.edit) {
+      // crop or mask mode: a corner resizes the frame, inside it moves (the picture under the crop frame, the mask
+      // over the layer); a press elsewhere ends the mode
+      const i = hd.corners.findIndex(p => Math.hypot(mx - p[0], my - p[1]) < 9), inside = inPoly([mx, my], hd.corners);
+      if (i >= 0 || inside) {
+        ed.setPointerCapture(e.pointerId);
+        edState.drag = { mode: 'edit', edit: hd.edit, handle: i >= 0 ? i : 'move', L, mx, my, from: editFrom(L), box: hd.box };
+        return;
+      }
+      setEditMode(null); renderLayerProps(); ui.editor = true;
+    }
+    if (L && hd && !hd.edit) {
       if (Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < 9) mode = 'rot';
       else if (hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9)) mode = 'scale';
     }
@@ -185,12 +221,19 @@ function initFaceEditor() {
       const f = activeFaceData(); if (!f) return;
       const [mx, my] = edPoint(e), hd = edState.handles;
       let cur = 'default';
-      if (hd && Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < 9) cur = 'grab';
+      if (hd?.edit) cur = hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9) ? 'nwse-resize' : inPoly([mx, my], hd.corners) ? 'move' : 'default';
+      else if (hd && Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < 9) cur = 'grab';
       else if (hd && hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9)) cur = 'nwse-resize';
       else if (hitLayer(f, edState.W, edState.H, mx / edState.k, my / edState.k)) cur = 'move';
       ed.style.cursor = cur; return;
     }
     const [mx, my] = edPoint(e), { k, W, H } = edState, L = d.L;
+    if (d.mode === 'edit') {
+      // the pointer's move in the layer's own px (unturned)
+      const a = -L.rot * DEG, ex = (mx - d.mx) / k, ey = (my - d.my) / k;
+      editDrag(activeObj(), sel.face, L, d.edit, d.handle, d.from, ex * Math.cos(a) - ey * Math.sin(a), ex * Math.sin(a) + ey * Math.cos(a), W, H, d.box);
+      refreshFields($('#layerSec'), L); return;
+    }
     if (d.mode === 'move') snapMove(L, d.x + (mx - d.mx) / (W * k), d.y + (my - d.my) / (H * k), W, H, e.altKey);
     else if (d.mode === 'scale') {
       scaleItem(activeObj(), sel.face, L, d, Math.hypot(mx - d.cx, my - d.cy) / d.d0);
@@ -204,7 +247,12 @@ function initFaceEditor() {
   });
   ed.addEventListener('pointerup', edUp);
    ed.addEventListener('pointercancel', edUp);
-  ed.addEventListener('dblclick', () => { const L = activeLayer(); if (L?.type === 'text') { const t = $('#layerSec textarea'); t?.focus(); t?.select(); } });
+  ed.addEventListener('dblclick', () => {
+    const L = activeLayer();
+    if (L?.type === 'text') { const t = $('#layerSec textarea'); t?.focus(); t?.select(); }
+    // a picture: its crop frame
+    if (L?.type === 'image' && !L.tile) { setEditMode(editMode() === 'crop' ? null : 'crop'); renderLayerProps(); ui.editor = true; }
+  });
   new ResizeObserver(() => { ui.editor = true; ui.net = true; }).observe($('#editorWrap'));
 }
 
