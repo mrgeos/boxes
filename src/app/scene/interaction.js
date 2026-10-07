@@ -14,6 +14,7 @@ import { refreshFields } from '../ui/fields.js';
 import { addImageToFace, deleteLayer, duplicateLayer, renderLayerProps, renderLayers } from '../ui/face-panel.js';
 import { deleteSticker, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
 import { setTab } from '../ui/tabs.js';
+import { tool } from '../ui/action-bar.js';
 import { placeLibImage } from '../ui/library-panel.js';
 import { ed, edPoint, edState, hitLayer } from '../ui/face-editor.js';
 
@@ -98,7 +99,7 @@ function initInteraction() {
       return;
     }
     if (!lockActive() || drag3) return;
-    if (e.button === 2 || (e.button === 0 && (e.shiftKey || e.ctrlKey || e.metaKey))) {
+    if (e.button === 2 || (e.button === 0 && (e.shiftKey || e.ctrlKey || e.metaKey || tool() === 'hand'))) {
       pan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y }; setCamTween(null); cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'move';
     }
   }, true);
@@ -118,6 +119,7 @@ function initInteraction() {
   cvs.addEventListener('pointerdown', e => {
     if (recording || e.button !== 0 || pan) return;
     down = { x: e.clientX, y: e.clientY };
+    if (tool() !== 'select') return;   // graphics are dragged with the select tool only
     const h = pick(e.clientX, e.clientY), L = activeLayer();
     // a selected sticker is dragged across the model, face to face
     const hs = sel.sticker && h?.objId === sel.obj ? stickerHit(h) : null;
@@ -143,7 +145,7 @@ function initInteraction() {
       return;
     }
     if (drag3) { dragLayer(e); return; }
-    if (e.buttons || e.timeStamp - hoverT < 50) return; hoverT = e.timeStamp;
+    if (e.buttons || e.timeStamp - hoverT < 50 || tool() !== 'select') return; hoverT = e.timeStamp;
     const h = pick(e.clientX, e.clientY); let cur = 'grab';
     if (h?.face) {
       cur = 'pointer';
@@ -162,6 +164,7 @@ function initInteraction() {
     }
     if (e.button !== 0 || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) { down = null; return; }
     down = null;
+    if (tool() === 'hand') return;   // the hand only moves the view
     const h = pick(e.clientX, e.clientY);
     if (!h) return;
     const o = state.objects.find(x => x.id === h.objId); if (!o) return;

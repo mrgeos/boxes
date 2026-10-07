@@ -125,6 +125,14 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 #viewport{position:absolute;inset:0}
 #viewport canvas{display:block;width:100%;height:100%;touch-action:none}
 .stage.checker{background-color:var(--checker-a);background-image:linear-gradient(45deg,var(--checker-b) 25%,transparent 25%,transparent 75%,var(--checker-b) 75%),linear-gradient(45deg,var(--checker-b) 25%,transparent 25%,transparent 75%,var(--checker-b) 75%);background-size:20px 20px;background-position:0 0,10px 10px}
+.abar{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:flex;align-items:center;gap:2px;padding:4px;background:color-mix(in srgb,var(--panel) 94%,transparent);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);z-index:3}
+.ab{all:unset;box-sizing:border-box;display:grid;place-items:center;width:34px;height:34px;border-radius:7px;color:var(--fg);cursor:pointer}
+.ab svg{width:19px;height:19px}
+.ab:hover:not(:disabled){background:var(--field)}
+.ab.on{background:var(--accent);color:var(--accent-fg)}
+.ab:disabled{opacity:.35;cursor:default}
+.ab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ab-sep{width:1px;height:22px;margin:0 4px;background:var(--line)}
 .views{position:absolute;left:12px;bottom:12px;display:flex;gap:4px;flex-wrap:wrap;max-width:calc(100% - 24px)}
 .views .btn{background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:blur(6px)}
 .views .btn.on{border-color:var(--accent);color:var(--accent)}

@@ -40,6 +40,19 @@ function lidAction(o) {
   if (o.type === 'bag') return o.bagTop === 'flap' ? ['Открыть клапан', 'Закрыть клапан', 150] : o.bagTop === 'fold' && !(o.rollTurns > 1) ? ['Развернуть отворот', 'Свернуть отворот', 150] : null;
   return null;
 }
+/* opens or closes the lid (flap, end) in a short movement; resolves when it is there */
+function toggleLid(o) {
+  const lid = lidAction(o); if (!lid) return Promise.resolve();
+  const from = o.lid || 0, to = from > 0 ? 0 : lid[2], t0 = performance.now(), T = 450;
+  return new Promise(done => {
+    const step = now => {
+      const t = Math.min(1, (now - t0) / T), e = t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+      o.lid = Math.round(from + (to - from) * e); applyLid(o);
+      if (t < 1) requestAnimationFrame(step); else { refreshObject(o); commit(); done(); }
+    };
+    requestAnimationFrame(step);
+  });
+}
 function turn(o, deg) { o.rotY = norm(o.rotY + deg); layoutAll(); refreshObject(o); commit(); }
 
 function layerItems(o, face, L) {
@@ -78,7 +91,7 @@ function objectItems(o, face = null, layer = null) {
     'sep',
     { label: 'Повернуть на 90° влево', run: () => turn(o, 90) },
     { label: 'Повернуть на 90° вправо', run: () => turn(o, -90) },
-    lid && { label: o.lid > 0 ? lid[1] : lid[0], run: () => { o.lid = o.lid > 0 ? 0 : lid[2]; applyLid(o); refreshObject(o); commit(); } },
+    lid && { label: o.lid > 0 ? lid[1] : lid[0], run: () => toggleLid(o) },
     'sep',
     { label: 'Сгруппировать', key: MOD + 'G', run: () => groupIds([o.id]) },
     g && { label: `Убрать из группы «${g.name}»`, run: () => leaveGroup(o.id) },
@@ -194,4 +207,4 @@ function initContextMenus() {
   ed.addEventListener('contextmenu', e => { e.preventDefault(); editorMenu(e); });
 }
 
-export { initContextMenus };
+export { initContextMenus, lidAction, toggleLid };
