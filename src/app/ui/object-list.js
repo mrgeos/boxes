@@ -129,9 +129,10 @@ function initObjectList() {
   $('#ungroupBtn').onclick = () => ungroupIds(picked());
   $('#dupObjBtn').onclick = () => duplicateIds(picked());
   $('#delObjBtn').onclick = () => deleteIds(picked());
-  // Ctrl+G groups, Ctrl+Shift+G ungroups (by key position, so it works in any keyboard layout)
+  // Ctrl+G groups, Ctrl+Shift+G ungroups (by key position, so it works in any keyboard layout); with layers
+  // picked on a face the keys group those instead (scene/interaction.js)
   document.addEventListener('keydown', e => {
-    if (!(e.ctrlKey || e.metaKey) || e.code !== 'KeyG' || e.target.closest?.('input,textarea,select')) return;
+    if (!(e.ctrlKey || e.metaKey) || e.code !== 'KeyG' || sel.layer || e.target.closest?.('input,textarea,select')) return;
     e.preventDefault(); e.shiftKey ? ungroupIds(picked()) : groupIds(picked());
   });
 }

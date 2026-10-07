@@ -2,7 +2,8 @@
 import { activeObj, sel } from './state.js';
 import { faceKeys } from './model.js';
 import { RT, ui } from '../scene/renderer.js';
-import { accent, focusSelected, orbitLock } from '../scene/camera.js';
+import { accent, focusSelected, invalidate, orbitLock } from '../scene/camera.js';
+import { setLayerSelection } from './layers.js';
 import { renderModel } from '../ui/model-panel.js';
 import { renderObjects } from '../ui/object-list.js';
 import { objectsIn } from './groups.js';
@@ -18,14 +19,20 @@ function select(objId, face = undefined, layerId = null, { flash = false } = {})
     if (face !== undefined && face && faceKeys(o).includes(face)) sel.face = face;
     else if (!faceKeys(o).includes(sel.face)) sel.face = faceKeys(o)[0];
   } else sel.face = null;
-  sel.layer = layerId;
+  setLayerSelection(layerId ? [layerId] : []);
   if (flash && o) { const f = RT.get(o.id)?.faces[sel.face]; if (f) { f.flash = 1; accent.set(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0a7aa1'); } }
   if (changedObj || leftGroup) { renderObjects(); renderModel(); }
   if (changedObj) { renderStickers(); if (orbitLock) focusSelected(); }
   renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps();
   ui.editor = ui.net = ui.lib = true;
 }
-function selectLayer(id) { ui.lib = true; sel.layer = id; if (id && sel.sticker) { sel.sticker = null; ui.stickers = true; } renderLayers(); renderLayerProps(); ui.editor = true; }
+function selectLayer(id) { pickLayers(id ? [id] : []); }
+/* picks several layers of the active face (main: the one whose properties are shown) */
+function pickLayers(ids, main = ids.at(-1)) {
+  ui.lib = true; setLayerSelection(ids, main);
+  if (ids.length && sel.sticker) { sel.sticker = null; ui.stickers = true; }
+  renderLayers(); renderLayerProps(); ui.editor = true; invalidate();
+}
 
 /* shows a group's settings; its first object (or the selected one, if inside) stays active for the face panels */
 function selectGroup(gid) {
@@ -35,4 +42,4 @@ function selectGroup(gid) {
   renderObjects(); renderModel();
 }
 
-export { select, selectGroup, selectLayer };
+export { pickLayers, select, selectGroup, selectLayer };

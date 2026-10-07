@@ -249,3 +249,17 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .cut .btn.on{border-color:var(--accent);color:var(--accent)}
 .layer.clipped{padding-left:18px}
 .layer .clip-mark{color:var(--muted);font-size:12px;margin-right:-2px}
+.layer.main{box-shadow:0 0 0 2px var(--accent) inset}
+.layer.in-grp{margin-left:16px}
+.layer.grp .tw{border:0;background:none;color:var(--muted);cursor:pointer;width:16px;padding:0;font-size:11px}
+.layer.grp{padding-left:2px}
+.layer.dragging{opacity:.45}
+.layer.drop-above{box-shadow:0 -2px 0 var(--accent)}
+.layer.drop-below{box-shadow:0 2px 0 var(--accent)}
+.layer .ren{flex:1;min-width:0;font:inherit;font-size:12.5px;padding:2px 4px;border:1px solid var(--accent);border-radius:4px;background:var(--panel);color:var(--fg)}
+.abar-al{display:flex;align-items:center;gap:2px;margin:2px 0 8px;flex-wrap:wrap}
+.abar-al button{width:28px;height:28px;border:1px solid transparent;border-radius:6px;background:none;color:var(--fg);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.abar-al button:hover:not(:disabled){background:var(--field);border-color:var(--line)}
+.abar-al button:disabled{opacity:.35;cursor:default}
+.abar-al svg{width:16px;height:16px}
+.abar-al .sep{width:1px;height:18px;background:var(--line);margin:0 4px}

@@ -1,17 +1,18 @@
 // Мышь, касания, перетаскивание файлов, клавиатура
 import * as THREE from 'three';
-import { $, DEG, S } from '../core/util.js';
-import { activeLayer, activeObj, sel, state } from '../core/state.js';
+import { $, DEG, S, toast } from '../core/util.js';
+import { activeFaceData, activeLayer, activeObj, sel, state } from '../core/state.js';
 import { faceKeys, faceMM, facePx, loopAxis } from '../core/model.js';
 import { apply, faceMaps, inv, layerReach, moveLayerOnto } from '../faces/wrap.js';
 import { library } from '../core/library.js';
 import { RT, camera, controls, cvs, markFace, renderer, ui, world } from './renderer.js';
 import { activeSticker, stickerAt, stickerDirty, touchSticker } from '../stickers/placement.js';
 import { applyViewOffset, focusSelected, lockActive, recording, setCamTween, setView, view } from './camera.js';
-import { select, selectLayer } from '../core/selection.js';
+import { pickLayers, select, selectLayer } from '../core/selection.js';
+import { boundsOf, clickPick, copyData, moveLayers, pasteData, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
 import { addFontFile, commit, openProjectFile, redo, undo } from '../core/project.js';
 import { refreshFields } from '../ui/fields.js';
-import { addImageToFace, deleteLayer, duplicateLayer, renderLayerProps, renderLayers } from '../ui/face-panel.js';
+import { addImageToFace, deleteLayer, duplicateLayer, layerCmd, moveLayer, renderFaceTabs, renderLayerProps, renderLayers } from '../ui/face-panel.js';
 import { deleteSticker, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
 import { setTab } from '../ui/tabs.js';
 import { handleAt } from './sel-box.js';
@@ -137,8 +138,13 @@ function inEditFrame(e) {
   return x >= x0 && x <= x1 && y >= y0 && y <= y1;
 }
 function startXform(e, g) {
-  const it = activeLayer() || activeSticker(), dx = e.clientX - g.c[0], dy = e.clientY - g.c[1];
+  const it = activeLayer() || activeSticker(), dx = e.clientX - g.c[0], dy = e.clientY - g.c[1], many = !activeSticker() || activeLayer() ? selectedLayers() : [];
   xform = { ...g, it, o: activeObj(), face: sel.face, from: sizeOf(it), r0: it.rot || 0, a0: Math.atan2(dy, dx), d0: Math.max(4, Math.hypot(dx, dy)) };
+  // several layers: scaled and turned together round the middle of their frame
+  if (many.length > 1) {
+    const [W, H] = facePx(xform.o, sel.face), b = boundsOf(many, W, H);
+    Object.assign(xform, { snap: snapshot(many), px: (b[0] + b[2]) / 2, py: (b[1] + b[3]) / 2 });
+  }
   controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = g.mode === 'rot' ? 'grabbing' : 'nwse-resize';
 }
 function dragXform(e) {
@@ -148,7 +154,17 @@ function dragXform(e) {
     editDrag(o, face, it, xform.edit, xform.handle, from, p[0] - at[0], p[1] - at[1], W, H, box);
     refreshFields($('#layerSec'), it); return;
   }
+  if (xform.many) {
+    const p = facePoint(e, xform.o, xform.face); if (!p) return;
+    moveLayers(xform.o, xform.face, xform.snap, p[0] - xform.at[0], p[1] - xform.at[1]);
+    refreshFields($('#layerSec'), activeLayer()); return;
+  }
   const { it, o, face, c, mode } = xform, dx = e.clientX - c[0], dy = e.clientY - c[1];
+  if (xform.snap) {
+    if (mode === 'scale') scaleLayers(o, face, xform.snap, xform.px, xform.py, Math.hypot(dx, dy) / xform.d0);
+    else { let a = xform.flip * (Math.atan2(dy, dx) - xform.a0) / DEG; if (e.shiftKey) a = Math.round(a / 15) * 15; rotateLayers(o, face, xform.snap, xform.px, xform.py, a); }
+    refreshFields($('#layerSec'), activeLayer()); return;
+  }
   if (mode === 'scale') scaleItem(o, face, it, xform.from, Math.hypot(dx, dy) / xform.d0);
   else {
     let a = xform.r0 + xform.flip * (Math.atan2(dy, dx) - xform.a0) / DEG;
@@ -173,7 +189,8 @@ function initInteraction() {
     }
     if (!lockActive() || drag3) return;
     if (e.button === 2 || (e.button === 0 && (e.shiftKey || e.ctrlKey || e.metaKey || tool() === 'hand'))) {
-      pan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y }; setCamTween(null); cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'move';
+      // a Shift- or Ctrl-click that does not move stays a click (it adds a layer to the picked ones)
+      pan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y }; setCamTween(null); if (e.button === 0) down = { x: e.clientX, y: e.clientY }; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'move';
     }
   }, true);
   window.addEventListener('pointermove', e => {
@@ -186,6 +203,12 @@ function initInteraction() {
    window.addEventListener('pointercancel', endPan);
   cvs.addEventListener('dblclick', e => {
     const h = pick(e.clientX, e.clientY); if (!h) return setView('fit');
+    // a double click on a layer of a picked group picks it alone (inside the group)
+    const o = state.objects.find(x => x.id === h.objId);
+    if (o && h.face === sel.face && h.uv && !h.wall && selectedIds().length > 1) {
+      const [W, H] = facePx(o, h.face), hl = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H);
+      if (hl?.group) { pickLayers([hl.id]); return; }
+    }
     // a double click on the selected picture: its crop frame
     const L = activeLayer();
     if (L?.type === 'image' && !L.tile && tool() === 'select' && layerUnder(h, L)) { setEditMode(editMode() === 'crop' ? null : 'crop'); renderLayerProps(); ui.editor = true; return; }
@@ -203,6 +226,12 @@ function initInteraction() {
       if (inEditFrame(e) && startEdit(e, 'move')) return;
       setEditMode(null); renderLayerProps(); ui.editor = true;
     } else if (g) return startXform(e, g);
+    // several picked layers: a press on any of them moves them all (over their face)
+    const many = selectedLayers(), hm = many.length > 1 && pick(e.clientX, e.clientY);
+    if (hm && many.some(M => layerUnder(hm, M))) {
+      const o = activeObj(), at = facePoint(e, o, sel.face);
+      if (at) { xform = { many: true, snap: snapshot(many), o, face: sel.face, at, it: many[0] }; controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'grabbing'; return; }
+    }
     const h = pick(e.clientX, e.clientY), L = activeLayer();
     // a selected sticker is dragged across the model, face to face
     const hs = sel.sticker && h?.objId === sel.obj ? stickerHit(h) : null;
@@ -242,7 +271,11 @@ function initInteraction() {
     cvs.style.cursor = cur;
   });
   cvs.addEventListener('pointerup', e => {
-    if (xform) { endXform(); cvs.style.cursor = ''; down = null; return; }
+    if (xform) {
+      const was = xform; endXform(); cvs.style.cursor = '';
+      // a click on one of several picked layers, without moving them, falls through and picks it alone
+      if (!(was.many && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) <= 5)) { down = null; return; }
+    }
     if (dragSt) { stickerDirty.add(dragSt.o.id); dragSt = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.stickers = true; commit(); down = null; return; }
     if (drag3) {
       drag3 = null; controls.enabled = true; cvs.style.cursor = 'move';
@@ -264,9 +297,13 @@ function initInteraction() {
       return;
     }
     if (sel.sticker) { sel.sticker = null; ui.stickers = true; }
-    let layerId = null;
-    if (h.face && h.uv && !h.wall) { const [W, H] = facePx(o, h.face); layerId = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H)?.id ?? null; }
-    select(o.id, h.face || undefined, layerId, { flash: true });
+    let hitL = null;
+    if (h.face && h.uv && !h.wall) { const [W, H] = facePx(o, h.face); hitL = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H); }
+    const layerId = hitL?.id ?? null, same = o.id === sel.obj && h.face === sel.face, add = e.shiftKey || e.ctrlKey || e.metaKey;
+    // a layer of a group picks the group (a layer inside it once the group is entered); Shift / Ctrl adds or takes off
+    if (hitL && same) pickLayers(clickPick(o.faces[h.face], hitL, add));
+    else if (add && same) return;
+    else { select(o.id, h.face || undefined, null, { flash: true }); if (hitL) pickLayers(clickPick(o.faces[h.face], hitL)); }
     // a click on a layer opens its design; a click on a bare face keeps the section that is open
     if (layerId) setTab('design');
   });
@@ -298,8 +335,24 @@ function initInteraction() {
     if (e.target === ed && activeObj()) { const [mx, my] = edPoint(e); return addImageToFace(file, activeObj(), sel.face, [mx / edState.dw, my / edState.dh]); }
     if (activeObj()) addImageToFace(file);
   });
+  // layers go to the clipboard as text marked as ours, so they paste onto another face, object or tab
+  const CLIP = 'boxstudio-layers:';
+  const copyOut = (e, cut) => {
+    if (e.target.closest?.('input,textarea') || String(getSelection?.() || '')) return;
+    const o = activeObj(), Ls = selectedLayers(); if (!o || !Ls.length) return;
+    e.preventDefault(); e.clipboardData.setData('text/plain', CLIP + JSON.stringify(copyData(o, sel.face, Ls)));
+    if (cut) deleteLayer(Ls[0].id);
+  };
+  document.addEventListener('copy', e => copyOut(e, false));
+  document.addEventListener('cut', e => copyOut(e, true));
   document.addEventListener('paste', e => {
     if (e.target.closest?.('input,textarea')) return;
+    const txt = e.clipboardData?.getData('text/plain') || '';
+    if (txt.startsWith(CLIP) && activeObj() && sel.face) {
+      e.preventDefault();
+      try { const out = pasteData(activeObj(), sel.face, JSON.parse(txt.slice(CLIP.length))); pickLayers(out.map(l => l.id)); renderFaceTabs(); commit(); } catch { toast('Не удалось вставить слои'); }
+      return;
+    }
     const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
     if (it && activeObj()) { e.preventDefault(); addImageToFace(it.getAsFile()); }
   });
@@ -317,6 +370,21 @@ function initInteraction() {
       const key = e.key.toLowerCase();
       if (key === 'f' || key === 'а') { e.preventDefault(); return activeObj() ? focusSelected({ frame: true }) : setView('fit'); }
       if (key === 'h' || key === 'р' || e.key === 'Home') { e.preventDefault(); return setView('fit'); }
+    }
+    // the face's layers, as in Figma: Ctrl+A all, Ctrl+G group, Ctrl+Shift+G ungroup, Alt+A/D/W/S/H/V align,
+    // Alt+Shift+H/V distribute, Ctrl+] / Ctrl+[ up and down (with Shift: to the top or the bottom)
+    if (activeObj() && sel.face && activeFaceData()) {
+      if (mod && !e.altKey && e.code === 'KeyA') { e.preventDefault(); return pickLayers(activeFaceData().layers.map(l => l.id)); }
+      if (mod && e.code === 'KeyG' && sel.layer) { e.preventDefault(); return layerCmd(e.shiftKey ? 'ungroup' : 'group'); }
+      if (e.altKey && !mod && sel.layer) {
+        const al = { KeyA: 'left', KeyD: 'right', KeyW: 'top', KeyS: 'bottom', KeyH: 'hcenter', KeyV: 'vcenter' }[e.code];
+        if (e.shiftKey && (e.code === 'KeyH' || e.code === 'KeyV')) { e.preventDefault(); return layerCmd('distribute', e.code === 'KeyH' ? 'x' : 'y'); }
+        if (al) { e.preventDefault(); return layerCmd('align', al); }
+      }
+      if (mod && sel.layer && (e.code === 'BracketRight' || e.code === 'BracketLeft')) {
+        e.preventDefault(); const up = e.code === 'BracketRight';
+        return moveLayer(sel.layer, e.shiftKey ? (up ? Infinity : -Infinity) : up ? 1 : -1);
+      }
     }
     const ST = !activeLayer() && activeSticker();
     if (ST) {
@@ -336,9 +404,11 @@ function initInteraction() {
     else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateLayer(L.id); }
     else if (e.key === 'Escape') selectLayer(null);
     else if (e.key.startsWith('Arrow')) {
-      e.preventDefault(); const st = e.shiftKey ? .05 : .005;
-      if (e.key === 'ArrowLeft') L.x -= st; if (e.key === 'ArrowRight') L.x += st; if (e.key === 'ArrowUp') L.y -= st; if (e.key === 'ArrowDown') L.y += st;
-      markFace(activeObj(), sel.face); refreshFields($('#layerSec'), L); clearTimeout(nudgeT); nudgeT = setTimeout(commit, 400);
+      // all the picked layers, by half a percent of the face (Shift: five)
+      e.preventDefault(); const o = activeObj(), [W, H] = facePx(o, sel.face), st = e.shiftKey ? .05 : .005;
+      const dx = e.key === 'ArrowLeft' ? -st * W : e.key === 'ArrowRight' ? st * W : 0, dy = e.key === 'ArrowUp' ? -st * H : e.key === 'ArrowDown' ? st * H : 0;
+      moveLayers(o, sel.face, snapshot(selectedLayers()), dx, dy);
+      refreshFields($('#layerSec'), L); clearTimeout(nudgeT); nudgeT = setTimeout(commit, 400);
     }
   });
 }

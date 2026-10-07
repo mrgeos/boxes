@@ -2,11 +2,12 @@
 import * as THREE from 'three';
 import { $, DEG, S } from '../core/util.js';
 import { activeLayer, activeObj, sel } from '../core/state.js';
-import { faceKeys, faceMM, loopAxis } from '../core/model.js';
+import { faceKeys, faceMM, facePx, loopAxis } from '../core/model.js';
 import { activeSticker, placementsFor, stickerSize } from '../stickers/placement.js';
 import { apply, layerMM, layerReach } from '../faces/wrap.js';
 import { RT, camera, cvs, scene, world } from './renderer.js';
 import { editMode, editRects } from '../core/mask.js';
+import { boundsOf, selectedLayers } from '../core/layers.js';
 import { tool } from '../ui/action-bar.js';
 import { recording } from './camera.js';
 
@@ -30,6 +31,12 @@ const LIFT = .4 * S, HLIFT = 1.5 * S, STEP = 1.5;   // off the surface; sampling
 function target() {
   const o = activeObj(), rt = o && RT.get(o.id); if (!rt) return null;
   const st = !activeLayer() && activeSticker(), L = !st && activeLayer();
+  // several layers: one frame round them all, square to the face (its own mm)
+  const many = !st && selectedLayers();
+  if (many?.length > 1) {
+    const [W, H] = facePx(o, sel.face), [mw] = faceMM(o, sel.face), b = boundsOf(many, W, H).map(v => v * mw / W);
+    return { o, rt, multi: true, w: b[2] - b[0], h: b[3] - b[1], M: [1, 0, 0, 1, (b[0] + b[2]) / 2, (b[1] + b[3]) / 2], key: JSON.stringify([o.id, sel.face, many, 'multi']), built: rt.group.children[0] };
+  }
   if (!st && (!L || !sel.face || !L.visible)) return null;
   const [w, h] = st ? stickerSize(st) : (m => [m.w, m.h])(layerMM(o, sel.face, L));
   // crop or mask mode: the frame being edited and the one round it (the layer's own mm)
@@ -38,7 +45,8 @@ function target() {
   return { o, rt, st, L, w, h, er, mode, key: JSON.stringify([o.id, sel.face, st || L, w, h, mode]), built: rt.group.children[0] };
 }
 /* where it goes: parts [{ key, M, G }] map it onto the mm of each face it is on */
-function partsOf({ o, st, L, rt }) {
+function partsOf({ o, st, L, rt, multi, M: MM }) {
+  if (multi) return [{ key: sel.face, M: MM }];
   if (st) { const keys = faceKeys(o); return placementsFor(o, st).filter(p => keys.includes(p.key) && rt.faces[p.key]).map(p => ({ key: p.key, M: p.M })); }
   const k = sel.face, [mw, mh] = faceMM(o, k), r = (L.rot || 0) * DEG, cs = Math.cos(r), sn = Math.sin(r), M = [cs, sn, -sn, cs, L.x * mw, L.y * mh];
   // a layer running over edges: its own face's mm map on to the faces it reaches

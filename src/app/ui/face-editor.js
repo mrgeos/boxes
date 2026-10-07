@@ -12,7 +12,8 @@ import { clipRect, editDrag, editFrom, editMode, editRects, maskPath, setEditMod
 import { renderLayerProps } from './face-panel.js';
 import { placementsFor } from '../stickers/placement.js';
 import { drawSticker } from '../stickers/film.js';
-import { selectLayer } from '../core/selection.js';
+import { pickLayers } from '../core/selection.js';
+import { boundsOf, clickPick, groupOf, layerAABB, moveLayers, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
 import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
 import { rotateItem, scaleItem } from '../core/transform.js';
@@ -20,7 +21,7 @@ import { rotateItem, scaleItem } from '../core/transform.js';
 const ed = $('#editor'), ectx = ed.getContext('2d');
 /* the face is drawn with a margin round it (PAD px), where the part of a layer past its edge shows */
 const PAD = 16;
-const edState = { k: 1, dw: 0, dh: 0, drag: null, guides: [] };
+const edState = { k: 1, dw: 0, dh: 0, drag: null, guides: [], marquee: null };
 function drawEditor() {
   const o = activeObj(), wrap = $('#editorWrap');
   if (!o || !sel.face) { ectx.setTransform(1, 0, 0, 1, 0, 0); ectx.clearRect(0, 0, ed.width, ed.height); return; }
@@ -99,7 +100,31 @@ function drawEditor() {
   // guides
   c.strokeStyle = '#e6007e'; c.lineWidth = 1;
   for (const g of edState.guides) { c.beginPath(); if (g[0] === 'x') { c.moveTo(g[1] * dw, 0); c.lineTo(g[1] * dw, dh); } else { c.moveTo(0, g[1] * dh); c.lineTo(dw, g[1] * dh); } c.stroke(); }
+  // a frame drawn with the mouse over empty space
+  if (edState.marquee) {
+    const [x0, y0, x1, y1] = edState.marquee;
+    c.save(); c.fillStyle = 'rgba(10,122,161,.08)'; c.strokeStyle = accentCss; c.lineWidth = 1; c.setLineDash([4, 3]);
+    c.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)); c.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)); c.restore();
+  }
   // selection
+  const many = selectedLayers();
+  if (many.length > 1) {
+    // several layers: each outlined thinly, one frame round them all with handles to scale and turn them together
+    c.save(); c.strokeStyle = accentCss; c.lineWidth = 1;
+    for (const M of many) {
+      const [w, h] = layerBox(M, W, H), a = M.rot * DEG, cs = Math.cos(a), sn = Math.sin(a), mx = M.x * W * k, my = M.y * H * k;
+      const q = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => [mx + sx * w * k / 2 * cs - sy * h * k / 2 * sn, my + sx * w * k / 2 * sn + sy * h * k / 2 * cs]);
+      c.beginPath(); q.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); c.stroke();
+    }
+    const b = boundsOf(many, W, H).map(v => v * k), pts = [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]], cxm = (b[0] + b[2]) / 2, rh = [cxm, b[1] - 18];
+    c.lineWidth = 1.5; c.strokeRect(b[0], b[1], b[2] - b[0], b[3] - b[1]);
+    c.beginPath(); c.moveTo(cxm, b[1]); c.lineTo(...rh); c.stroke();
+    c.fillStyle = '#fff';
+    for (const p of pts) { c.beginPath(); c.rect(p[0] - 4, p[1] - 4, 8, 8); c.fill(); c.stroke(); }
+    c.beginPath(); c.arc(rh[0], rh[1], 5, 0, Math.PI * 2); c.fill(); c.stroke(); c.restore();
+    edState.handles = { multi: true, corners: pts, rot: rh, center: [cxm, (b[1] + b[3]) / 2] };
+    return;
+  }
   const L = activeLayer();
   if (L && L.visible) {
     const [w, h] = layerBox(L, W, H); const cx = L.x * W * k, cy = L.y * H * k, a = L.rot * DEG;
@@ -165,20 +190,23 @@ function hitLayer(face, W, H, px, py) {
   }
   return null;
 }
-function snapMove(L, nx, ny, W, H, free) {
-  const guides = [];
-  if (!free) {
-    const [w, h] = layerBox(L, W, H); const th = 6 / edState.k;
-    const tx = [[.5, 0], [0, w / 2 / W], [1, -w / 2 / W]], ty = [[.5, 0], [0, h / 2 / H], [1, -h / 2 / H]];
-    for (const [g, off] of tx) if (Math.abs((nx - off - g) * W) < th && !L.rot) { nx = g + off; guides.push(['x', g]); break; }
-    for (const [g, off] of ty) if (Math.abs((ny - off - g) * H) < th && !L.rot) { ny = g + off; guides.push(['y', g]); break; }
-    if (L.rot && Math.abs((nx - .5) * W) < th) { nx = .5; guides.push(['x', .5]); }
-    if (L.rot && Math.abs((ny - .5) * H) < th) { ny = .5; guides.push(['y', .5]); }
-  }
-  edState.guides = guides; L.x = nx; L.y = ny;
+/* smart guides: a moving box (face px) snaps its edges and centre to the face's edges and centre and to the other
+   layers' ones, within 6 screen px; returns the shift to add and the lines to show */
+function snapBox(bx, others, W, H) {
+  const th = 6 / edState.k, xs = [0, W / 2, W], ys = [0, H / 2, H];
+  for (const L of others) { if (!L.visible) continue; const q = layerAABB(L, W, H); xs.push(q[0], (q[0] + q[2]) / 2, q[2]); ys.push(q[1], (q[1] + q[3]) / 2, q[3]); }
+  const best = (vals, cands) => { let r = null; for (const v of vals) for (const c of cands) { const d = c - v; if (Math.abs(d) < th && (!r || Math.abs(d) < Math.abs(r[0]))) r = [d, c]; } return r; };
+  const bx_ = best([bx[0], (bx[0] + bx[2]) / 2, bx[2]], xs), by_ = best([bx[1], (bx[1] + bx[3]) / 2, bx[3]], ys);
+  return { dx: bx_?.[0] || 0, dy: by_?.[0] || 0, guides: [...(bx_ ? [['x', bx_[1] / W]] : []), ...(by_ ? [['y', by_[1] / H]] : [])] };
 }
 function edPoint(e) { const r = ed.getBoundingClientRect(); return [(e.clientX - r.left - PAD), (e.clientY - r.top - PAD)]; }
-const edUp = () => { if (edState.drag) { edState.drag = null; edState.guides = []; ui.editor = true; ui.layers = true; commit(); } };
+const edUp = () => {
+  const d = edState.drag; if (!d) return;
+  edState.drag = null; edState.guides = []; edState.marquee = null; ui.editor = true; ui.layers = true;
+  // a click on one of several picked layers (without moving it) picks it alone
+  if (d.mode === 'move' && !d.moved && d.pick) pickLayers(d.pick);
+  commit();
+};
 
 /* hooks up the 2D editor */
 function initFaceEditor() {
@@ -202,18 +230,35 @@ function initFaceEditor() {
       if (Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < 9) mode = 'rot';
       else if (hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9)) mode = 'scale';
     }
-    let target = L;
-    if (!mode) {
-      // the selected layer first, even under others; else the top layer under the cursor
-      target = L && hitLayer({ layers: [L] }, W, H, px, py) ? L : hitLayer(f, W, H, px, py);
-      if (!target) { if (sel.layer) selectLayer(null); return; }
-      if (target.id !== sel.layer) selectLayer(target.id);
-      mode = 'move';
-    }
+    const many = selectedLayers(f);
     ed.setPointerCapture(e.pointerId);
-    const [cx, cy] = [target.x * W * k, target.y * H * k];
-    edState.drag = { mode, L: target, mx, my, x: target.x, y: target.y, rot: target.rot, w: target.w, h: target.h, size: target.size,
-      d0: Math.max(4, Math.hypot(mx - cx, my - cy)), cx, cy };
+    if (mode && hd.multi) {
+      // several layers scaled or turned together round the middle of their frame
+      const [cx, cy] = hd.center;
+      edState.drag = { mode: 'm' + mode, snap: snapshot(many), mx, my, cx, cy, px: cx / k, py: cy / k, d0: Math.max(4, Math.hypot(mx - cx, my - cy)), a0: Math.atan2(my - cy, mx - cx) };
+      return;
+    }
+    if (mode) {
+      const [cx, cy] = [L.x * W * k, L.y * H * k];
+      edState.drag = { mode, L, mx, my, x: L.x, y: L.y, rot: L.rot, w: L.w, h: L.h, size: L.size, d0: Math.max(4, Math.hypot(mx - cx, my - cy)), cx, cy };
+      return;
+    }
+    // the selected layers first, even under others; else the top layer under the cursor
+    const hit = (many.length && hitLayer({ layers: many }, W, H, px, py)) || hitLayer(f, W, H, px, py);
+    if (!hit) {
+      // empty space: a frame drawn with the mouse picks the layers it touches (Shift adds to the picked ones)
+      const keep = e.shiftKey || e.ctrlKey || e.metaKey ? many.map(l => l.id) : [];
+      if (!keep.length && sel.layer) pickLayers([]);
+      edState.drag = { mode: 'marquee', mx, my, keep };
+      return;
+    }
+    if (e.shiftKey || e.ctrlKey || e.metaKey) { pickLayers(clickPick(f, hit, true)); edState.drag = null; return; }
+    // a press on one of several picked layers moves them all; a click without moving then picks it alone
+    let pick = null;
+    if (!many.includes(hit)) pickLayers(clickPick(f, hit), hit.group ? undefined : hit.id);
+    else if (many.length > 1) pick = clickPick(f, hit);
+    const Ls = selectedLayers(f);
+    edState.drag = { mode: 'move', snap: snapshot(Ls), mx, my, pick, moved: false, others: f.layers.filter(l => !Ls.includes(l)), box: boundsOf(Ls, W, H) };
   });
   ed.addEventListener('pointermove', e => {
     const d = edState.drag;
@@ -227,15 +272,42 @@ function initFaceEditor() {
       else if (hitLayer(f, edState.W, edState.H, mx / edState.k, my / edState.k)) cur = 'move';
       ed.style.cursor = cur; return;
     }
-    const [mx, my] = edPoint(e), { k, W, H } = edState, L = d.L;
+    const [mx, my] = edPoint(e), { k, W, H } = edState, L = d.L, o = activeObj(), f = activeFaceData();
+    if (d.mode === 'marquee') {
+      edState.marquee = [d.mx, d.my, mx, my];
+      const r = [Math.min(d.mx, mx) / k, Math.min(d.my, my) / k, Math.max(d.mx, mx) / k, Math.max(d.my, my) / k], ids = new Set(d.keep);
+      for (const M of f.layers) {
+        if (!M.visible) continue;
+        const q = layerAABB(M, W, H);
+        if (q[0] <= r[2] && q[2] >= r[0] && q[1] <= r[3] && q[3] >= r[1]) for (const g of groupOf(f, M)) ids.add(g.id);
+      }
+      const now = f.layers.filter(l => ids.has(l.id)).map(l => l.id);
+      if (now.join() !== selectedIds().join()) pickLayers(now); else ui.editor = true;
+      return;
+    }
+    if (d.mode === 'move') {
+      let dx = (mx - d.mx) / k, dy = (my - d.my) / k;
+      if (!d.moved && Math.hypot(mx - d.mx, my - d.my) < 2) return;
+      d.moved = true;
+      // smart guides (Alt: none)
+      const g = e.altKey ? { dx: 0, dy: 0, guides: [] } : snapBox([d.box[0] + dx, d.box[1] + dy, d.box[2] + dx, d.box[3] + dy], d.others, W, H);
+      dx += g.dx; dy += g.dy; edState.guides = g.guides;
+      moveLayers(o, sel.face, d.snap, dx, dy);
+      refreshFields($('#layerSec'), activeLayer() || d.snap[0].L); return;
+    }
+    if (d.mode === 'mscale') { scaleLayers(o, sel.face, d.snap, d.px, d.py, Math.hypot(mx - d.cx, my - d.cy) / d.d0); refreshFields($('#layerSec'), activeLayer()); return; }
+    if (d.mode === 'mrot') {
+      let a = (Math.atan2(my - d.cy, mx - d.cx) - d.a0) / DEG;
+      if (e.shiftKey) a = Math.round(a / 15) * 15;
+      rotateLayers(o, sel.face, d.snap, d.px, d.py, a); refreshFields($('#layerSec'), activeLayer()); return;
+    }
     if (d.mode === 'edit') {
       // the pointer's move in the layer's own px (unturned)
       const a = -L.rot * DEG, ex = (mx - d.mx) / k, ey = (my - d.my) / k;
       editDrag(activeObj(), sel.face, L, d.edit, d.handle, d.from, ex * Math.cos(a) - ey * Math.sin(a), ex * Math.sin(a) + ey * Math.cos(a), W, H, d.box);
       refreshFields($('#layerSec'), L); return;
     }
-    if (d.mode === 'move') snapMove(L, d.x + (mx - d.mx) / (W * k), d.y + (my - d.my) / (H * k), W, H, e.altKey);
-    else if (d.mode === 'scale') {
+    if (d.mode === 'scale') {
       scaleItem(activeObj(), sel.face, L, d, Math.hypot(mx - d.cx, my - d.cy) / d.d0);
     } else if (d.mode === 'rot') {
       let a = Math.atan2(my - d.cy, mx - d.cx) / DEG + 90;
@@ -247,7 +319,10 @@ function initFaceEditor() {
   });
   ed.addEventListener('pointerup', edUp);
    ed.addEventListener('pointercancel', edUp);
-  ed.addEventListener('dblclick', () => {
+  ed.addEventListener('dblclick', e => {
+    // a double click on a layer of a group picks it alone (inside the group, as in Figma)
+    const f = activeFaceData(), [mx, my] = edPoint(e), hit = f && hitLayer(f, edState.W, edState.H, mx / edState.k, my / edState.k);
+    if (hit?.group && selectedIds().length > 1) { pickLayers([hit.id]); return; }
     const L = activeLayer();
     if (L?.type === 'text') { const t = $('#layerSec textarea'); t?.focus(); t?.select(); }
     // a picture: its crop frame

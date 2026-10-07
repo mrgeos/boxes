@@ -1,5 +1,5 @@
 // Правая панель: грани, слои и их свойства
-import { $, $$, esc, fmt, toast, uid } from '../core/util.js';
+import { $, $$, esc, fmt, toast } from '../core/util.js';
 import { BLENDS, EFFECTS, EFFECT_SHORT, ICON, SWATCHES } from '../core/constants.js';
 import { activeFaceData, activeLayer, activeObj, assets, sel, state } from '../core/state.js';
 import { faceKeys, faceLabel, faceMM, facePx, netLayout, newImage } from '../core/model.js';
@@ -7,7 +7,8 @@ import { getImg, importImageFile } from '../core/assets.js';
 import { hasRecolor, vecColors } from '../core/vector.js';
 import { allFonts, ensureFont } from '../core/fonts.js';
 import { RT, applyObjMaterials, markFace, ui } from '../scene/renderer.js';
-import { select, selectLayer } from '../core/selection.js';
+import { pickLayers, select } from '../core/selection.js';
+import { alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setLayerSelection, shiftLayers } from '../core/layers.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField, refreshFields } from './fields.js';
 import { MASKS, cropped, editMode, hasPanels, resetCrop, setClipBelow, setClipTo, setEditMode, setMask } from '../core/mask.js';
@@ -42,6 +43,7 @@ function setFaceBg(c, doCommit) {
   if (doCommit) commit();
 }
 function layerName(L) {
+  if (L.name) return L.name;
   if (L.type === 'text') return L.text.split('\n')[0] || 'Текст';
   if (L.type === 'image') return 'Изображение';
   return L.kind === 'ellipse' ? 'Круг' : 'Плашка';
@@ -51,11 +53,25 @@ function imageDpi(o, L) {
   const [mw] = faceMM(o, sel.face); const widthMM = L.w * mw;
   return Math.round(im.naturalWidth / (widthMM / 25.4));
 }
+/* the face's layers, top first, as in Figma: groups with their layers under them (folded or not), several picked
+   with Shift (a run) or Ctrl/Cmd (one more), dragged to another place or into a group, renamed by a double click */
+const folded = new Set();
+let drag = null;
 function renderLayers() {
   const o = activeObj(), f = activeFaceData(), box = $('#layers');
   if (!f) { box.innerHTML = ''; return; }
   if (!f.layers.length) { box.innerHTML = `<div class="empty">На этой грани пока только фон. Добавьте картинку, текст или плашку — или перетащите файл на грань в 3D.</div>`; return; }
-  box.innerHTML = [...f.layers].reverse().map(L => {
+  const picked = new Set(selectedIds()), rows = [], seen = new Set();
+  for (const L of [...f.layers].reverse()) {
+    if (L.group && !seen.has(L.group)) {
+      seen.add(L.group);
+      const ms = f.layers.filter(l => l.group === L.group), all = ms.every(l => picked.has(l.id)), vis = ms.some(l => l.visible);
+      rows.push(`<div class="layer grp ${all ? 'on' : ''} ${vis ? '' : 'hidden'}" data-g="${L.group}" draggable="true">
+        <button class="tw" data-a="fold" aria-label="${folded.has(L.group) ? 'Развернуть' : 'Свернуть'}">${folded.has(L.group) ? '▸' : '▾'}</button>
+        <span class="th">${ICON_GROUP}</span><span class="ln">${esc(f.groups?.[L.group] || 'Группа')}</span><span class="badge">${ms.length}</span>
+        <span class="acts">${rowActs(vis)}</span></div>`);
+    }
+    if (L.group && folded.has(L.group)) continue;
     let th = '';
     if (L.type === 'image') th = `<span class="th" data-src="${L.src}"></span>`;
     else if (L.type === 'text') th = `<span class="th" style="color:${L.color};font-family:'${esc(L.font)}'">Aa</span>`;
@@ -64,35 +80,145 @@ function renderLayers() {
     const badge = L.effect !== 'none' ? `<span class="badge">${EFFECT_SHORT[L.effect]}</span>`
       : dpi != null ? `<span class="badge ${dpi < 150 ? 'warn' : 'ok'} mono" title="Разрешение при печати">${dpi} dpi</span>` : '';
     const cut = (L.mask ? ' · маска' : '') + (cropped(L) ? ' · кадр' : '') + (L.clipTo ? ' · обрезан' : '');
-    return `<div class="layer ${L.id === sel.layer ? 'on' : ''} ${L.visible ? '' : 'hidden'} ${L.clipBelow ? 'clipped' : ''}" data-id="${L.id}" ${cut || L.clipBelow ? `title="${L.clipBelow ? 'Обтравка по слою ниже' : ''}${cut}"` : ''}>
+    rows.push(`<div class="layer ${picked.has(L.id) ? 'on' : ''} ${L.id === sel.layer && picked.size > 1 ? 'main' : ''} ${L.visible ? '' : 'hidden'} ${L.clipBelow ? 'clipped' : ''} ${L.group ? 'in-grp' : ''}" data-id="${L.id}" draggable="true" ${cut || L.clipBelow ? `title="${L.clipBelow ? 'Обтравка по слою ниже' : ''}${cut}"` : ''}>
       ${L.clipBelow ? '<span class="clip-mark" aria-hidden="true">↳</span>' : ''}${th}<span class="ln">${esc(layerName(L))}</span>${badge}
-      <span class="acts">
-        <button data-a="vis" title="${L.visible ? 'Скрыть' : 'Показать'}" aria-label="Видимость">${L.visible ? ICON.eye : ICON.eyeOff}</button>
-        <button data-a="up" title="Выше" aria-label="Выше">${ICON.up}</button>
-        <button data-a="down" title="Ниже" aria-label="Ниже">${ICON.down}</button>
-        <button data-a="dup" title="Дублировать (Ctrl+D)" aria-label="Дублировать">${ICON.copy}</button>
-        <button data-a="del" title="Удалить (Delete)" aria-label="Удалить">${ICON.trash}</button>
-      </span></div>`;
-  }).join('');
+      <span class="acts">${rowActs(L.visible)}</span></div>`);
+  }
+  box.innerHTML = rows.join('');
   $$('#layers .th[data-src]').forEach(t => { const u = assets[t.dataset.src]; if (u) t.style.backgroundImage = `url("${u}")`; });
+  const unitOf = el => el.dataset.g ? f.layers.filter(l => l.group === el.dataset.g) : f.layers.filter(l => l.id === el.dataset.id);
+  // the rows' layers top first, for a Shift run
+  const order = () => [...f.layers].reverse().map(l => l.id);
   $$('#layers .layer').forEach(el => {
     el.onclick = e => {
-      const a = e.target.closest('button')?.dataset.a, id = el.dataset.id;
-      if (!a) return selectLayer(id);
-      const i = f.layers.findIndex(l => l.id === id), L = f.layers[i];
-      if (a === 'vis') L.visible = !L.visible;
-      if (a === 'up' || a === 'down') return moveLayer(id, a === 'up' ? 1 : -1);
-      if (a === 'dup') return duplicateLayer(id);
-      if (a === 'del') return deleteLayer(id);
-      markFace(o, sel.face); renderLayers(); commit();
+      const a = e.target.closest('button')?.dataset.a, unit = unitOf(el);
+      if (a === 'fold') { const g = el.dataset.g; folded.has(g) ? folded.delete(g) : folded.add(g); return renderLayers(); }
+      if (a) return rowAction(o, f, unit, a);
+      const ids = unit.map(l => l.id);
+      if (e.shiftKey && sel.layer) {
+        // a run from the main layer to this row
+        const ord = order(), i = ord.indexOf(sel.layer), j = Math.max(...ids.map(id => ord.indexOf(id))), k = Math.min(...ids.map(id => ord.indexOf(id)));
+        const run = ord.slice(Math.min(i, k), Math.max(i, j) + 1);
+        return pickLayers(f.layers.filter(l => run.includes(l.id)).map(l => l.id), sel.layer);
+      }
+      if (e.ctrlKey || e.metaKey) {
+        const cur = new Set(selectedIds()), on = ids.every(id => cur.has(id));
+        for (const id of ids) on ? cur.delete(id) : cur.add(id);
+        return pickLayers(f.layers.filter(l => cur.has(l.id)).map(l => l.id));
+      }
+      pickLayers(ids, el.dataset.g ? ids.at(-1) : el.dataset.id);
+    };
+    // a double click on the name renames the layer or the group
+    $('.ln', el).ondblclick = e => { e.stopPropagation(); renameRow(o, f, el); };
+    el.ondragstart = e => {
+      const unit = unitOf(el), sel_ = selectedLayers(f), whole = !!el.dataset.g;
+      drag = { Ls: !whole && unit.every(l => sel_.includes(l)) ? sel_ : unit, whole };
+      e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'layers'); el.classList.add('dragging');
+    };
+    el.ondragend = () => { drag = null; $$('#layers .layer').forEach(r => r.classList.remove('dragging', 'drop-above', 'drop-below')); };
+    el.ondragover = e => {
+      if (!drag) return; e.preventDefault();
+      const r = el.getBoundingClientRect(), above = e.clientY < r.top + r.height / 2;
+      $$('#layers .layer').forEach(q => q.classList.remove('drop-above', 'drop-below'));
+      el.classList.add(above ? 'drop-above' : 'drop-below');
+    };
+    el.ondrop = e => {
+      if (!drag) return; e.preventDefault();
+      const above = el.classList.contains('drop-above'); dropRows(o, f, el, above); drag = null;
     };
   });
 }
+const ICON_GROUP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
+const rowActs = vis => `<button data-a="vis" title="${vis ? 'Скрыть' : 'Показать'}" aria-label="Видимость">${vis ? ICON.eye : ICON.eyeOff}</button>
+  <button data-a="up" title="Выше (Ctrl+])" aria-label="Выше">${ICON.up}</button>
+  <button data-a="down" title="Ниже (Ctrl+[)" aria-label="Ниже">${ICON.down}</button>
+  <button data-a="dup" title="Дублировать (Ctrl+D)" aria-label="Дублировать">${ICON.copy}</button>
+  <button data-a="del" title="Удалить (Delete)" aria-label="Удалить">${ICON.trash}</button>`;
+/* a row's buttons act on its layer or its whole group */
+function rowAction(o, f, unit, a) {
+  const k = sel.face;
+  if (a === 'vis') { const v = !unit.some(l => l.visible); for (const l of unit) l.visible = v; markFace(o, k); }
+  if (a === 'up' || a === 'down') shiftLayers(o, k, unit, a === 'up' ? 1 : -1);
+  if (a === 'dup') { const c = duplicateLayers(o, k, unit); setLayerSelection(c.map(l => l.id)); }
+  if (a === 'del') { deleteLayers(o, k, unit); if (!f.layers.some(l => l.id === sel.layer)) setLayerSelection([]); renderFaceTabs(); }
+  renderLayers(); renderLayerProps(); ui.editor = true; commit();
+}
+/* drops the dragged layers above or below a row: next to a group's layer they join that group */
+function dropRows(o, f, el, above) {
+  const k = sel.face, moved = new Set(drag.Ls), rest = f.layers.filter(l => !moved.has(l));
+  let R = el.dataset.g ? null : f.layers.find(l => l.id === el.dataset.id), g = el.dataset.g || R?.group || null;
+  if (R && moved.has(R)) return renderLayers();
+  const ms = g ? rest.filter(l => l.group === g) : [];
+  let at, join;
+  if (drag.whole && g) {
+    // a whole group goes next to another group, never into it
+    at = above ? rest.indexOf(ms.at(-1)) + 1 : rest.indexOf(ms[0]); join = undefined;
+  } else if (el.dataset.g) {
+    // on a group's row: above it — over the group; below it — into the group at its top (or under it, folded)
+    if (above) { at = rest.indexOf(ms.at(-1)) + 1; join = null; }
+    else if (folded.has(g)) { at = rest.indexOf(ms[0]); join = null; }
+    else { at = rest.indexOf(ms.at(-1)) + 1; join = g; }
+  } else { at = rest.indexOf(R) + (above ? 1 : 0); join = drag.whole ? undefined : R.group || null; }
+  if (at < 0) return renderLayers();
+  placeLayers(o, k, drag.Ls, at, join);
+  renderLayers(); ui.editor = true; commit();
+}
+function renameRow(o, f, el) {
+  const ln = $('.ln', el), L = el.dataset.id && f.layers.find(l => l.id === el.dataset.id), g = el.dataset.g;
+  const inp = document.createElement('input'); inp.className = 'ren'; inp.value = g ? f.groups?.[g] || 'Группа' : layerName(L);
+  ln.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const end = save => { if (done) return; done = true; if (save) { renameItem(o, sel.face, g || L, inp.value.trim()); commit(); } renderLayers(); renderLayerProps(); };
+  inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') end(true); if (e.key === 'Escape') end(false); };
+  inp.onblur = () => end(true); inp.onclick = e => e.stopPropagation();
+}
+/* align and distribute: one layer (or one group) to the face, several to their common box */
+const AL = { left: ['M4 3v18M8 8h11M8 16h6', 'По левому краю (Alt+A)'], hcenter: ['M12 3v18M5 8h14M8 16h8', 'По центру по горизонтали (Alt+H)'], right: ['M20 3v18M5 8h11M10 16h6', 'По правому краю (Alt+D)'],
+  top: ['M3 4h18M8 8v11M16 8v6', 'По верхнему краю (Alt+W)'], vcenter: ['M3 12h18M8 5v14M16 8v8', 'По центру по вертикали (Alt+V)'], bottom: ['M3 20h18M8 5v11M16 10v6', 'По нижнему краю (Alt+S)'] };
+const DI = { x: ['M4 4v16M20 4v16M10 8v8M14 8v8', 'Распределить по горизонтали (Alt+Shift+H)'], y: ['M4 4h16M4 20h16M8 10h8M8 14h8', 'Распределить по вертикали (Alt+Shift+V)'] };
+const svgI = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="${d}"/></svg>`;
+function alignBarHTML(n) {
+  return `<div class="abar-al" role="toolbar" aria-label="Выравнивание">${Object.entries(AL).map(([k, [d, t]]) => `<button data-al="${k}" title="${t}" aria-label="${t}">${svgI(d)}</button>`).join('')}
+    <span class="sep"></span>${Object.entries(DI).map(([k, [d, t]]) => `<button data-di="${k}" title="${t}" aria-label="${t}" ${n < 3 ? 'disabled' : ''}>${svgI(d)}</button>`).join('')}</div>`;
+}
+/* the layer actions of the panel, for the buttons and the keys alike */
+function layerCmd(cmd, arg) {
+  const o = activeObj(), k = sel.face, f = activeFaceData(), Ls = selectedLayers(f); if (!o || !f || !Ls.length) return;
+  if (cmd === 'align') alignLayers(o, k, Ls, arg);
+  else if (cmd === 'distribute') distributeLayers(o, k, Ls, arg);
+  else if (cmd === 'group') { if (unitsOf(f, Ls).length < 2) return; groupLayers(o, k, Ls); }
+  else if (cmd === 'ungroup') { if (!Ls.some(l => l.group)) return; ungroupLayers(o, k, Ls.flatMap(l => groupOf(f, l))); }
+  renderLayers(); renderLayerProps(); ui.editor = true; commit();
+}
+function bindAlignBar(sec) {
+  $$('[data-al]', sec).forEach(b => { b.onclick = () => layerCmd('align', b.dataset.al); });
+  $$('[data-di]', sec).forEach(b => { b.onclick = () => layerCmd('distribute', b.dataset.di); });
+}
+/* several layers picked: what they share */
+function renderMultiProps(sec, o, Ls) {
+  const f = activeFaceData(), units = unitsOf(f, Ls), grouped = Ls.some(l => l.group), main = activeLayer() || Ls.at(-1);
+  const oneGroup = units.length === 1 && grouped;
+  sec.innerHTML = `<div class="sec-h"><h2>${oneGroup ? esc(f.groups?.[Ls[0].group] || 'Группа') : `Выбрано слоёв: ${Ls.length}`}</h2><span class="badge">${faceLabel(o, sel.face)}</span></div>
+    ${alignBarHTML(units.length)}
+    <div class="grid2"><button class="btn sm" id="grpBtn" ${units.length < 2 ? 'disabled' : ''} title="Ctrl+G">Сгруппировать</button><button class="btn sm" id="ungrpBtn" ${grouped ? '' : 'disabled'} title="Ctrl+Shift+G">Разгруппировать</button></div>
+    ${rangeField('Непрозрачность', 'opacity', 0, 100, 1, 100)}
+    <div class="field wide"><span class="fl">Наложение</span><select data-k="blend">${Object.entries(BLENDS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+    <div class="grid2"><button class="btn sm" id="dupLayersBtn" title="Ctrl+D">Дублировать</button><button class="btn sm danger" id="delLayersBtn" title="Delete">Удалить</button></div>
+    <p class="hint">${oneGroup ? 'Двойной клик по слою группы в окне грани или на модели выбирает его одного. ' : ''}Shift- или Ctrl-клик добавляет и убирает слой, рамка мышью в окне грани выбирает несколько, Ctrl+A — все слои грани.</p>`;
+  bindAlignBar(sec);
+  // a shared setting: shown as the main layer has it, set for all
+  bindFields(sec, () => main, (key, v) => { for (const L of Ls) L[key] = v; markFace(o, sel.face); });
+  $('#grpBtn').onclick = () => layerCmd('group');
+  $('#ungrpBtn').onclick = () => layerCmd('ungroup');
+  $('#dupLayersBtn').onclick = () => duplicateLayer(main.id);
+  $('#delLayersBtn').onclick = () => deleteLayer(main.id);
+}
 function renderLayerProps() {
-  const sec = $('#layerSec'), L = activeLayer(), o = activeObj();
+  const sec = $('#layerSec'), L = activeLayer(), o = activeObj(), many = selectedLayers();
+  if (many.length > 1) return renderMultiProps(sec, o, many);
   if (!L) { sec.innerHTML = `<div class="sec-h"><h2>Слой</h2></div><p class="hint">Выберите слой в списке, в окне грани или кликом по модели. Стрелки сдвигают слой, Shift+стрелки — сильнее.</p>`; return; }
   const effOpts = Object.entries(EFFECTS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-  let html = `<div class="sec-h"><h2>Слой: ${esc(layerName(L)).slice(0, 24)}</h2><span class="badge">${faceLabel(o, sel.face)}</span></div>`;
+  let html = `<div class="sec-h"><h2>Слой: ${esc(layerName(L)).slice(0, 24)}</h2><span class="badge">${faceLabel(o, sel.face)}</span></div>${alignBarHTML(1)}`;
   if (L.type === 'text') {
     html += `<textarea data-k="text" rows="2" aria-label="Текст"></textarea>
       <div class="grid2"><select data-k="font" aria-label="Шрифт">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
@@ -129,7 +255,7 @@ function renderLayerProps() {
     if (k === 'w' && L.type === 'image') ui.layers = true;
     markFace(activeObj(), sel.face);
   });
-  bindCrop(o, L);
+  bindCrop(o, L); bindAlignBar(sec);
   $('#centerBtn').onclick = () => { const L = activeLayer(); L.x = .5; L.y = .5; markFace(o, sel.face); refreshFields(sec, L); commit(); };
   $('#delLayerBtn').onclick = () => deleteLayer(L.id);
   if (L.type === 'image') {
@@ -178,24 +304,25 @@ function addLayer(L, face = sel.face, obj = activeObj()) {
   else { sel.layer = L.id; renderLayers(); renderLayerProps(); renderFaceTabs(); }
   markFace(obj, face); commit();
 }
+/* these act on a layer, or on all the selected ones when it is one of them */
+const withSel = (f, id) => { const S = selectedLayers(f); return S.some(l => l.id === id) ? S : f.layers.filter(l => l.id === id); };
 function deleteLayer(id) {
   const o = activeObj(), f = activeFaceData(); if (!f) return;
-  f.layers = f.layers.filter(l => l.id !== id);
-  if (sel.layer === id) sel.layer = null;
-  markFace(o, sel.face); renderLayers(); renderLayerProps(); renderFaceTabs(); commit();
+  deleteLayers(o, sel.face, withSel(f, id));
+  if (!f.layers.some(l => l.id === sel.layer)) setLayerSelection([]);
+  renderLayers(); renderLayerProps(); renderFaceTabs(); ui.editor = true; commit();
 }
-/* one step up (1) or down (-1) in the face's layers: up is drawn over the others */
+/* one step up (1) or down (-1) in the face's layers: up is drawn over the others; ±Infinity: to the top or bottom */
 function moveLayer(id, step) {
-  const o = activeObj(), f = activeFaceData(), i = f?.layers.findIndex(l => l.id === id) ?? -1, j = i + step;
-  if (i < 0 || j < 0 || j >= f.layers.length) return;
-  [f.layers[i], f.layers[j]] = [f.layers[j], f.layers[i]];
-  markFace(o, sel.face); renderLayers(); commit();
+  const o = activeObj(), f = activeFaceData(); if (!f) return;
+  shiftLayers(o, sel.face, withSel(f, id), step);
+  renderLayers(); ui.editor = true; commit();
 }
 function duplicateLayer(id) {
-  const o = activeObj(), f = activeFaceData(); const L = f?.layers.find(l => l.id === id); if (!L) return;
-  const c = { ...structuredClone(L), id: uid(), x: L.x + .03, y: L.y + .03 };
-  f.layers.splice(f.layers.indexOf(L) + 1, 0, c); sel.layer = c.id;
-  markFace(o, sel.face); renderLayers(); renderLayerProps(); renderFaceTabs(); commit();
+  const o = activeObj(), f = activeFaceData(); if (!f) return;
+  const c = duplicateLayers(o, sel.face, withSel(f, id)); if (!c.length) return;
+  setLayerSelection(c.map(l => l.id));
+  renderLayers(); renderLayerProps(); renderFaceTabs(); ui.editor = true; commit();
 }
 async function addImageToFace(file, obj = activeObj(), face = sel.face, at = null) {
   if (!file || !file.type.startsWith('image/')) { toast('Нужен файл изображения: PNG, JPG, SVG или WebP'); return; }
@@ -240,4 +367,4 @@ function initFacePanel() {
   $('#imgInput').onchange = e => { const f = e.target.files[0]; if (f && pickCb) pickCb(f); };
 }
 
-export { addImageToFace, addLayer, bindVecColors, deleteLayer, duplicateLayer, initFacePanel, moveLayer, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers, setFaceBg, updateFaceMeta, vecColorsHTML };
+export { addImageToFace, addLayer, layerCmd, bindVecColors, deleteLayer, duplicateLayer, initFacePanel, moveLayer, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers, setFaceBg, updateFaceMeta, vecColorsHTML };
