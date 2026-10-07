@@ -160,11 +160,23 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .addrow .btn{height:auto;padding:6px 4px;flex-direction:column;gap:3px;font-size:11px}
 
 .layers{display:flex;flex-direction:column;gap:3px}
-.layer{display:flex;align-items:center;gap:6px;padding:4px 4px 4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--field);cursor:pointer;min-height:34px}
+.layer{display:flex;align-items:center;gap:6px;padding:2px 4px 2px 6px;border:1px solid transparent;border-radius:5px;background:none;cursor:pointer;min-height:28px}
+.layer:hover{background:var(--field)}
 .layer.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 .layer.hidden .ln{opacity:.45}
 .layer .ln{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px}
-.layer .th{width:24px;height:24px;border-radius:4px;flex:none;background:var(--checker-b) center/contain no-repeat;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;font-weight:700;overflow:hidden}
+.layer .th{width:20px;height:20px;border-radius:3px;flex:none;background:var(--checker-b) center/contain no-repeat;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:10.5px;font-weight:700;overflow:hidden}
+.layer .th.txt{background:none;font-size:12px}
+.layer.locked .th,.layer.hidden .th{opacity:.5}
+.layer .mods{display:flex;gap:1px;flex:none}
+.layer .mods .mod{width:18px;height:18px;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:3px;display:flex;align-items:center;justify-content:center;padding:0}
+.layer .mods .mod:hover{background:var(--panel);color:var(--accent)}
+.layer .mods .mod.warn{color:var(--warn)}.layer .mods .mod.bad{color:var(--danger)}
+.layer .mods svg{width:12px;height:12px}
+.layer .acts button{visibility:hidden}
+.layer:hover .acts button,.layer:focus-within .acts button,.layer .acts button.pin{visibility:visible}
+.flash{animation:propflash 1.2s ease-out}
+@keyframes propflash{0%,30%{box-shadow:0 0 0 2px var(--accent);border-radius:6px}100%{box-shadow:0 0 0 2px transparent}}
 .layer .th svg{width:14px;height:14px}
 /* asset library */
 .apick{width:300px;padding:8px}
@@ -183,7 +195,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .vc{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--muted)}
 .vc input[type=color]{width:26px;height:22px;padding:0}
 .layer .acts{display:flex;gap:0}
-.layer .acts button{width:24px;height:24px;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;padding:0}
+.layer .acts button{width:22px;height:22px;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;padding:0}
 .layer .acts button:hover{background:var(--panel);color:var(--fg)}
 .layer .acts svg{width:14px;height:14px}
 .badge{font-size:10px;padding:1px 6px;border-radius:9px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}

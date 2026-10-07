@@ -13,6 +13,20 @@ const ICON = {
   bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 8h12l1 13H5L6 8z"/><path d="M6 8l1.5-4h9L18 8M9 12.5h6"/></svg>',
   dome: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 13.5h18M4.2 13.5 7 20h10l2.8-6.5"/><path d="M6.5 13.5 8.2 6.5a2 2 0 0 1 2-1.5h3.6a2 2 0 0 1 2 1.5l1.7 7"/></svg>',
   torte: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M2.5 17.5h19M3.5 17.5 5 20h14l1.5-2.5"/><path d="M5.5 17.5V8.5c0-2 1.5-3.5 3.5-3.5h6c2 0 3.5 1.5 3.5 3.5v9"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  unlock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>',
+  crop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14"/></svg>',
+  mask: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="5"/></svg>',
+  clip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z" stroke-dasharray="3 3"/><path d="M8 8h8v8H8z"/></svg>',
+  fx: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 16l.7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7Z"/></svg>',
+  recolor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.5-.8 1.5-1.5 0-1-.8-1.4-.8-2.3 0-.9.7-1.7 1.7-1.7H17a4 4 0 0 0 4-4C21 6.5 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></svg>',
+  grad: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 15 15 3M9 21 21 9"/></svg>',
+  arc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17a11 11 0 0 1 18 0"/><path d="M7 20l-1-3M17 20l1-3"/></svg>',
+  wrap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h10a4 4 0 0 1 4 4v10"/><path d="M14 18l3 3 3-3"/></svg>',
+  blend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>',
+  opacity: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" stroke="none"/></svg>',
+  tile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17v.5"/></svg>',
   rect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>',
   ell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>',
 };
@@ -33,7 +47,6 @@ const FOILS = {
   'foil-gold': ['#fbe7a1', '#d6a53c', '#8f6516'], 'foil-silver': ['#f7f8fa', '#bfc4cc', '#7d838d'],
   'foil-copper': ['#f6c29c', '#bf6f3f', '#7c3e1b'], 'foil-holo': null,
 };
-const EFFECT_SHORT = { 'foil-gold': 'золото', 'foil-silver': 'серебро', 'foil-copper': 'медь', 'foil-holo': 'голо', 'spot-uv': 'УФ-лак', emboss: 'тиснение', deboss: 'конгрев' };
 const isFoil = e => e && e.startsWith('foil');
 const BLENDS = { 'source-over': 'Обычное', multiply: 'Умножение', screen: 'Осветление', overlay: 'Перекрытие' };
 const PRESETS = [
@@ -103,4 +116,4 @@ const LIGHTS = {
   flat:   { light: .7, az: 20, el: 70, env: .95, shadow: .18, exposure: .9 },
 };
 
-export { BLENDS, BOARD, EFFECTS, EFFECT_SHORT, FACE_LABEL, FINISHES, FOILS, FONTS, ICON, LID_COLORS, LID_TYPES, LID_WALLS, LIGHTS, PET_PRINT, PRESETS, SWATCHES, WHITE_INSIDE, isFoil };
+export { BLENDS, BOARD, EFFECTS, FACE_LABEL, FINISHES, FOILS, FONTS, ICON, LID_COLORS, LID_TYPES, LID_WALLS, LIGHTS, PET_PRINT, PRESETS, SWATCHES, WHITE_INSIDE, isFoil };

@@ -1,14 +1,17 @@
 // Правая панель: грани, слои и их свойства
 import { $, $$, esc, fmt, toast } from '../core/util.js';
-import { BLENDS, EFFECTS, EFFECT_SHORT, ICON, SWATCHES } from '../core/constants.js';
+import { BLENDS, EFFECTS, ICON, SWATCHES } from '../core/constants.js';
 import { activeFaceData, activeLayer, activeObj, assets, sel, state } from '../core/state.js';
 import { faceKeys, faceLabel, faceMM, facePx, netLayout, newImage } from '../core/model.js';
 import { getImg, importImageFile } from '../core/assets.js';
+import { library } from '../core/library.js';
+import { drawLayer, layerBox } from '../faces/render.js';
+import { openMenu } from './menu.js';
 import { hasRecolor, vecColors } from '../core/vector.js';
 import { allFonts, ensureFont } from '../core/fonts.js';
 import { RT, applyObjMaterials, markFace, ui } from '../scene/renderer.js';
 import { pickLayers, select } from '../core/selection.js';
-import { alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setGradient, setLayerSelection, shiftLayers } from '../core/layers.js';
+import { alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setVisible, shiftLayers } from '../core/layers.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField, refreshFields } from './fields.js';
 import { MASKS, cropped, editMode, hasPanels, resetCrop, setClipBelow, setClipTo, setEditMode, setMask } from '../core/mask.js';
@@ -45,7 +48,7 @@ function setFaceBg(c, doCommit) {
 function layerName(L) {
   if (L.name) return L.name;
   if (L.type === 'text') return L.text.split('\n')[0] || 'Текст';
-  if (L.type === 'image') return 'Изображение';
+  if (L.type === 'image') return library.find(it => it.id === L.src)?.name || 'Изображение';
   return L.kind === 'ellipse' ? 'Круг' : 'Плашка';
 }
 function imageDpi(o, L) {
@@ -69,23 +72,16 @@ function renderLayers() {
       rows.push(`<div class="layer grp ${all ? 'on' : ''} ${vis ? '' : 'hidden'}" data-g="${L.group}" draggable="true">
         <button class="tw" data-a="fold" aria-label="${folded.has(L.group) ? 'Развернуть' : 'Свернуть'}">${folded.has(L.group) ? '▸' : '▾'}</button>
         <span class="th">${ICON_GROUP}</span><span class="ln">${esc(f.groups?.[L.group] || 'Группа')}</span><span class="badge">${ms.length}</span>
-        <span class="acts">${rowActs(vis)}</span></div>`);
+        <span class="acts">${rowActs(vis, ms.every(l => l.locked))}</span></div>`);
     }
     if (L.group && folded.has(L.group)) continue;
-    let th = '';
-    if (L.type === 'image') th = `<span class="th" data-src="${L.src}"></span>`;
-    else if (L.type === 'text') th = `<span class="th" style="color:${L.color};font-family:'${esc(L.font)}'">Aa</span>`;
-    else th = `<span class="th" style="color:${L.fill}">${L.kind === 'ellipse' ? ICON.ell : ICON.rect}</span>`;
-    const dpi = L.type === 'image' ? imageDpi(o, L) : null;
-    const badge = L.effect !== 'none' ? `<span class="badge">${EFFECT_SHORT[L.effect]}</span>`
-      : dpi != null ? `<span class="badge ${dpi < 150 ? 'warn' : 'ok'} mono" title="Разрешение при печати">${dpi} dpi</span>` : '';
-    const cut = (L.mask ? ' · маска' : '') + (cropped(L) ? ' · кадр' : '') + (L.clipTo ? ' · обрезан' : '');
-    rows.push(`<div class="layer ${picked.has(L.id) ? 'on' : ''} ${L.id === sel.layer && picked.size > 1 ? 'main' : ''} ${L.visible ? '' : 'hidden'} ${L.clipBelow ? 'clipped' : ''} ${L.group ? 'in-grp' : ''}" data-id="${L.id}" draggable="true" ${cut || L.clipBelow ? `title="${L.clipBelow ? 'Обтравка по слою ниже' : ''}${cut}"` : ''}>
-      ${L.clipBelow ? '<span class="clip-mark" aria-hidden="true">↳</span>' : ''}${th}<span class="ln">${esc(layerName(L))}</span>${badge}
-      <span class="acts">${rowActs(L.visible)}</span></div>`);
+    const mods = layerMods(o, L).map(m => `<button class="mod ${m.cls || ''}" data-a="mod" data-to="${esc(m.to)}" title="${esc(m.t)}" aria-label="${esc(m.t)}">${ICON[m.i]}</button>`).join('');
+    rows.push(`<div class="layer ${picked.has(L.id) ? 'on' : ''} ${L.id === sel.layer && picked.size > 1 ? 'main' : ''} ${L.visible ? '' : 'hidden'} ${L.locked ? 'locked' : ''} ${L.clipBelow ? 'clipped' : ''} ${L.group ? 'in-grp' : ''}" data-id="${L.id}" draggable="true">
+      ${L.clipBelow ? '<span class="clip-mark" title="Обтравка по слою ниже">↳</span>' : ''}${thumbHTML(L)}<span class="ln">${esc(layerName(L))}</span><span class="mods">${mods}</span>
+      <span class="acts">${rowActs(L.visible, L.locked)}</span></div>`);
   }
   box.innerHTML = rows.join('');
-  $$('#layers .th[data-src]').forEach(t => { const u = assets[t.dataset.src]; if (u) t.style.backgroundImage = `url("${u}")`; });
+  $$('#layers canvas.th').forEach(c => drawThumb(c, o, f.layers.find(l => l.id === c.closest('.layer').dataset.id)));
   const unitOf = el => el.dataset.g ? f.layers.filter(l => l.group === el.dataset.g) : f.layers.filter(l => l.id === el.dataset.id);
   // the rows' layers top first, for a Shift run
   const order = () => [...f.layers].reverse().map(l => l.id);
@@ -93,6 +89,7 @@ function renderLayers() {
     el.onclick = e => {
       const a = e.target.closest('button')?.dataset.a, unit = unitOf(el);
       if (a === 'fold') { const g = el.dataset.g; folded.has(g) ? folded.delete(g) : folded.add(g); return renderLayers(); }
+      if (a === 'mod') { pickLayers(unit.map(l => l.id), el.dataset.id); return revealProp(e.target.closest('button').dataset.to); }
       if (a) return rowAction(o, f, unit, a);
       const ids = unit.map(l => l.id);
       if (e.shiftKey && sel.layer) {
@@ -110,6 +107,7 @@ function renderLayers() {
     };
     // a double click on the name renames the layer or the group
     $('.ln', el).ondblclick = e => { e.stopPropagation(); renameRow(o, f, el); };
+    el.oncontextmenu = e => { e.preventDefault(); rowMenu(o, f, el, e.clientX, e.clientY); };
     el.ondragstart = e => {
       const unit = unitOf(el), sel_ = selectedLayers(f), whole = !!el.dataset.g;
       drag = { Ls: !whole && unit.every(l => sel_.includes(l)) ? sel_ : unit, whole };
@@ -129,15 +127,75 @@ function renderLayers() {
   });
 }
 const ICON_GROUP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
-const rowActs = vis => `<button data-a="vis" title="${vis ? 'Скрыть' : 'Показать'}" aria-label="Видимость">${vis ? ICON.eye : ICON.eyeOff}</button>
-  <button data-a="up" title="Выше (Ctrl+])" aria-label="Выше">${ICON.up}</button>
-  <button data-a="down" title="Ниже (Ctrl+[)" aria-label="Ниже">${ICON.down}</button>
-  <button data-a="dup" title="Дублировать (Ctrl+D)" aria-label="Дублировать">${ICON.copy}</button>
-  <button data-a="del" title="Удалить (Delete)" aria-label="Удалить">${ICON.trash}</button>`;
+/* the row's own buttons, as in Figma: lock and eye show on hover, and stay while the layer is locked or hidden;
+   the rest (order, duplicate, delete, rename) is in the row's context menu and on keys */
+const rowActs = (vis, locked) => `<button data-a="lock" class="${locked ? 'pin' : ''}" title="${locked ? 'Разблокировать' : 'Заблокировать: не выбирается и не двигается на модели и в окне грани'}" aria-label="Блокировка">${locked ? ICON.lock : ICON.unlock}</button>
+  <button data-a="vis" class="${vis ? '' : 'pin'}" title="${vis ? 'Скрыть' : 'Показать'}" aria-label="Видимость">${vis ? ICON.eye : ICON.eyeOff}</button>`;
+/* what is done to a layer beyond its plain look, as small marks in its row: { i: icon, t: title, to: the field it opens } */
+function layerMods(o, L) {
+  const m = [], dpi = L.type === 'image' && !L.tile ? imageDpi(o, L) : null;
+  if (dpi != null && dpi < 300) m.push({ i: 'warn', cls: dpi < 150 ? 'bad' : 'warn', t: `${dpi} dpi при печати — ${dpi < 150 ? 'мало для офсета' : 'для офсета лучше 300 dpi'}`, to: '[data-k="w"]' });
+  if (cropped(L)) m.push({ i: 'crop', t: 'Кадрирована', to: '.cut' });
+  if (L.mask) m.push({ i: 'mask', t: 'Маска: ' + (MASKS[L.mask.kind] || '').toLowerCase(), to: '.cut' });
+  if (L.clipTo) m.push({ i: 'clip', t: L.clipTo === 'panel' ? 'Обрезана по панели ленты' : 'Обрезана по краю грани', to: '.cut' });
+  if (L.type === 'image' && L.tile) m.push({ i: 'tile', t: 'Повторяется узором', to: '[data-k="tile"]' });
+  if (L.type === 'image' && hasRecolor(L.recolor)) m.push({ i: 'recolor', t: 'Цвета вектора заменены', to: '.vcols' });
+  if (L.grad) m.push({ i: 'grad', t: L.grad.kind === 'radial' ? 'Радиальный градиент' : 'Линейный градиент', to: '#gradKind' });
+  if (L.type === 'text' && Math.abs(L.arc || 0) >= 1) m.push({ i: 'arc', t: `По дуге ${Math.round(L.arc)}°`, to: '[data-k="arc"]' });
+  if (L.wrap) m.push({ i: 'wrap', t: 'Переходит через рёбра', to: '[data-k="wrap"]' });
+  if (L.effect && L.effect !== 'none') m.push({ i: 'fx', t: 'Отделка: ' + EFFECTS[L.effect], to: '[data-k="effect"]' });
+  if (L.blend && L.blend !== 'source-over') m.push({ i: 'blend', t: 'Наложение: ' + BLENDS[L.blend], to: '[data-k="blend"]' });
+  if (L.opacity < 1) m.push({ i: 'opacity', t: `Непрозрачность ${Math.round(L.opacity * 100)} %`, to: '[data-k="opacity"]' });
+  return m;
+}
+/* scrolls the layer's settings to a field and flashes it */
+function revealProp(to) {
+  requestAnimationFrame(() => {
+    const el = $('#layerSec')?.querySelector(to); if (!el) return;
+    const box = el.closest('.field, .row, .cut, label') || el;
+    box.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
+  });
+}
+/* the row's picture: the layer itself, small (a picture with its crop and mask, a plate in its fill); a text as "Aa" in its colours */
+function thumbHTML(L) {
+  if (L.type !== 'text') return '<canvas class="th" width="40" height="40"></canvas>';
+  const g = L.grad, bg = g ? (g.kind === 'radial' ? `radial-gradient(${L.color},${g.color})` : `linear-gradient(${(g.angle ?? 90) + 90}deg,${L.color},${g.color})`) : null;
+  return `<span class="th txt" style="font-family:'${esc(L.font)}';${bg ? `background-image:${bg};-webkit-background-clip:text;background-clip:text;color:transparent` : `color:${L.color}`}">Aa</span>`;
+}
+function drawThumb(c, o, L) {
+  if (!L) return;
+  const x = c.getContext('2d'), T = c.width, [W, H] = facePx(o, sel.face);
+  if (L.type === 'image' && !getImg(L.src)?.complete) { const u = assets[L.src]; if (u) c.style.backgroundImage = `url("${u}")`; return; }
+  const one = { ...L, x: .5, y: .5, rot: 0, opacity: 1, blend: 'source-over', visible: true, tile: false }, [w, h] = layerBox(one, W, H), sc = T * .9 / Math.max(w, h, 1);
+  x.setTransform(sc, 0, 0, sc, T / 2 - sc * W / 2, T / 2 - sc * H / 2);
+  drawLayer(x, one, W, H);
+}
+/* the row's context menu: what the row's buttons used to do, and more */
+function rowMenu(o, f, el, cx, cy) {
+  const unit = el.dataset.g ? f.layers.filter(l => l.group === el.dataset.g) : f.layers.filter(l => l.id === el.dataset.id);
+  if (!unit.every(l => selectedIds().includes(l.id))) pickLayers(unit.map(l => l.id), el.dataset.g ? unit.at(-1).id : el.dataset.id);
+  const Ls = selectedLayers(f), vis = Ls.some(l => l.visible), locked = Ls.every(l => l.locked), i = f.layers.indexOf(Ls.at(-1));
+  const act = a => () => rowAction(o, f, Ls, a);
+  openMenu(cx, cy, [
+    { label: 'Переименовать', run: () => { const row = $(`#layers .layer[${el.dataset.g ? `data-g="${el.dataset.g}"` : `data-id="${el.dataset.id}"`}]`); if (row) renameRow(o, f, row); } },
+    { label: 'Дублировать', key: 'Ctrl+D', run: act('dup') },
+    { label: 'Удалить', key: 'Delete', run: act('del') },
+    'sep',
+    { label: 'Выше', key: 'Ctrl+]', disabled: i >= f.layers.length - 1, run: act('up') },
+    { label: 'Ниже', key: 'Ctrl+[', disabled: f.layers.indexOf(Ls[0]) <= 0, run: act('down') },
+    'sep',
+    { label: vis ? 'Скрыть' : 'Показать', run: act('vis') },
+    { label: locked ? 'Разблокировать' : 'Заблокировать', run: act('lock') },
+    Ls.length > 1 && 'sep', Ls.length > 1 && { label: 'Сгруппировать', key: 'Ctrl+G', run: () => layerCmd('group') },
+    Ls.some(l => l.group) && { label: 'Разгруппировать', key: 'Ctrl+Shift+G', run: () => layerCmd('ungroup') },
+  ], Ls.length > 1 ? `Слоёв: ${Ls.length}` : layerName(Ls[0]));
+}
 /* a row's buttons act on its layer or its whole group */
 function rowAction(o, f, unit, a) {
   const k = sel.face;
-  if (a === 'vis') { const v = !unit.some(l => l.visible); for (const l of unit) l.visible = v; markFace(o, k); }
+  if (a === 'vis') setVisible(o, k, unit, !unit.some(l => l.visible));
+  if (a === 'lock') setLocked(o, k, unit, !unit.every(l => l.locked));
   if (a === 'up' || a === 'down') shiftLayers(o, k, unit, a === 'up' ? 1 : -1);
   if (a === 'dup') { const c = duplicateLayers(o, k, unit); setLayerSelection(c.map(l => l.id)); }
   if (a === 'del') { deleteLayers(o, k, unit); if (!f.layers.some(l => l.id === sel.layer)) setLayerSelection([]); renderFaceTabs(); }

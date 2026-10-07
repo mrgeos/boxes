@@ -223,7 +223,11 @@ function setGradient(o, k, L, kind) {
   markFace(o, k);
 }
 /* all of the active face's layers selected */
-function selectAllLayers() { const f = activeFaceData(); if (f?.layers.length) setLayerSelection(f.layers.map(L => L.id)); }
+function selectAllLayers() { const f = activeFaceData(), Ls = f?.layers.filter(L => !L.locked); if (Ls?.length) setLayerSelection(Ls.map(L => L.id)); }
+/* locked layers are not picked or dragged on the model and in the face window (only in the list) */
+function setLocked(o, k, Ls, on) { for (const L of Ls) { if (on) L.locked = true; else delete L.locked; } markFace(o, k); }
+/* shown or hidden */
+function setVisible(o, k, Ls, on) { for (const L of Ls) L.visible = on; markFace(o, k); }
 const activeFaceKey = () => (activeObj() && sel.face) || null;
 
-export { activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setGradient, setLayerSelection, setText, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };
+export { activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setText, setVisible, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };

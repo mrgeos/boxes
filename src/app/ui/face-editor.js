@@ -188,7 +188,7 @@ function drawEditor() {
 const inPoly = ([x, y], q) => { let r = false; for (let i = 0, j = q.length - 1; i < q.length; j = i++) if ((q[i][1] > y) !== (q[j][1] > y) && x < (q[j][0] - q[i][0]) * (y - q[i][1]) / (q[j][1] - q[i][1]) + q[i][0]) r = !r; return r; };
 function hitLayer(face, W, H, px, py) {
   for (let i = face.layers.length - 1; i >= 0; i--) {
-    const L = face.layers[i]; if (!L.visible) continue;
+    const L = face.layers[i]; if (!L.visible || L.locked) continue;
     if (L.type === 'image' && L.tile) return L;
     const [w, h] = layerBox(L, W, H);
     const dx = px - L.x * W, dy = py - L.y * H, a = -L.rot * DEG;
@@ -285,7 +285,7 @@ function initFaceEditor() {
       edState.marquee = [d.mx, d.my, mx, my];
       const r = [Math.min(d.mx, mx) / k, Math.min(d.my, my) / k, Math.max(d.mx, mx) / k, Math.max(d.my, my) / k], ids = new Set(d.keep);
       for (const M of f.layers) {
-        if (!M.visible) continue;
+        if (!M.visible || M.locked) continue;
         const q = layerAABB(M, W, H);
         if (q[0] <= r[2] && q[2] >= r[0] && q[1] <= r[3] && q[3] >= r[1]) for (const g of groupOf(f, M)) ids.add(g.id);
       }
