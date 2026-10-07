@@ -185,6 +185,8 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 
 /* menus & toast */
 .menu{position:absolute;right:16px;top:calc(100% + 6px);width:290px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:12px;display:flex;flex-direction:column;gap:10px;z-index:20}
+.menu.file{left:12px;right:auto;width:220px;gap:2px;padding:6px}
+.menu.file .btn{height:32px}
 .menu h3{margin:0;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .menu .btn{justify-content:flex-start;width:100%}
 .menu hr{border:0;border-top:1px solid var(--line);margin:0}

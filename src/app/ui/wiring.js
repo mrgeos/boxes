@@ -31,7 +31,7 @@ function copyFaceDesign(o, from, targets) {
   for (const k of targets) { o.faces[k] = { bg: f.bg, layers: f.layers.map(l => ({ ...structuredClone(l), id: uid() })) }; markFace(o, k); }
   renderFaceTabs(); commit(); toast(`Дизайн скопирован: ${targets.map(k => faceLabel(o, k)).join(', ')}`);
 }
-function closeMenu() { $('#exportMenu').hidden = true; $('#exportBtn').setAttribute('aria-expanded', 'false'); }
+function closeMenu() { for (const n of ['export', 'file']) { $(`#${n}Menu`).hidden = true; $(`#${n}Btn`).setAttribute('aria-expanded', 'false'); } }
 
 /* hooks up the toolbar and panel buttons */
 function initWiring() {
@@ -70,8 +70,10 @@ function initWiring() {
   $('#pngBtn').onclick = () => { closeMenu(); exportPNG(); };
   $('#videoBtn').onclick = () => { closeMenu(); exportVideo(); };
   $$('#pngScale button').forEach(b => b.onclick = () => { setPngScale(+b.dataset.v); $$('#pngScale button').forEach(x => x.classList.toggle('on', x === b)); });
-  $('#exportBtn').onclick = e => { e.stopPropagation(); const m = $('#exportMenu'); m.hidden = !m.hidden; $('#exportBtn').setAttribute('aria-expanded', String(!m.hidden)); };
-  document.addEventListener('click', e => { if (!e.target.closest('#exportMenu') && !e.target.closest('#exportBtn')) closeMenu(); });
+  // the export menu on the right and the file menu (burger) on the left of the top bar: one open at a time
+  for (const n of ['export', 'file']) $(`#${n}Btn`).onclick = e => { e.stopPropagation(); const m = $(`#${n}Menu`), open = m.hidden; closeMenu(); m.hidden = !open; $(`#${n}Btn`).setAttribute('aria-expanded', String(open)); };
+  document.addEventListener('click', e => { if (!e.target.closest('.menu') && !e.target.closest('#exportBtn, #fileBtn')) closeMenu(); });
+  $$('#fileMenu .btn').forEach(b => b.addEventListener('click', () => closeMenu()));
   $('#undoBtn').onclick = undo;
    $('#redoBtn').onclick = redo;
   $('#saveBtn').onclick = () => saveFile(`${slug(activeObj()?.name || 'proekt')}.boxstudio.json`, new Blob([projectJSON()], { type: 'application/json' }));

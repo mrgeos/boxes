@@ -17,10 +17,10 @@ async function test(name, fn) {
 }
 /* saves the project through the button and opens it again from the file; returns the saved JSON */
 async function saveAndReopen(page, edit = p => p) {
-  const [d] = await Promise.all([page.waitForEvent('download'), page.click('#saveBtn')]);
+  const [d] = await Promise.all([page.waitForEvent('download'), page.click('#fileBtn').then(() => page.click('#saveBtn'))]);
   const proj = edit(JSON.parse(readFileSync(await d.path(), 'utf8'))), file = (await d.path()) + '-reopen.json';
   writeFileSync(file, JSON.stringify(proj));
-  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#openBtn')]); await fc.setFiles(file); await page.waitForTimeout(1200);
+  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#fileBtn').then(() => page.click('#openBtn'))]); await fc.setFiles(file); await page.waitForTimeout(1200);
   return proj;
 }
 
