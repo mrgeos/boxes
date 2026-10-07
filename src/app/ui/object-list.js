@@ -8,7 +8,6 @@ import { thumbOf } from './object-thumbs.js';
 import { lidAction, toggleLid } from './context-menus.js';
 import { setTab } from './tabs.js';
 import { renderModel } from './model-panel.js';
-import { renderGroupPanel } from './group-panel.js';
 import { select, selectGroup } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { setView } from '../scene/camera.js';
@@ -48,6 +47,9 @@ function renderObjects() {
       const a = e.target.closest('[data-a]')?.dataset.a, mod = e.target.closest('[data-mod]')?.dataset.mod;
       if (a) { const ids = on.has(id) ? [...on] : [id], os = ids.flatMap(objectsIn).map(objById); a === 'vis' ? setHidden(ids, !os.every(o => o.hidden)) : setLocked(ids, !os.every(o => o.locked)); renderObjects(); commit(); return; }
       if (mod) return modAction(id, mod);
+      // a double click renames: the first click may have redrawn the list (a group row does), so no dblclick
+      // comes; the second click's count tells it
+      if (e.detail === 2 && !e.shiftKey && !e.ctrlKey && !e.metaKey) { renameRow(id); return; }
       if (e.ctrlKey || e.metaKey) { sel.multi = on.has(id) ? [...on].filter(x => x !== id) : [...on, id]; anchor = id; renderObjects(); return; }
       if (e.shiftKey && anchor) {
         const ids = visibleRows().map(r => r.id), a = ids.indexOf(anchor), b = ids.indexOf(id);
@@ -146,7 +148,7 @@ function renameRow(id) {
     if (done) return; done = true;
     if (save && inp.value.trim() && inp.value.trim() !== own(id).name) {
       renameById(id, inp.value);
-      isGroup(id) ? renderGroupPanel() : renderModel();
+      renderModel();   // the panel of the selected object or group (it has the name too)
       if (id === sel.obj) $('#objBadge').textContent = own(id).name;
       commit();
     }
@@ -161,11 +163,6 @@ function renameRow(id) {
 /* hooks up the object list and its buttons */
 function initObjectList() {
   const list = $('#objList');
-  // a double click on a row renames the object or the group
-  list.addEventListener('dblclick', e => {
-    const row = e.target.closest('.obj'); if (!row || e.target.closest('button, input')) return;
-    e.preventDefault(); renameRow(row.dataset.id);
-  });
   list.addEventListener('dragover', e => {
     if (!isItemDrag(e)) return;
     e.preventDefault(); e.dataTransfer.dropEffect = 'move'; clearMarks();
