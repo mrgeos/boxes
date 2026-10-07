@@ -85,6 +85,7 @@
   <main class="stage" id="stage">
     <div id="viewport"></div>
     <div class="off-hint" id="offHint" role="status" hidden></div>
+    <div class="cbar" id="ctxBar" role="toolbar" aria-label="Действия с выделенным" hidden></div>
     <div class="abar" id="actionBar" role="toolbar" aria-label="Инструменты и действия">
       <button class="ab" data-tool="select" aria-label="Выделение"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l13 8-6 1.5L9 19Z"/></svg></button>
       <button class="ab" data-tool="move" aria-label="Перемещение"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3"/></svg></button>
@@ -93,9 +94,8 @@
       <span class="ab-sep"></span>
       <button class="ab needs-obj" id="abText" title="Текст на грань" aria-label="Текст на грань"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></button>
       <button class="ab needs-obj" id="abImage" title="Картинка на грань: из библиотеки или с компьютера" aria-label="Картинка на грань"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg></button>
+      <span class="ab-split needs-obj-wrap"><button class="ab needs-obj" id="abShape" title="Фигура на грань" aria-label="Фигура на грань"></button><button class="ab caret needs-obj" id="abShapeMenu" title="Выбрать фигуру" aria-label="Выбрать фигуру" aria-haspopup="menu"></button></span>
       <button class="ab needs-obj" id="abSticker" title="Наклейка на грань" aria-label="Наклейка"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-8-8h8Z"/><path d="M20 12h-5a3 3 0 0 1-3-3V4"/></svg></button>
-      <span class="ab-sep"></span>
-      <button class="ab" id="abLid" aria-label="Открыть или закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18M5 20V11h14v9"/><path d="M5 11 9 4h11l-1 7"/></svg></button>
     </div>
     <div class="stage-hint" id="stageHint">
       <button id="hideHint" aria-label="Скрыть подсказку">×</button>

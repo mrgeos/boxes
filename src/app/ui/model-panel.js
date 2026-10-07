@@ -311,4 +311,4 @@ function bindScene() {
   $('#lightPreset').onchange = e => { Object.assign(state.scene, LIGHTS[e.target.value], { preset: e.target.value }); refreshFields(sec, state.scene); applyScene(); commit(); };
 }
 
-export { bindScene, renderModel };
+export { bindScene, modelInput, renderModel };

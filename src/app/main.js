@@ -1,6 +1,7 @@
 // Запуск
 import { initTabs } from './ui/tabs.js';
 import { initActionBar } from './ui/action-bar.js';
+import { initCtxBar } from './ui/context-bar.js';
 import { initTextEdit } from './ui/text-edit.js';
 import * as THREE from 'three';
 import { sel, state } from './core/state.js';
@@ -39,7 +40,7 @@ initObjectList(); initObjectThumbs();
 initWiring();
 initColorPicker();
 initTabs();
-initActionBar();
+initActionBar(); initCtxBar();
 initTextEdit();
 resize();
 bindScene();

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { $, $$ } from '../core/util.js';
 import { activeObj, sel } from '../core/state.js';
-import { faceKeys, newText } from '../core/model.js';
+import { faceKeys, newShape, newText } from '../core/model.js';
 import { controls, cvs } from '../scene/renderer.js';
 import { invalidate } from '../scene/camera.js';
 import { syncRings } from '../scene/move.js';
@@ -10,7 +10,9 @@ import { newSticker } from '../stickers/placement.js';
 import { addLayer } from './face-panel.js';
 import { placeLibImage } from './library-panel.js';
 import { addSticker } from './stickers-panel.js';
-import { lidAction, toggleLid } from './context-menus.js';
+import { openMenu } from './menu.js';
+import { refreshCtxBar } from './context-bar.js';
+import { ICON } from '../core/constants.js';
 import { pickAsset } from './asset-picker.js';
 import { setTab } from './tabs.js';
 import { startTextEdit } from './text-edit.js';
@@ -35,11 +37,20 @@ function setTool(t) {
 }
 /* quick actions follow the selection: what can be added, whether a lid opens */
 function renderActionBar() {
-  const o = activeObj(), lid = o && lidAction(o);
+  const o = activeObj();
   $$('#actionBar .needs-obj').forEach(b => { b.disabled = !o; });
-  const lb = $('#abLid');
-  lb.disabled = !lid; lb.title = lid ? (o.lid > 0 ? lid[1] : lid[0]) : 'Открыть / закрыть';
-  lb.classList.toggle('on', !!(o && o.lid > 0));
+  const s = SHAPES[shapeKind];
+  $('#abShape').innerHTML = s.icon; $('#abShape').title = s.label + ' на грань';
+  // opening the lid is in the bar over the selected object (context-bar.js)
+  refreshCtxBar();
+}
+/* the shape the button adds (the last one picked from its menu, kept for the next visit) */
+const SHAPES = { rect: { label: 'Плашка', icon: ICON.rect }, ellipse: { label: 'Круг', icon: ICON.ell } };
+let shapeKind = (() => { try { return SHAPES[localStorage.getItem('bs3d-shape')] ? localStorage.getItem('bs3d-shape') : 'rect'; } catch { return 'rect'; } })();
+function addShape(kind) {
+  const o = activeObj(); if (!o) return;
+  shapeKind = kind; try { localStorage.setItem('bs3d-shape', kind); } catch { /* private mode */ }
+  setTab('design'); addLayer(newShape(kind), face(o), o); renderActionBar();
 }
 const face = o => sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0];
 function initActionBar() {
@@ -47,7 +58,13 @@ function initActionBar() {
   $('#abText').onclick = () => { const o = activeObj(); if (!o) return; setTab('design'); const L = newText('Ваш текст'); addLayer(L, face(o), o); startTextEdit(L, '3d', true); };
   $('#abImage').onclick = e => { const o = activeObj(); if (!o) return; pickAsset(e.currentTarget, 'Картинка на грань', r => { setTab('design'); placeLibImage(r, o, face(o)); }); };
   $('#abSticker').onclick = () => { const o = activeObj(); if (!o) return; addSticker(newSticker('circle', face(o))); };
-  $('#abLid').onclick = () => { const o = activeObj(); if (o) toggleLid(o).then(renderActionBar); };
+  $('#abShape').onclick = () => addShape(shapeKind);
+  $('#abShapeMenu').innerHTML = ICON.caret;
+  $('#abShapeMenu').onclick = e => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const m = openMenu(r.left, r.top, Object.entries(SHAPES).map(([k, v]) => ({ label: v.label, checked: k === shapeKind, run: () => addShape(k) })), 'Фигура');
+    if (m) m.style.top = Math.max(4, r.top - m.getBoundingClientRect().height - 6) + 'px';   // above the bar
+  };
   document.addEventListener('keydown', e => {
     if (e.target.closest?.('input,textarea,select,[contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === ' ') { e.preventDefault(); if (!e.repeat && cur !== 'hand') { spaceFrom = cur; setTool('hand'); } return; }

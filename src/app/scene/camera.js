@@ -13,6 +13,7 @@ import { drawEditor } from '../ui/face-editor.js';
 import { drawNet } from '../net/net-view.js';
 import { syncRings } from './move.js';
 import { syncSelBox } from './sel-box.js';
+import { syncCtxBar } from '../ui/context-bar.js';
 import { layoutPending } from '../core/groups.js';
 
 function sceneBounds(onlyActive = false) {
@@ -158,6 +159,7 @@ function initCamera() {
       if (f.flash > 0) { changed = true; f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
     }
     if (changed) renderer.render(scene, camera);
+    syncCtxBar(changed);
     if (ui.editor) { ui.editor = false; drawEditor(); }
     if (ui.net) { ui.net = false; drawNet(); }
     if (ui.layers) { ui.layers = false; renderLayers(); }

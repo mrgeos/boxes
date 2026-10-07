@@ -213,4 +213,4 @@ function initContextMenus() {
   ed.addEventListener('contextmenu', e => { e.preventDefault(); editorMenu(e); });
 }
 
-export { initContextMenus, lidAction, toggleLid };
+export { initContextMenus, lidAction, toggleLid, turn };
