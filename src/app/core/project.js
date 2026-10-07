@@ -15,7 +15,7 @@ import { renderFonts, renderLayerProps } from '../ui/face-panel.js';
 import { renderAll } from '../ui/wiring.js';
 
 const hist = { stack: [], i: -1 };
-const snapshot = () => JSON.stringify({ objects: state.objects, scene: state.scene, fonts: state.fonts, groups: state.groups, tree: state.tree });
+const snapshot = () => JSON.stringify({ name: state.name, objects: state.objects, scene: state.scene, fonts: state.fonts, groups: state.groups, tree: state.tree });
 function commit() {
   normalizeTree();
   const s = snapshot(); if (hist.stack[hist.i] === s) return;
@@ -28,6 +28,7 @@ function restore(s) {
   const ids = new Set(d.objects.map(o => o.id));
   for (const id of [...RT.keys()]) if (!ids.has(id)) disposeObject(id);
   state.objects = d.objects; state.scene = d.scene; state.fonts = d.fonts || []; state.groups = d.groups || []; state.tree = d.tree || [];
+  if (d.name) { state.name = d.name; paintProjectName(); }
   for (const o of state.objects) buildObject(o);
   layoutAll();
   if (!activeObj()) sel.obj = state.objects[0]?.id ?? null;
@@ -55,7 +56,7 @@ const assetsOf = ids => { const out = {}; for (const id of ids) { if (assets[id]
 /* a project file carries its whole library; the autosave only what the design uses (the library is in the browser) */
 function projectJSON(withLibrary = true) {
   const ids = usedAssets(); if (withLibrary) for (const it of library) ids.add(it.id);
-  return JSON.stringify({ app: 'box-studio-3d', version: 1, objects: state.objects, groups: state.groups, tree: state.tree, scene: state.scene, fonts: state.fonts,
+  return JSON.stringify({ app: 'box-studio-3d', version: 1, name: state.name, objects: state.objects, groups: state.groups, tree: state.tree, scene: state.scene, fonts: state.fonts,
     library: library.filter(it => withLibrary || ids.has(it.id) || !it.browser).map(({ id, hash, name, aspect, added }) => ({ id, hash, name, aspect, added })), assets: assetsOf(ids),
     vectors: Object.fromEntries([...ids].filter(id => vecOf[id]).map(id => [id, vecOf[id]])) });
 }
@@ -68,8 +69,9 @@ function scheduleSave() {
     catch (e) { if (!saveWarned) { saveWarned = true; toast('Проект слишком большой для автосохранения в браузере. Используйте «Сохранить проект».', 4200); } }
   }, 900);
 }
-function loadProject(d, { resetHistory = true } = {}) {
+function loadProject(d, { resetHistory = true, name = null } = {}) {
   if (!d || !Array.isArray(d.objects)) throw new Error('bad project');
+  state.name = String(d.name || name || 'Без названия').slice(0, 120); paintProjectName();
   for (const id of [...RT.keys()]) disposeObject(id);
   Object.assign(assets, d.assets || {});
   for (const [id, v] of Object.entries(d.vectors || {})) if (assets[v]) vecOf[id] = v;
@@ -87,6 +89,15 @@ function loadProject(d, { resetHistory = true } = {}) {
   if (resetHistory) { hist.stack = []; hist.i = -1; }
   commit();
   requestAnimationFrame(() => { setLastView('q'); setView('fit', true); });
+}
+/* the project's name: in the top bar, the tab's title and the name of the saved file */
+function paintProjectName() {
+  const el = $('#projName'); if (el && !el.querySelector('input')) el.textContent = state.name;
+  document.title = `${state.name} — Box Studio 3D`;
+}
+function renameProject(name) {
+  const n = String(name || '').trim().slice(0, 120); if (!n || n === state.name) return false;
+  state.name = n; paintProjectName(); commit(); return true;
 }
 /* ---------- file saving (viewer download capability, with a plain fallback) ---------- */
 let dlNS;
@@ -114,7 +125,7 @@ async function openProjectFile(file) {
   try { d = JSON.parse(await file.text()); } catch { return toast('Файл не читается как проект (.json)'); }
   try {
     if (d.format === 'box-studio') { loadProject(await convertLegacy(d), { resetHistory: false }); toast(`Проект «Студии коробки» открыт: ${file.name}`); }
-    else { loadProject(d); toast(`Открыт проект: ${file.name}`); }
+    else { loadProject(d, { name: file.name.replace(/(\.boxstudio)?\.json$/i, '') }); toast(`Открыт проект: ${file.name}`); }
   } catch { toast('Это не файл проекта Box Studio 3D или «Студии коробки»'); }
 }
 /* projects saved by the first version («Студия коробки», 200×150×50 box with a window) */
@@ -137,4 +148,4 @@ async function convertLegacy(p) {
   return { objects: [o], scene: state.scene, fonts: state.fonts, assets: {} };
 }
 
-export { LS_KEY, addFontFile, commit, loadProject, openProjectFile, projectJSON, redo, saveFile, scheduleSave, undo, usedAssets };
+export { LS_KEY, addFontFile, commit, loadProject, openProjectFile, paintProjectName, projectJSON, redo, renameProject, saveFile, scheduleSave, undo, usedAssets };

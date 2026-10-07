@@ -8,7 +8,7 @@ import { buildObject, markFace, markObj, ui } from '../scene/renderer.js';
 import { VIEW_LABEL, orbitLock, sceneBounds, setOrbitLock, setView, viewName } from '../scene/camera.js';
 import { openMenu } from './menu.js';
 import { select } from '../core/selection.js';
-import { addFontFile, commit, loadProject, openProjectFile, projectJSON, redo, saveFile, undo } from '../core/project.js';
+import { addFontFile, commit, loadProject, openProjectFile, paintProjectName, projectJSON, redo, renameProject, saveFile, undo } from '../core/project.js';
 import { refreshFields } from './fields.js';
 import { renderModel } from './model-panel.js';
 import { renderObjects } from './object-list.js';
@@ -68,15 +68,29 @@ function initWiring() {
   $$('#fileMenu .btn').forEach(b => b.addEventListener('click', () => closeMenu()));
   $('#undoBtn').onclick = undo;
    $('#redoBtn').onclick = redo;
-  $('#saveBtn').onclick = () => saveFile(`${slug(activeObj()?.name || 'proekt')}.boxstudio.json`, new Blob([projectJSON()], { type: 'application/json' }));
+  $('#saveBtn').onclick = () => saveFile(`${slug(state.name || activeObj()?.name || 'proekt')}.boxstudio.json`, new Blob([projectJSON()], { type: 'application/json' }));
   $('#openBtn').onclick = () => { $('#projInput').value = ''; $('#projInput').click(); };
   $('#projInput').onchange = e => e.target.files[0] && openProjectFile(e.target.files[0]);
   $('#newBtn').onclick = () => {
     const o = newObject('mailer'); o.name = 'Коробка 1';
-    loadProject({ objects: [o], scene: state.scene, fonts: state.fonts, assets: {} }, { resetHistory: false });
+    loadProject({ name: 'Без названия', objects: [o], scene: state.scene, fonts: state.fonts, assets: {} }, { resetHistory: false });
     toast('Новый проект. Вернуть предыдущий — Ctrl+Z');
   };
   $('#sampleBtn').onclick = () => { loadProject(sampleProject(), { resetHistory: false }); toast('Загружен пример. Вернуть предыдущий — Ctrl+Z'); };
+  // the project's name next to the logo: a double click (or Enter, F2) types a new one in place
+  const pn = $('#projName');
+  const renameInPlace = () => {
+    if (pn.querySelector('input')) return;
+    const inp = document.createElement('input'); inp.className = 'ren'; inp.value = state.name; inp.setAttribute('aria-label', 'Название проекта');
+    pn.textContent = ''; pn.appendChild(inp); inp.focus(); inp.select();
+    let done = false;
+    const end = save => { if (done) return; done = true; const v = inp.value; inp.remove(); if (!(save && renameProject(v))) paintProjectName(); };
+    inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') end(true); if (e.key === 'Escape') end(false); };
+    inp.onblur = () => end(true);
+  };
+  pn.ondblclick = renameInPlace;
+  pn.onkeydown = e => { if (e.target === pn && (e.key === 'Enter' || e.key === 'F2')) { e.preventDefault(); renameInPlace(); } };
+  paintProjectName();
   $('#fontBtn').onclick = () => { $('#fontInput').value = ''; $('#fontInput').click(); };
   $('#fontInput').onchange = e => e.target.files[0] && addFontFile(e.target.files[0]);
   // the view button: the side the camera looks from now, and in its menu the sides, zoom to the selection or

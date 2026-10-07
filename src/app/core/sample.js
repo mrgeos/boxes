@@ -63,7 +63,7 @@ function sampleProject() {
   wb.faces.front.layers = [T('ПРЯНИКИ С МОРОШКОЙ', { font: 'Montserrat', weight: 700, size: .17, color: '#20392b', y: .73, ls: .16 })];
   wb.faces.top.layers = [T('СЕВЕР', { font: 'Unbounded', weight: 700, size: .085, color: '#20392b', y: .077, ls: .3, effect: 'foil-gold' })];
   for (const k of ['left', 'right']) wb.faces[k].layers = [T('200 × 150 × 50 мм', { font: 'Montserrat', weight: 500, size: .16, color: '#4e6b58' })];
-  return { objects: [wb, m, t], scene: { ...state.scene, ...LIGHTS.studio, preset: 'studio' }, fonts: [] };
+  return { name: 'Пример: чайная «Север»', objects: [wb, m, t], scene: { ...state.scene, ...LIGHTS.studio, preset: 'studio' }, fonts: [] };
 }
 
 export { sampleProject };
