@@ -85,7 +85,7 @@ grainTex.wrapS = grainTex.wrapT = THREE.RepeatWrapping;
 const RT = new Map();
 const dirtyFaces = new Set();
 const rebuildQueue = new Set();
-const ui = { editor: true, net: true, layers: false, stickers: false, lib: true };
+const ui = { editor: true, net: true, layers: false, stickers: false, lib: true, brand: true };
 function markFace(o, k) {
   for (const t of wrapTouch(o, k)) dirtyFaces.add(o.id + '|' + t);   // faces its layers run onto, now and before
   dirtyFaces.add(o.id + '|' + k);

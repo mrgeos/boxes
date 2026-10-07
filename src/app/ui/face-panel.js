@@ -10,6 +10,7 @@ import { viewNet } from '../net/net-view.js';
 import { drawLayer, layerBox } from '../faces/render.js';
 import { openMenu } from './menu.js';
 import { pickAsset } from './asset-picker.js';
+import { FONT_ROLES, kit, linkOf, setLink } from '../core/brand.js';
 import { swapImage } from './library-panel.js';
 import { NONE, addKeyout, hasColorEdits, hasRecolor, removeKeyout, setKeyoutTol, setVecColor, vecColors } from '../core/vector.js';
 import { allFonts, ensureFont } from '../core/fonts.js';
@@ -287,7 +288,7 @@ function renderLayerProps() {
   let html = `<div class="sec-h"><h2>${pic ? 'Картинка' : `Слой: ${esc(layerName(L)).slice(0, 24)}`}</h2><span class="badge">${faceLabel(o, sel.face)}</span></div>${pic ? '' : alignBarHTML(1)}`;
   if (L.type === 'text') {
     html += `<textarea data-k="text" rows="2" aria-label="Текст"></textarea>
-      <div class="grid2"><select data-k="font" aria-label="Шрифт">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
+      <div class="grid2"><select data-k="font" aria-label="Шрифт">${brandFontOpts()}<optgroup label="Все шрифты">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</optgroup></select>
       <select data-k="weight" aria-label="Насыщенность"><option value="400">Обычный</option><option value="500">Средний</option><option value="700">Жирный</option><option value="900">Сверхжирный</option></select></div>
       <div class="row"><select data-k="align" class="grow" aria-label="Выравнивание"><option value="left">По левому краю</option><option value="center">По центру</option><option value="right">По правому краю</option></select>
       <label class="check"><input type="checkbox" data-k="italic"> Курсив</label></div>
@@ -314,6 +315,8 @@ function renderLayerProps() {
   bindFields(sec, activeLayer, (k) => {
     const L = activeLayer();
     if (k === 'weight') L.weight = +L.weight;
+    // a kit font (@heading, @body) links the text to it; any other font drops the link
+    if (k === 'font') setLink(L, 'font', L.font.startsWith('@') ? L.font.slice(1) : null);
     if (k === 'font' || k === 'weight' || k === 'italic') ensureFont(L);
     if (k === 'text' || k === 'effect') ui.layers = true;
     if (k === 'kind' || k === 'tile') renderLayerProps();
@@ -321,14 +324,20 @@ function renderLayerProps() {
     markFace(activeObj(), sel.face);
   });
   bindCrop(o, L); bindAlignBar(sec);
+  if (L.type === 'text' && linkOf(L, 'font') && $('[data-k="font"]', sec)) $('[data-k="font"]', sec).value = '@' + linkOf(L, 'font');
   $('#gradKind') && ($('#gradKind').onchange = e => { setGradient(o, sel.face, activeLayer(), e.target.value || null); ui.layers = true; renderLayerProps(); commit(); });
   if (L.type === 'image') {
     // another picture in its place: from the uploads, or from the computer (as the action bar does)
-    $('#imgReplace').onclick = e => pickAsset(e.currentTarget, 'Заменить картинку', r => swapImage(r));
+    $('#imgReplace').onclick = e => pickAsset(e.currentTarget, 'Заменить картинку', r => swapImage(r), { brand: true });
     bindVecColors(sec, activeLayer, () => { markFace(o, sel.face); ui.layers = true; }, renderLayerProps);
     $$('#fitSeg button', sec).forEach(b => b.onclick = () => { setImageFit(o, sel.face, activeLayer(), b.dataset.fit); ui.layers = true; renderLayerProps(); commit(); });
     for (const ax of ['X', 'Y']) $('#flip' + ax, sec).onclick = () => { const L = activeLayer(); L['flip' + ax] = !L['flip' + ax]; markFace(o, sel.face); ui.layers = true; renderLayerProps(); commit(); };
   }
+}
+/* the kit's fonts first in a text's font list (as variables: '@heading', '@body') */
+function brandFontOpts() {
+  const F = kit().fonts, set = Object.entries(FONT_ROLES).filter(([r]) => F[r]);
+  return set.length ? `<optgroup label="Бренд">${set.map(([r, t]) => `<option value="@${r}">${t} — ${esc(F[r])}</option>`).join('')}</optgroup>` : '';
 }
 /* the fill of a text or shape: plain colour or a gradient from it to a second colour */
 function gradHTML(L, key = 'grad') {

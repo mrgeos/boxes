@@ -1,5 +1,9 @@
 // Выбор цвета: цвета документа, последние, пипетка
 import { state } from '../core/state.js';
+import { esc } from '../core/util.js';
+import { addBrandColor, brandColor, kit, linkOf, setLink } from '../core/brand.js';
+import { linkChip } from './fields.js';
+import { ui } from '../scene/renderer.js';
 
 const RECENT_KEY = 'box-studio-3d/recent-colors';
 let recentColors = [];
@@ -26,8 +30,12 @@ function openColorPop(input) {
   closeColorPop();
   const el = document.createElement('div'); el.className = 'cpop'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Выбор цвета');
   const cur = input.value.toLowerCase(), docC = documentColors().slice(0, 28), rec = recentColors.slice(0, 12);
+  // the brand kit first: a kit colour links the field to it (when the field is one of the design's, see fields.js)
+  const T = input.__target?.(), k = input.dataset.k, linkable = !!(T && k), K = kit().colors, linked = linkable && linkOf(T, k);
   const sw = list => list.length ? `<div class="swatches">${list.map(c => `<button class="sw ${c === cur ? 'cur' : ''}" style="background:${c}" data-c="${c}" title="${c}" aria-label="${c}"></button>`).join('')}</div>` : '<div class="none">пока пусто</div>';
-  el.innerHTML = `<h3>Цвета в документе</h3>${sw(docC)}<h3>Последние использованные</h3>${sw(rec)}
+  const brand = `<h3>Бренд-кит</h3>${K.length ? `<div class="swatches">${K.map(c => `<button class="sw ${c.id === linked ? 'cur' : ''}" style="background:${c.hex}" data-b="${c.id}" title="${esc(c.name)} · ${c.hex}" aria-label="${esc(c.name)}"></button>`).join('')}</div>` : '<span class="none">Пока пусто — добавьте этот цвет</span>'}
+    ${linkable && !K.some(c => c.hex === cur) ? '<button class="btn sm" data-a="tokit">＋ Этот цвет в бренд-кит</button>' : ''}`;
+  el.innerHTML = `${brand}<h3>Цвета в документе</h3>${sw(docC)}<h3>Последние использованные</h3>${sw(rec)}
     <div class="row2">${window.EyeDropper ? '<button class="btn" data-a="eye">Пипетка</button>' : ''}<button class="btn" data-a="more">Другой цвет…</button></div>`;
   document.body.appendChild(el);
   const r = input.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
@@ -39,7 +47,16 @@ function openColorPop(input) {
   };
   el.addEventListener('click', async e => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.c) { apply(b.dataset.c); closeColorPop(); }
+    if (b.dataset.b) {
+      const c = brandColor(b.dataset.b); apply(c.hex);
+      if (linkable) { setLink(input.__target(), k, c.id); linkChip(input, input.__target(), k); input.__commit?.(); ui.brand = true; }
+      closeColorPop();
+    }
+    else if (b.dataset.a === 'tokit') {
+      // the colour joins the kit and this field links to it
+      const c = addBrandColor(cur); setLink(T, k, c.id); linkChip(input, T, k); input.__commit?.(); ui.brand = true; closeColorPop();
+    }
+    else if (b.dataset.c) { apply(b.dataset.c); closeColorPop(); }
     else if (b.dataset.a === 'more') { closeColorPop(); try { input.showPicker(); } catch { input.focus(); input.click(); } }
     else if (b.dataset.a === 'eye') { try { const { sRGBHex } = await new EyeDropper().open(); apply(sRGBHex); } catch {} closeColorPop(); }
   });
@@ -64,4 +81,4 @@ function initColorPicker() {
   document.addEventListener('change', e => { const t = e.target; if (t instanceof HTMLInputElement && t.type === 'color') rememberColor(t.value); }, true);
 }
 
-export { initColorPicker };
+export { documentColors, initColorPicker };

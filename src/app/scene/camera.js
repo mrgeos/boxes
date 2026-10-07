@@ -14,6 +14,7 @@ import { drawNet } from '../net/net-view.js';
 import { syncRings } from './move.js';
 import { syncSelBox } from './sel-box.js';
 import { syncCtxBar } from '../ui/context-bar.js';
+import { renderBrand } from '../ui/brand-panel.js';
 import { layoutPending } from '../core/groups.js';
 
 function sceneBounds(onlyActive = false) {
@@ -165,6 +166,7 @@ function initCamera() {
     if (ui.layers) { ui.layers = false; renderLayers(); }
     if (ui.stickers) { ui.stickers = false; renderStickers(); }
     if (ui.lib) { ui.lib = false; renderLibrary(); }
+    if (ui.brand) { ui.brand = false; renderBrand(); }
   });
 }
 

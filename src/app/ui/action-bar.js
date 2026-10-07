@@ -56,7 +56,7 @@ const face = o => sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKe
 function initActionBar() {
   $$('#actionBar [data-tool]').forEach(b => { b.onclick = () => setTool(b.dataset.tool); b.title = TOOLS[b.dataset.tool]; });
   $('#abText').onclick = () => { const o = activeObj(); if (!o) return; setTab('design'); const L = newText('Ваш текст'); addLayer(L, face(o), o); startTextEdit(L, '3d', true); };
-  $('#abImage').onclick = e => { const o = activeObj(); if (!o) return; pickAsset(e.currentTarget, 'Картинка на грань', r => { setTab('design'); placeLibImage(r, o, face(o)); }); };
+  $('#abImage').onclick = e => { const o = activeObj(); if (!o) return; pickAsset(e.currentTarget, 'Картинка на грань', r => { setTab('design'); placeLibImage(r, o, face(o)); }, { brand: true }); };
   $('#abSticker').onclick = () => { const o = activeObj(); if (!o) return; addSticker(newSticker('circle', face(o))); };
   $('#abShape').onclick = () => addShape(shapeKind);
   $('#abShapeMenu').innerHTML = ICON.caret;

@@ -11,7 +11,7 @@ import { renderGallery } from './preset-gallery.js';
    works on the selection (its tabs pick a section; with nothing selected it says so). A section is a .sec with
    data-tab. Both choices are kept for the next visit. Canvases in a section (the face editor, the net) are
    drawn again when it is shown, as they take their size from the panel. */
-const LEFT = ['add', 'models', 'library', 'scene'], RIGHT = ['shape', 'design', 'extras', 'net'];
+const LEFT = ['add', 'models', 'brand', 'library', 'scene'], RIGHT = ['shape', 'design', 'extras', 'net'];
 let left = 'models', right = 'design', hasSel = true;
 const curTab = () => shownTab();
 function show(panel, t) {
@@ -54,6 +54,7 @@ function setTab(t) {
     left = t; show('sidePanel', t); $('#sidePanel').scrollTop = 0;
     $$('#rail .rail-btn').forEach(b => { const on = b.dataset.tab === t; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false'); });
     if (t === 'add') renderGallery();
+    if (t === 'brand') ui.brand = true;
   } else if (RIGHT.includes(t)) { right = t; paintRight(); $('#propPanel').scrollTop = 0; }
   // the stickers' tab of older versions
   else if (t === 'stickers') return setTab('extras');

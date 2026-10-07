@@ -1,4 +1,5 @@
 // Правая панель: библиотека ассетов
+import { brandLogo, logoFor, setLink } from '../core/brand.js';
 import { $, $$, esc, toast } from '../core/util.js';
 import { activeLayer, activeObj, assets, sel } from '../core/state.js';
 import { faceKeys, facePx, newImage } from '../core/model.js';
@@ -44,14 +45,17 @@ function renderLibrary() {
 /* puts a library picture into the selected image layer or sticker */
 function swapImage(it) {
   const o = activeObj(), L = activeLayer(), st = activeSticker(); if (!o) return;
-  if (L?.type === 'image') { L.src = it.id; L.aspect = it.aspect; L.recolor = {}; delete L.keyout; markFace(o, sel.face); renderLayers(); renderLayerProps(); return commit(); }
+  if (L?.type === 'image') { L.src = it.id; L.aspect = it.aspect; L.recolor = {}; delete L.keyout; setLink(L, 'src', it.brand || null); markFace(o, sel.face); renderLayers(); renderLayerProps(); return commit(); }
   if (st) return setStickerImage(o, st, it);
 }
 function placeLibImage(it, obj = activeObj(), face = sel.face, at = null) {
   if (!obj || !face || !faceKeys(obj).includes(face)) return;
+  // a kit logo: on a dark face its inverse version, and linked to the kit
+  if (it.brand) { const l = logoFor(obj.faces[face], brandLogo(it.brand)); if (l) it = { id: l.src, aspect: l.aspect, brand: l.id }; }
   const L = newImage(it.id, it.aspect), [W, H] = facePx(obj, face);
   L.w = Math.min(.6, (H * .6 * it.aspect) / W);
   if (at) { L.x = at[0]; L.y = at[1]; }
+  if (it.brand) { setLink(L, 'src', it.brand); L.name = brandLogo(it.brand)?.name; }
   addLayer(L, face, obj);
 }
 

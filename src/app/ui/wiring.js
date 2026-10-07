@@ -44,7 +44,7 @@ function initWiring() {
     copyFaceDesign(o, sel.face, t === '*' ? outerKeys(o).filter(k => k !== sel.face) : [t]);
   };
   // a picture onto the face: from the uploads or from the computer, as in the action bar
-  $('#addImgBtn').onclick = e => { if (!activeObj()) return; pickAsset(e.currentTarget, 'Картинка на грань', r => placeLibImage(r)); };
+  $('#addImgBtn').onclick = e => { if (!activeObj()) return; pickAsset(e.currentTarget, 'Картинка на грань', r => placeLibImage(r), { brand: true }); };
   $('#addTextBtn').onclick = () => { const L = newText('Ваш текст'); const f = activeFaceData(); if (!f) return; L.color = luminance(f.bg) < .5 ? '#ffffff' : '#1c1b19'; addLayer(L); startTextEdit(L, '2d', true); };
   $('#addRectBtn').onclick = () => activeFaceData() && addLayer(newShape('rect'));
   $('#addEllBtn').onclick = () => activeFaceData() && addLayer(newShape('ellipse'));

@@ -1,4 +1,5 @@
 // Выбор картинки: из библиотеки или с компьютера
+import { brandLogo, kit } from '../core/brand.js';
 import { esc } from '../core/util.js';
 import { assets } from '../core/state.js';
 import { importImageFile } from '../core/assets.js';
@@ -14,16 +15,20 @@ function closePicker() {
 }
 function outside(e) { if (pop && !pop.contains(e.target)) closePicker(); }
 function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePicker(); } }
-function pickAsset(anchor, title, cb) {
+/* brand: the kit's logos and patterns come first; picked, they are linked to the kit ({ brand: id } in the answer) */
+function pickAsset(anchor, title, cb, { brand = false } = {}) {
   closePicker();
   const upload = () => pickImage(async file => { const r = await importImageFile(file); cb({ id: r.id, aspect: r.aspect }); });
-  if (!library.length) return upload();
+  const kitPics = brand ? [...kit().logos, ...kit().patterns] : [];
+  if (!library.length && !kitPics.length) return upload();
   pop = document.createElement('div'); pop.className = 'ctx apick'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', title);
   pop.innerHTML = `<div class="ctx-h">${esc(title)}</div>
+    ${kitPics.length ? `<div class="ctx-h sub">Бренд-кит</div><div class="lib">${kitPics.map(l => `<button class="it" data-kit="${l.id}" title="${esc(l.name)}" aria-label="${esc(l.name)}" style="background-image:url('${assets[l.src] || ''}')"></button>`).join('')}</div><div class="ctx-h sub">Загрузки</div>` : ''}
     <div class="lib">${library.map(it => `<button class="it" data-h="${it.hash}" title="${esc(it.name)}" aria-label="${esc(it.name)}"></button>`).join('')}</div>
     <button class="btn sm" data-a="up">С компьютера…</button>`;
   document.body.appendChild(pop);
-  pop.querySelectorAll('.it').forEach(b => {
+  pop.querySelectorAll('.it[data-kit]').forEach(b => { const l = brandLogo(b.dataset.kit); b.onclick = () => { closePicker(); cb({ id: l.src, aspect: l.aspect, brand: l.id }); }; });
+  pop.querySelectorAll('.it[data-h]').forEach(b => {
     const it = library.find(x => x.hash === b.dataset.h);
     b.style.backgroundImage = `url("${assets[it.id]}")`;
     b.onclick = () => { closePicker(); cb({ id: it.id, aspect: it.aspect }); };

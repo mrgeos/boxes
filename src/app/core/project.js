@@ -7,6 +7,7 @@ import { addAsset } from './assets.js';
 import { libAdopt, libStore, library } from './library.js';
 import { vecOf } from './vector.js';
 import { registerFont } from './fonts.js';
+import { emptyKit } from './brand.js';
 import { RT, buildObject, disposeObject, ui } from '../scene/renderer.js';
 import { activeSticker } from '../stickers/placement.js';
 import { applyScene, setLastView, setView } from '../scene/camera.js';
@@ -15,7 +16,7 @@ import { renderFonts, renderLayerProps } from '../ui/face-panel.js';
 import { renderAll } from '../ui/wiring.js';
 
 const hist = { stack: [], i: -1 };
-const snapshot = () => JSON.stringify({ name: state.name, objects: state.objects, scene: state.scene, fonts: state.fonts, groups: state.groups, tree: state.tree });
+const snapshot = () => JSON.stringify({ name: state.name, brand: state.brand, objects: state.objects, scene: state.scene, fonts: state.fonts, groups: state.groups, tree: state.tree });
 function commit() {
   normalizeTree();
   const s = snapshot(); if (hist.stack[hist.i] === s) return;
@@ -29,6 +30,7 @@ function restore(s) {
   for (const id of [...RT.keys()]) if (!ids.has(id)) disposeObject(id);
   state.objects = d.objects; state.scene = d.scene; state.fonts = d.fonts || []; state.groups = d.groups || []; state.tree = d.tree || [];
   if (d.name) { state.name = d.name; paintProjectName(); }
+  state.brand = d.brand || emptyKit(); ui.brand = true;
   for (const o of state.objects) buildObject(o);
   layoutAll();
   if (!activeObj()) sel.obj = state.objects[0]?.id ?? null;
@@ -50,13 +52,15 @@ function usedAssets() {
     if (o.product?.src) used.add(o.product.src);
   }
   for (const f of state.fonts) used.add(f.asset);
+  // the kit's logos and patterns go with the project even when no face shows them
+  for (const l of [...(state.brand?.logos || []), ...(state.brand?.patterns || [])]) used.add(l.src);
   return used;
 }
 const assetsOf = ids => { const out = {}; for (const id of ids) { if (assets[id]) out[id] = assets[id]; if (vecOf[id] && assets[vecOf[id]]) out[vecOf[id]] = assets[vecOf[id]]; } return out; };
 /* a project file carries its whole library; the autosave only what the design uses (the library is in the browser) */
 function projectJSON(withLibrary = true) {
   const ids = usedAssets(); if (withLibrary) for (const it of library) ids.add(it.id);
-  return JSON.stringify({ app: 'box-studio-3d', version: 1, name: state.name, objects: state.objects, groups: state.groups, tree: state.tree, scene: state.scene, fonts: state.fonts,
+  return JSON.stringify({ app: 'box-studio-3d', version: 1, name: state.name, brand: state.brand, objects: state.objects, groups: state.groups, tree: state.tree, scene: state.scene, fonts: state.fonts,
     library: library.filter(it => withLibrary || ids.has(it.id) || !it.browser).map(({ id, hash, name, aspect, added }) => ({ id, hash, name, aspect, added })), assets: assetsOf(ids),
     vectors: Object.fromEntries([...ids].filter(id => vecOf[id]).map(id => [id, vecOf[id]])) });
 }
@@ -72,6 +76,7 @@ function scheduleSave() {
 function loadProject(d, { resetHistory = true, name = null } = {}) {
   if (!d || !Array.isArray(d.objects)) throw new Error('bad project');
   state.name = String(d.name || name || 'Без названия').slice(0, 120); paintProjectName();
+  state.brand = d.brand || emptyKit(); ui.brand = true;
   for (const id of [...RT.keys()]) disposeObject(id);
   Object.assign(assets, d.assets || {});
   for (const [id, v] of Object.entries(d.vectors || {})) if (assets[v]) vecOf[id] = v;
@@ -148,4 +153,4 @@ async function convertLegacy(p) {
   return { objects: [o], scene: state.scene, fonts: state.fonts, assets: {} };
 }
 
-export { LS_KEY, addFontFile, commit, loadProject, openProjectFile, paintProjectName, projectJSON, redo, renameProject, saveFile, scheduleSave, undo, usedAssets };
+export { assetsOf, LS_KEY, addFontFile, commit, loadProject, openProjectFile, paintProjectName, projectJSON, redo, renameProject, saveFile, scheduleSave, undo, usedAssets };
