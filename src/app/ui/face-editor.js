@@ -18,6 +18,7 @@ import { boundsOf, clickPick, groupOf, layerAABB, moveLayers, rotateLayers, scal
 import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
 import { rotateItem, scaleItem } from '../core/transform.js';
+import { boardFacePath } from '../carriers/board.js';
 
 const ed = $('#editor'), ectx = ed.getContext('2d');
 /* the face is drawn with a margin round it (PAD px), where the part of a layer past its edge shows */
@@ -40,6 +41,8 @@ function drawEditor() {
   const circle = o.type === 'tube' && sel.face !== 'wrap';
   c.save();
   if (circle) { c.beginPath(); c.arc(dw / 2, dh / 2, dw / 2, 0, Math.PI * 2); c.clip(); }
+  // a cake board: its own outline (round, scalloped, with its tab)
+  else if (o.type === 'board') { c.beginPath(); boardFacePath(o, sel.face).forEach(([u, v], i) => c[i ? 'lineTo' : 'moveTo'](u * dw, v * dh)); c.closePath(); c.clip(); }
   c.drawImage(f.canvas, 0, 0, dw, dh);
   c.restore();
   const accentCss = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();

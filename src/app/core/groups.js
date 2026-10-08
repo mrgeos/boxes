@@ -63,7 +63,7 @@ function rotBox(b, deg) {
   return r;
 }
 /* an object's footprint in its own frame (mm): measured from its geometry when built, else from its size */
-function objFoot(o) { const f = RT.get(o.id)?.foot; if (f) return f; const { w, d } = o.dims, dd = o.type === 'cup' || o.type === 'tube' || o.type === 'torte' ? w : d; return { x0: -w / 2, x1: w / 2, z0: -dd / 2, z1: dd / 2 }; }
+function objFoot(o) { const f = RT.get(o.id)?.foot; if (f) return f; const { w, d } = o.dims, dd = o.type === 'cup' || o.type === 'tube' || o.type === 'torte' || (o.type === 'board' && o.cbShape === 'round') ? w : d; return { x0: -w / 2, x1: w / 2, z0: -dd / 2, z1: dd / 2 }; }
 /* the item's footprint in its parent's frame when it stands at the parent's origin, own rotation applied */
 function itemBox(id) { const g = groupById(id); return g ? rotBox(layoutGroup(g), g.rotY) : rotBox(objFoot(objById(id)), objById(id).rotY); }
 /* places a group's items in a row (into slots); returns the row's footprint, centred on the group's origin */

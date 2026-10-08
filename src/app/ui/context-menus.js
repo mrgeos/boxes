@@ -23,7 +23,7 @@ import { deleteIds, duplicateIds, groupIds, leaveGroup, renameRow, renderObjects
 import { openMenu } from './menu.js';
 
 const MOD = /Mac|iP(hone|ad)/.test(navigator.platform) ? '⌘' : 'Ctrl+';
-const TYPES = { box: 'Коробки', dome: 'Лотки с крышкой-призмой', torte: 'Тортницы', cup: 'Бумажные стаканы', bag: 'Пакеты', tube: 'Тубусы и банки' };
+const TYPES = { box: 'Коробки', dome: 'Лотки с крышкой-призмой', torte: 'Тортницы', board: 'Подложки под торт', cup: 'Бумажные стаканы', bag: 'Пакеты', tube: 'Тубусы и банки' };
 const norm = a => ((a + 180) % 360 + 360) % 360 - 180;
 const objById = id => state.objects.find(o => o.id === id) || null;
 const layerTitle = L => L.type === 'text' ? `Текст «${(L.text || '').split('\n')[0].slice(0, 24)}»` : L.type === 'image' ? 'Картинка' : L.kind === 'ellipse' ? 'Круг' : 'Плашка';

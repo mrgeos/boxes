@@ -35,6 +35,7 @@ const sep = '<span class="ab-sep"></span>';
 /* the sizes an object shows, by its kind: [key of o.dims, label] */
 function dimKeys(o) {
   if (o.type === 'tube' || o.type === 'torte') return [['w', 'Ø'], ['h', 'В']];
+  if (o.type === 'board') return o.cbShape === 'round' ? [['w', 'Ø']] : [['w', 'Ш'], ['d', 'Г']];   // its thickness is set in the panel (it can be under 5 mm)
   if (o.type === 'cup') return [['w', 'Ø верх'], ['d', 'Ø низ'], ['h', 'В']];
   return [['w', 'Ш'], ['d', 'Г'], ['h', 'В']];
 }

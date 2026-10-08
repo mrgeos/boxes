@@ -12,7 +12,7 @@ import { addObject } from './wiring.js';
    scene's own renderer (in a corner of its canvas, in the same task, so it never shows), then kept in the
    browser. Pictures are made one at a time in the background while the gallery is open. */
 const CATS = [['all', 'Все'], ['box', 'Коробки'], ['cake', 'Для тортов'], ['bag', 'Пакеты'], ['cup', 'Стаканы и тубусы']];
-const catOf = p => p.type === 'torte' || p.type === 'dome' || p.id.startsWith('cake') ? 'cake'
+const catOf = p => p.type === 'torte' || p.type === 'dome' || p.type === 'board' || p.id.startsWith('cake') ? 'cake'
   : p.type === 'bag' || p.type === 'paperbag' ? 'bag' : p.type === 'cup' || p.type === 'tube' ? 'cup' : 'box';
 const THUMB_V = 1, SIZE = 160, STORE = 'bs3d-thumbs';
 let cat = 'all', thumbs = null, queue = [], busy = false, stage = null;

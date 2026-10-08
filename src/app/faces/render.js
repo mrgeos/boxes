@@ -13,6 +13,7 @@ import { STICKER_FX, placementsFor } from '../stickers/placement.js';
 import { drawSticker, stickerMask, stickerShadow } from '../stickers/film.js';
 import { drawWrapped, wrapsOnto } from './wrap.js';
 import { clipBase, clipRect, cropOf, cropped, maskPath } from '../core/mask.js';
+import { boardFin } from '../carriers/board.js';
 
 /* the copies of a layer a ring face needs: +1 when it runs over the start of the face, -1 over its end */
 function loopShifts(L, W, H, ax) {
@@ -253,7 +254,7 @@ function renderFace(o, k) {
   // print on a clear PET lid: no board colour, paper grain or kraft, only the layers
   const clear = f.clear = isClearFace(o, k);
   const bf = clear && o.type === 'bag' ? BAG_FILM[o.bagMat] : null;
-  const fin = clear ? bf?.fin || PET_PRINT : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : k === 'carry' ? FINISHES[o.carry?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = faceGrain(o, k);
+  const fin = clear ? bf?.fin || PET_PRINT : o.type === 'board' ? boardFin(o, k) : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : k === 'carry' ? FINISHES[o.carry?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = faceGrain(o, k);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   if (clear) { ctx.clearRect(0, 0, W, H); if (bf?.ground) { ctx.fillStyle = bf.ground; ctx.fillRect(0, 0, W, H); } }
   else {
@@ -297,7 +298,8 @@ function renderFace(o, k) {
     const L = it.L; if (!L.visible) continue;
     if (L.type === 'text') ensureFont(L);
     if (isFoil(L.effect)) fxl.push(it);
-    else { draw(ctx, it, W, H); if (L.effect !== 'none') fxl.push(it); }
+    // on foil, what is printed is ink, not metal: those layers go to the finish map too
+    else { draw(ctx, it, W, H); if (L.effect !== 'none' || fin.foilBase) fxl.push(it); }
   }
   if (fin.kraft && !clear) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = fin.kraft; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   if (grain > 0 && !clear) {
@@ -344,7 +346,7 @@ let skipStickers = false;
 /* fxl: layers with a finish, as { L } or a part of a neighbour's layer; draw(ctx, item, W, H, paint, alpha) paints one */
 function updateFaceMaterial(o, k, f, fxl, fin, ops, draw) {
   const m = f.mat;
-  const needFx = ops.length > 0 || fxl.some(({ L }) => isFoil(L.effect) || L.effect === 'spot-uv');
+  const needFx = ops.length > 0 || !!fin.foilBase || fxl.some(({ L }) => isFoil(L.effect) || L.effect === 'spot-uv');
   const holo = fxl.some(({ L }) => L.effect === 'foil-holo'), uv = fxl.some(({ L }) => L.effect === 'spot-uv');
   const needBump = ops.length > 0 || fxl.some(({ L }) => isFoil(L.effect) || L.effect === 'emboss' || L.effect === 'deboss' || L.effect === 'spot-uv');
   const opsDraw = (x, ppx, color) => { for (const { st, M } of ops) { x.setTransform(M[0] * ppx, M[1] * ppx, M[2] * ppx, M[3] * ppx, M[4] * ppx, M[5] * ppx); stickerMask(x, st, color(st)); } x.setTransform(1, 0, 0, 1, 0, 0); };
@@ -355,6 +357,7 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops, draw) {
       const e = it.L.effect;
       if (isFoil(e)) draw(x, it, W, H, `rgb(0,${e === 'foil-holo' ? 30 : 46},255)`, 1);
       else if (e === 'spot-uv') draw(x, it, W, H, `rgb(0,10,${Math.round(fin.m * 255)})`, 1);
+      else if (fin.foilBase && (!e || e === 'none')) draw(x, it, W, H, 'rgb(0,140,0)', 1);
     }
     opsDraw(x, W / faceMM(o, k)[0], st => { const [r, mt] = STICKER_FX[st.finish] || STICKER_FX.gloss; return `rgb(0,${Math.round(r * 255)},${Math.round(mt * 255)})`; });
     f.fxTex.needsUpdate = true;
