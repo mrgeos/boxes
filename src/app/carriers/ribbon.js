@@ -8,7 +8,7 @@ import { artImg } from '../core/vector.js';
 /* A ribbon is tied crosswise: one band goes round the object across its width, the other across its depth, both
    through the middle of the top (ox, oz: the cross moved off the middle, mm; 0 for now), and they are tied over
    the cross with a bow or a knot. A band lies taut over the object: its path is the convex outline of the object's
-   section along the band (with the lid closed), as wide as the ribbon, a ribbon's thickness off the surface. The
+   section along the band (with the lid closed), as wide as the ribbon, off the surface by its own thickness and the gap set (lift). The
    ribbon can repeat a text or a logo along it. When the lid is opened, the ribbon is off (hidden); it is back when
    the lid is closed. All lengths are mm. */
 const RIBBON_MAT = { satin: 'Атлас', grosgrain: 'Репс', twine: 'Шпагат / джут' };
@@ -18,7 +18,9 @@ const MAT_COLOR = { satin: '#b3243b', grosgrain: '#1f3b63', twine: '#c4a57a' };
 /* what a ribbon can be tied round: boxes (but a handle box, whose handle is on top) and the round ones */
 const ribbonFits = o => !!o && (o.type === 'box' ? o.lidType !== 'handle' : ['dome', 'tube', 'torte'].includes(o.type));
 const ribbonsOf = o => ribbonFits(o) ? o.ribbons || [] : [];
-const thickOf = r => r.mat === 'twine' ? r.w : r.mat === 'grosgrain' ? .45 : .3;
+const THICK = { satin: .35, grosgrain: .7, twine: 0 };
+/* how thick the tape is (twine: its diameter, its width) */
+const thickOf = r => r.mat === 'twine' ? r.w : clamp(r.thick ?? THICK[r.mat], .05, 5);
 function ribbonName(r) {
   return r.mat === 'twine' ? 'Шпагат' : r.mat === 'grosgrain' ? 'Репсовая лента' : 'Атласная лента';
 }
@@ -27,7 +29,7 @@ function newRibbon(o, over = {}) {
   const mat = over.mat || 'satin', small = Math.min(o.dims.w, o.dims.d ?? o.dims.w);
   const w = mat === 'twine' ? 3 : clamp(Math.round(small * .12), 6, 40);
   return { id: uid(), mat, w, color: MAT_COLOR[mat], print: 'none', text: 'Ваш текст', font: 'Inter', textColor: '#ffffff', src: null, aspect: 1,
-    printSize: Math.round(w * .55), gap: 20, bow: 'classic', bowSize: Math.round(clamp(w * 1.8, 18, 90)), tails: Math.round(clamp(w * 2.6, 25, 140)), tie: 'cross', ox: 0, oz: 0, ...over };
+    printSize: Math.round(w * .55), gap: 20, thick: THICK[mat], lift: 0, bow: 'classic', bowSize: Math.round(clamp(w * 1.8, 18, 90)), tails: Math.round(clamp(w * 2.6, 25, 140)), tie: 'cross', ox: 0, oz: 0, ...over };
 }
 /* a ribbon made of another stuff: twine is a cord of a few mm, the others are tapes */
 function setRibbonMat(o, r, mat) {
@@ -38,6 +40,7 @@ function setRibbonMat(o, r, mat) {
     Object.assign(r, { w: fresh.w, bowSize: fresh.bowSize, tails: fresh.tails, printSize: fresh.printSize });
   }
   if (r.color === MAT_COLOR[was]) r.color = MAT_COLOR[mat];
+  if (r.thick == null || r.thick === THICK[was]) r.thick = THICK[mat];
 }
 
 /* ---------- the object's outline ---------- */
@@ -140,27 +143,55 @@ function wrapPath(tris, c, d, w, r) {
 
 /* ---------- strips ---------- */
 const UNIT = 100;   // mm of ribbon per unit of its texture coordinate along it
-/* a ribbon strip along 3D points (mm) with the across-direction at each, width w (or w·wf[i]); u by the length so far;
-   notch: a V cut into the end, as a tail is cut */
-function stripGeo(P, A, w, len, { wf = null, notch = 0 } = {}) {
-  const n = P.length, pos = new Float32Array(n * 9), uv = new Float32Array(n * 6), idx = [];
+/* a ribbon strip along 3D points (mm) with the across-direction at each: a flat bar w wide (or w·wf[i]) and th thick,
+   with its edges and cut ends, u by the length so far (len). Options: cup — how much the middle bows out of the edges
+   (a share of the width); C — a point the strip's face turns away from (the object, the knot); wave(i) — { lift,
+   twist } at point i (a tail lying in soft waves, turning at its end); notch — a V cut into the end, as a tail is cut;
+   loop — a closed band (no cut ends) */
+const COLS = 6;
+function stripGeo(P, A, w, len, { wf = null, notch = 0, th = .3, cup = 0, C = null, wave = null, loop = false } = {}) {
+  const n = P.length, m = COLS, top = [], bot = [], uvs = [], T = new THREE.Vector3(), N = new THREE.Vector3(), a = new THREE.Vector3();
   for (let i = 0; i < n; i++) {
-    const hw = w * (wf ? wf[i] : 1) / 2;
-    for (let j = 0; j < 3; j++) {
-      const t = (j - 1) * hw, back = notch && i === n - 1 && j === 1 ? notch : 0;
-      // the middle of the cut end is short of the edges: a V notch
-      const T = back && i > 0 ? P[i].clone().sub(P[i - 1]).setLength(back) : null, q = P[i].clone().addScaledVector(A[i], t);
-      if (T) q.sub(T);
-      pos.set([q.x * S, q.y * S, q.z * S], (i * 3 + j) * 3);
+    T.subVectors(P[Math.min(n - 1, i + 1)], P[Math.max(0, i - 1)]).normalize();
+    const wv = wave ? wave(i) : null, hw = w * (wf ? wf[i] : 1) / 2;
+    a.copy(A[i]); if (wv?.twist) a.applyAxisAngle(T, wv.twist);
+    N.crossVectors(T, a).normalize();
+    if (C && N.dot(P[i].clone().sub(C)) < 0) N.negate();
+    const mid = P[i].clone().addScaledVector(N, (wv?.lift || 0) + Math.abs(Math.sin(wv?.twist || 0)) * hw);
+    for (let j = 0; j <= m; j++) {
+      const f = j / m * 2 - 1, back = notch && i === n - 1 ? notch * (1 - Math.abs(f)) : 0;
+      // the middle stands out of the edges a little (cup); the cut end is a V (notch)
+      const q = mid.clone().addScaledVector(a, f * hw).addScaledVector(N, cup * w * (1 - f * f)).addScaledVector(T, -back);
+      top.push(q.clone().addScaledVector(N, th / 2)); bot.push(q.addScaledVector(N, -th / 2));
       // the print reads along the strip, not mirrored, seen from its outer side
-      uv.set([(len[i] - (back || 0)) / UNIT, 1 - j / 2], (i * 3 + j) * 2);
+      uvs.push([(len[i] - back) / UNIT, 1 - j / m]);
     }
-    if (i) for (let j = 0; j < 2; j++) { const a = (i - 1) * 3 + j, b = a + 1, c2 = a + 3, d2 = a + 4; idx.push(a, c2, b, b, c2, d2); }
   }
+  const pos = [], uv = [], idx = [];
+  const grid = (rows, cols, at, uvAt) => {
+    const o = pos.length / 3;
+    for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) { const q = at(i, j); pos.push(q.x * S, q.y * S, q.z * S); uv.push(...uvAt(i, j)); }
+    for (let i = 1; i < rows; i++) for (let j = 1; j < cols; j++) { const p00 = o + (i - 1) * cols + j - 1, p01 = p00 + 1, p10 = p00 + cols, p11 = p10 + 1; idx.push(p00, p10, p01, p01, p10, p11); }
+  };
+  const K = (i, j) => i * (m + 1) + j;
+  // the face and the back, then its two edges and (an open strip) its cut ends: each its own vertices, so edges stay crisp
+  grid(n, m + 1, (i, j) => top[K(i, j)], (i, j) => uvs[K(i, j)]);
+  grid(n, m + 1, (i, j) => bot[K(i, m - j)], (i, j) => uvs[K(i, m - j)]);
+  for (const j of [0, m]) grid(n, 2, (i, k) => (k ? bot : top)[K(i, j)], (i) => uvs[K(i, j)]);
+  if (!loop) for (const i of [0, n - 1]) grid(2, m + 1, (k, j) => (k ? bot : top)[K(i, j)], (k, j) => uvs[K(i, j)]);
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeVertexNormals();
   return g;
+}
+/* a run of 3D points evened out to steps of about `step` mm (for a tail that waves), with its length so far */
+function resample(P, len, step) {
+  const L = len.at(-1), k = Math.max(2, Math.ceil(L / step)), out = [], l = [];
+  for (let s = 0, i = 1; s <= k; s++) {
+    const at = L * s / k; while (i < P.length - 1 && len[i] < at) i++;
+    const f = (at - len[i - 1]) / ((len[i] - len[i - 1]) || 1); out.push(P[i - 1].clone().lerp(P[i], clamp(f, 0, 1))); l.push(at);
+  }
+  return [out, l];
 }
 /* a cord (twine) along 3D points (mm), radius r; u by length as for a strip */
 function cordGeo(P, r, closed = false) {
@@ -281,22 +312,24 @@ function buildRibbons(o, rt = RT.get(o.id)) {
   if (lid) { o.lid = lid; applyLid(o); }
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (const { p } of tris) for (let i = 0; i < p.length; i += 3) { x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]); z0 = Math.min(z0, p[i + 2]); z1 = Math.max(z1, p[i + 2]); }
+  let y1 = 0; for (const { p } of tris) for (let i = 1; i < p.length; i += 3) y1 = Math.max(y1, p[i]);
   if (!(x1 > x0)) return;
   rt.ribbons = new THREE.Group(); rt.ribbonGroups = new Map(); rt.group.add(rt.ribbons);
   list.forEach((r, k) => {
+    r.thick ??= THICK[r.mat]; r.lift ??= 0;   // ribbons made before these could be set
     const G = new THREE.Group(); G.visible = !r.hidden; rt.ribbons.add(G); rt.ribbonGroups.set(r.id, G);
     const c = [(x0 + x1) / 2 + (r.ox || 0), (z0 + z1) / 2 + (r.oz || 0)], th = thickOf(r), twine = r.mat === 'twine', w = clamp(r.w, 1, 120);
-    // several ribbons lie one over the other
-    const lift0 = k * th * 2.2 + (twine ? w / 2 : th / 2) + .15;
+    // several ribbons lie one over the other; the gap lifts the ribbon off the object all round (its shadow shows under it)
+    const gap = clamp(r.lift || 0, 0, 30), lift0 = k * th * 2.2 + (twine ? w / 2 : th / 2) + .15 + gap, mid = new THREE.Vector3(c[0], y1 / 2, c[1]);
     const add = geo => { const m = new THREE.Mesh(geo, blank); m.castShadow = m.receiveShadow = true; m.userData = { objId: o.id, ribbon: r.id }; G.add(m); };
-    const piece = (P, A, len, opt = {}) => add(twine ? cordGeo(P, w / 2, opt.closed) : stripGeo(P, A, w, len, opt));
+    const piece = (P, A, len, opt = {}) => add(twine ? cordGeo(P, w / 2, opt.loop) : stripGeo(P, A, w, len, { th, ...opt }));
     // the two bands: across the width, then over it across the depth
     let top = 0;
     [[1, 0], [0, 1]].forEach((d, i) => {
       const P = wrapPath(tris, c, d, twine ? 0 : w, lift0 + i * (twine ? w : th)); if (!P) return;
       const pts = lift(P, c, d), n = new THREE.Vector3(-d[1], 0, d[0]);
       if (twine) pts.pop();
-      piece(pts, pts.map(() => n), P.len, { closed: twine });
+      piece(pts, pts.map(() => n), P.len, { loop: true, cup: .02, C: mid });
       top = Math.max(top, P.pts[0][1]);
     });
     if (!top) return;
@@ -307,14 +340,20 @@ function buildRibbons(o, rt = RT.get(o.id)) {
       // towards the front, splayed
       const a = (r.bow === 'puffy' ? 45 : 35) * Math.PI / 180, dn = [s * Math.sin(a), Math.cos(a)];
       const P = wrapPath(tris, c, dn, twine ? 0 : w, lift0 + (twine ? w * 2 : th * 2.5)); if (!P) continue;
-      const head = pathHead(P, tl + w * .3), pts = lift(head, c, dn), n = new THREE.Vector3(-dn[1], 0, dn[0]);
-      piece(pts, pts.map(() => n), head.len, { notch: twine ? 0 : w * .35 });
+      const head = pathHead(P, tl + w * .3), [pts, l] = resample(lift(head, c, dn), head.len, clamp(w / 4, 1, 4)), n = new THREE.Vector3(-dn[1], 0, dn[0]), L = l.at(-1);
+      // past the knot it lies in soft waves off the lid, and its end turns a little
+      const w0 = w * .6, wave = i => {
+        const q = l[i] - w0, on = clamp(q / (w * 2), 0, 1);
+        return { lift: q > 0 ? w * .1 * on * (.5 - .5 * Math.cos(q / (w * 2.4) * Math.PI * 2)) : 0, twist: s * .45 * clamp((l[i] - (L - w * 2.5)) / (w * 2.5), 0, 1) ** 2 };
+      };
+      piece(pts, pts.map(() => n), l, { notch: twine ? 0 : w * .35, cup: .06, C: mid, wave });
     }
     // the knot and the loops
     const K = knot(base, w, r.bow === 'knot');
     if (twine) add(new THREE.SphereGeometry(w * .9 * S, 12, 8).translate(base.x * S, (base.y + w * .3) * S, base.z * S));
-    else piece(K.P, K.A, runLen(K.P), { wf: K.wf });
-    for (const L of bowLoops(r, base.clone().setY(base.y + (twine ? w * .3 : w * .25)))) piece(L.P, L.A, runLen(L.P), { wf: twine ? null : L.wf });
+    else piece(K.P, K.A, runLen(K.P), { wf: K.wf, cup: .04, C: base.clone().setY(base.y + w * .35) });
+    const lb = base.clone().setY(base.y + (twine ? w * .3 : w * .25));
+    for (const L of bowLoops(r, lb)) piece(L.P, L.A, runLen(L.P), { wf: twine ? null : L.wf, cup: .045, C: lb });
     ribbonLook(o, r);
   });
   showRibbons(o);
