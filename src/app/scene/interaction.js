@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { $, DEG, S, toast } from '../core/util.js';
 import { activeFaceData, activeLayer, activeObj, sel, state } from '../core/state.js';
 import { deleteIds, duplicateIds, picked } from '../ui/object-list.js';
-import { faceKeys, faceMM, facePx, loopAxis } from '../core/model.js';
+import { faceKeys, faceMM, facePx, loopAxis, newText } from '../core/model.js';
 import { apply, faceMaps, inv, layerReach, moveLayerOnto } from '../faces/wrap.js';
 import { library } from '../core/library.js';
 import { RT, camera, controls, cvs, markFace, renderer, ui, world } from './renderer.js';
@@ -13,7 +13,7 @@ import { pickLayers, select, selectExtra, selectLayer, selectObjectItself } from
 import { boundsOf, clickPick, copyData, moveLayers, pasteData, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
 import { addFontFile, commit, openProjectFile, redo, undo } from '../core/project.js';
 import { refreshFields } from '../ui/fields.js';
-import { addImageToFace, deleteLayer, duplicateLayer, layerCmd, moveLayer, renderFaceTabs, renderLayerProps, renderLayers } from '../ui/face-panel.js';
+import { addImageToFace, addLayer, deleteLayer, duplicateLayer, layerCmd, moveLayer, renderFaceTabs, renderLayerProps, renderLayers } from '../ui/face-panel.js';
 import { deleteSticker, editStickerText, extraAction, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
 import { setTab } from '../ui/tabs.js';
 import { activeRibbon, isPart } from '../core/extras.js';
@@ -368,8 +368,18 @@ function initInteraction() {
       try { const out = pasteData(activeObj(), sel.face, JSON.parse(txt.slice(CLIP.length))); pickLayers(out.map(l => l.id)); renderFaceTabs(); commit(); } catch { toast('Не удалось вставить слои'); }
       return;
     }
+    const o = activeObj(); if (!o) return;
+    // a picture (Figma: Copy as PNG, a screenshot, an image copied in a browser)
     const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
-    if (it && activeObj()) { e.preventDefault(); addImageToFace(it.getAsFile()); }
+    if (it) { e.preventDefault(); addImageToFace(it.getAsFile()); return; }
+    // a vector as SVG code (Figma: Copy as SVG): a vector layer, its colours can be swapped
+    const svg = txt.trim();
+    if (/^(<\?xml[^>]*>\s*)?<svg[\s>]/i.test(svg)) { e.preventDefault(); addImageToFace(new File([svg], 'Из Figma.svg', { type: 'image/svg+xml' })); return; }
+    // Figma's own copy (Cmd+C) is in its closed format: say how to copy it so it pastes
+    const html = e.clipboardData?.getData('text/html') || '';
+    if (/\(fig(ma|meta)\)/.test(html)) { e.preventDefault(); toast('Из Figma вставляется картинкой или вектором: в Figma правый клик → Copy/Paste as → «Copy as PNG» (Shift+Cmd+C) или «Copy as SVG», затем вставьте сюда'); return; }
+    // plain text: a text layer with it
+    if (svg && svg.length <= 2000 && sel.face) { e.preventDefault(); addLayer(Object.assign(newText(svg), { size: svg.length > 40 ? .06 : .12 })); }
   });
   /* keyboard */
   document.addEventListener('keydown', e => {
