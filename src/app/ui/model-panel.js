@@ -10,7 +10,7 @@ import { applyLid, applyObjMaterials, markFace, markObj, rebuildQueue, ui } from
 import { BAG_MATS, BAG_TOPS, applyBagPreset, bagFilm } from '../carriers/bag.js';
 import { applyDomePreset } from '../carriers/dome.js';
 import { TORTE_COLORS, TORTE_FIN, applyTortePreset } from '../carriers/torte.js';
-import { BOARD_BOTTOM, BOARD_COVER, BOARD_SHAPE, applyBoardPreset, fitCake, setBoardCover } from '../carriers/board.js';
+import { BOARD_BOTTOM, BOARD_COVER, BOARD_SHAPE, COLLAR_OVERLAP, applyBoardPreset, fitCake, setBoardCover } from '../carriers/board.js';
 import { winMM, windowPlace } from '../carriers/box.js';
 import { HANDLE_SHAPES, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, defaultFrontWin, defaultHandle } from '../carriers/handle-box.js';
 import { CARRY_PANEL, CARRY_STYLES, applyCarry, carryDims, carryOn } from '../carriers/carry.js';
@@ -107,12 +107,14 @@ function modelInput(k) {
   // a cake board: its covering and underside repaint it; its shape, edge, tab and cake build it again
   if (k === 'cbCover' || k === 'cbBottom') { setBoardCover(o); applyObjMaterials(o); markObj(o); renderModel(); renderFacePanel(); return; }
   if (k === 'cbWrap') { applyObjMaterials(o); ui.net = true; renderModel(); return; }
-  if (k.startsWith('cb') || k.startsWith('cake.')) {
+  if (k.startsWith('cb') || k.startsWith('cake.') || k.startsWith('collar.')) {
     rebuildQueue.add(o.id); ui.net = ui.editor = true; updateFaceMeta();
     // a new shape of the board: the cake takes it too, sized to it
     if (k === 'cbShape') { ensureFaces(o); fitCake(o); }
     if (k === 'cake.shape') { const cs = o.cake.shape; fitCake(o, cs); }
-    if (['cbShape', 'cbTab.on', 'cake.on', 'cake.shape'].includes(k)) { renderModel(); renderObjects(); }
+    if (k === 'collar.on') { ensureFaces(o); select(o.id, o.collar.on ? 'collar' : faceKeys(o).includes(sel.face) ? sel.face : 'top'); renderFaceTabs(); }
+    if (o.collar?.on && (k.startsWith('collar.') || k.startsWith('cake.'))) markFace(o, 'collar');
+    if (['cbShape', 'cbTab.on', 'cake.on', 'cake.shape', 'collar.on'].includes(k)) { renderModel(); renderObjects(); }
     return;
   }
   if (k === 'baseColor') { applyObjMaterials(o); $$('#torteSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.baseColor)); return; }
@@ -192,6 +194,8 @@ function renderModel() {
           + `<label class="check"><input type="checkbox" data-k="cbTab.on"> Язычок, за который берут (под пирожное)</label>`
           + (o.cbTab?.on ? rangeField('Язычок: ширина, мм', 'cbTab.w', 10, 200, 1) + rangeField('Язычок: длина, мм', 'cbTab.l', 5, 120, 1) : '')
           + `<label class="check"><input type="checkbox" data-k="cake.on"> Торт на подложке</label>`
+          + `<label class="check"><input type="checkbox" data-k="collar.on"> Ацетатная лента (тубус) вокруг торта</label>`
+          + (o.collar?.on ? rangeField('Высота ленты, мм', 'collar.h', 10, 300, 1) + `<p class="hint">Прозрачная ПЭТ-лента обнимает торт по его форме. На ней можно печатать — грань «Ацетатная лента»: незапечатанное остаётся прозрачным. На развёртке — полоса с нахлёстом ${COLLAR_OVERLAP} мм под клей.</p>` : '')
           + (o.cake?.on !== false ? `<div class="field wide"><span class="fl">Форма торта</span><select data-k="cake.shape"><option value="round">Круглый</option><option value="rect">Прямоугольный</option></select></div>`
             + (o.cake.shape === 'rect' ? rangeField('Торт: ширина, мм', 'cake.w', 20, 800, 1) + rangeField('Торт: глубина, мм', 'cake.l', 20, 800, 1) : rangeField('Диаметр торта, мм', 'cake.d', 20, 600, 1))
             + rangeField('Высота торта, мм', 'cake.h', 10, 250, 1) + `<div class="row"><button class="btn sm" id="cakeFit">По размеру подложки</button></div>` : '')

@@ -113,6 +113,8 @@ function boardDefaults(o) {
   o.cbShape ??= 'round'; o.cbCover ??= 'foil-gold'; o.cbEdge ??= 'smooth'; o.cbR ??= 10; o.cbWrap ??= true; o.cbBottom ??= 'raw';
   o.cbTab ??= { on: false, w: 40, l: 25 }; o.cake ??= { on: true };
   if (o.cbShape === 'round') o.dims.d = o.dims.w;
+  o.collar ??= { on: false };
+  o.collar.h ??= Math.round(clamp((o.cake.h ?? 60) + 20, 30, 200));
   o.cake.h ??= Math.round(clamp(Math.min(o.dims.w, o.dims.d || o.dims.w) * .3, 20, 90));
   if (!o.cake.shape) fitCake(o);
 }
@@ -148,8 +150,52 @@ function buildBoard(o, rt) {
     if (C.shape === 'rect') { const cw = clamp(C.w ?? 100, 20, 2000), cl = clamp(C.l ?? 100, 20, 2000); addCake(rt.group, o, rt, { rect: [cw, cl, Math.min(cw, cl) * .06 + (o.cbShape === 'rect' ? (o.cbR || 0) * .5 : 0)], y0: h, h: ch }); }
     else { const cd = clamp(C.d ?? 100, 20, 2000); addCake(rt.group, o, rt, { R: cd / 2, y0: h, h: Math.min(ch, cd * .7) }); }
   }
+  buildCollar(o, rt);
   boardColors(o, rt);
 }
+/* ---------- the acetate collar ---------- */
+/* A band of clear acetate (PET) wrapped round the cake, standing on the board: round or the slab's outline, 1.5 mm
+   off the cake, collar.h high. It is a face of its own (collar), printed like the clear lid of a cake container:
+   what is not printed stays clear. The band is a ring: its design starts and ends at the back; flat, it is
+   a strip as long as the way round plus an overlap. */
+const COLLAR_GAP = 1.5, COLLAR_OVERLAP = 15;
+const collarOn = o => o.type === 'board' && !!o.collar?.on;
+function collarDims(o) {
+  const C = o.cake || {}, h = clamp(o.collar?.h ?? 80, 10, 400), y0 = clamp(o.dims.h, 1, 40);
+  if (C.shape === 'rect') {
+    const w = clamp(C.w ?? 100, 20, 2000) + 2 * COLLAR_GAP, l = clamp(C.l ?? 100, 20, 2000) + 2 * COLLAR_GAP, r = Math.min(w, l) / 2 * .12 + COLLAR_GAP + (o.cbShape === 'rect' ? (o.cbR || 0) * .5 : 0);
+    const rr = Math.min(r, w / 2, l / 2), P = rrect(-w / 2, -l / 2, w / 2, l / 2, rr, 10);
+    return { rect: true, w, l, P, len: 2 * (w + l) - (8 - 2 * Math.PI) * rr, h, y0 };
+  }
+  const R = clamp(C.d ?? 100, 20, 2000) / 2 + COLLAR_GAP;
+  return { rect: false, R, P: circle(R, 160), len: 2 * Math.PI * R, h, y0 };
+}
+/* the outline of the collar as a run from the back middle, round by the right, to the back middle again */
+function collarRun(D) {
+  const P = D.P, n = P.length;
+  // start at the point nearest the back middle (x 0, z most negative)
+  let s = 0; for (let i = 1; i < n; i++) if (Math.abs(P[i][0]) + (P[i][1] > 0 ? 1e6 : 0) < Math.abs(P[s][0]) + (P[s][1] > 0 ? 1e6 : 0)) s = i;
+  const run = []; for (let k = 0; k <= n; k++) run.push(P[(s - k + n) % n]);
+  const L = [0]; for (let i = 1; i < run.length; i++) L.push(L[i - 1] + Math.hypot(run[i][0] - run[i - 1][0], run[i][1] - run[i - 1][1]));
+  return { run, L, total: L.at(-1) };
+}
+function buildCollar(o, rt) {
+  if (!collarOn(o)) return;
+  const D = collarDims(o), R = collarRun(D), g = new THREE.Group(), S0 = D.y0, S1 = D.y0 + D.h;
+  // the clear band, its edges catching the light, and the print on it a hair outside
+  const band = (off, mat, face) => {
+    const pos = [], uv = [], idx = [], N = normals(R.run.slice(0, -1)); N.push(N[0]);
+    R.run.forEach(([x, z], i) => { const nx = N[i][0] * off, nz = N[i][1] * off; pos.push((x + nx) * S, S0 * S, (z + nz) * S, (x + nx) * S, S1 * S, (z + nz) * S); uv.push(R.L[i] / R.total, 0, R.L[i] / R.total, 1); });
+    for (let i = 0; i < R.run.length - 1; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx); geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, mat); m.userData = { objId: o.id, face, noFrame: true }; g.add(m); return m;
+  };
+  band(0, rt.petMat, null).raycast = () => {};
+  for (const y of [S0, S1]) { const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(R.run.map(([x, z]) => new THREE.Vector3(x * S, y * S, z * S))), rt.petEdgeMat); ring.raycast = () => {}; ring.renderOrder = 4; g.add(ring); }
+  band(.06, rt.faces.collar.mat, 'collar').renderOrder = 3;
+  rt.group.add(g);
+}
+
 /* the edge's look: the covering turned over it (foil metal, or the paper's colour and finish) or the cut board */
 function boardColors(o, rt) {
   const m = rt.cbSideMat; if (!m) return;
@@ -170,6 +216,12 @@ function boardNet(o) {
   const sm = resample(B.smooth, 1.5).P;
   const top = { key: 'top', x: m, y: m, w: B.W, h: B.D, poly: sheet(wrap ? grown(sm, m) : B.P, m, m), folds: wrap ? [sheet(sm, m, m), sheet(grown(sm, h), m, m)] : [] };
   const n = { W: B.W + 2 * m, H: B.D + 2 * m, board: true, panels: [top] };
+  if (collarOn(o)) {
+    // the acetate collar: a strip as long as the way round, and the overlap glued at the seam
+    const D = collarDims(o), y = n.H + gap, x = 0, W = D.len + COLLAR_OVERLAP;
+    n.panels.push({ key: 'collar', x, y, w: D.len, h: D.h, poly: [[x, y], [x + W, y], [x + W, y + D.h], [x, y + D.h]], folds: [[[x + D.len, y], [x + D.len, y + D.h]]] });
+    n.W = Math.max(n.W, W); n.H = y + D.h;
+  }
   if (o.cbBottom === 'covered') {
     // under it, a sheet a little smaller than the board hides the turned-in edge
     const x = n.W + gap, inset = wrap ? 3 : 0;
@@ -179,4 +231,4 @@ function boardNet(o) {
   return n;
 }
 
-export { BOARD_BOTTOM, BOARD_COVER, BOARD_SHAPE, RAW_BOARD, applyBoardPreset, boardColors, boardDefaults, fitCake, boardFaceMM, boardFacePath, boardFin, boardGrain, boardNet, boardOutline, buildBoard, setBoardCover };
+export { BOARD_BOTTOM, BOARD_COVER, BOARD_SHAPE, RAW_BOARD, COLLAR_OVERLAP, applyBoardPreset, boardColors, boardDefaults, collarDims, collarOn, fitCake, boardFaceMM, boardFacePath, boardFin, boardGrain, boardNet, boardOutline, buildBoard, setBoardCover };

@@ -37,7 +37,7 @@ function computeFrames(o, rt) {
   const inv = rt.group.matrixWorld.clone().invert(), frames = {};
   rt.group.traverse(m => {
     const k = m.userData?.face || m.userData?.support;
-    if (!m.isMesh || !k || m.userData.wall || frames[k]) return;
+    if (!m.isMesh || !k || m.userData.wall || m.userData.noFrame || frames[k]) return;
     const gp = m.geometry.parameters;
     const M = inv.clone().multiply(m.matrixWorld), [w, h] = m.userData.face ? faceMM(o, k) : [gp.width / S, gp.height / S];
     const c = new THREE.Vector3().applyMatrix4(M).divideScalar(S);

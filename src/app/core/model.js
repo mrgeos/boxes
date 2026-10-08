@@ -11,19 +11,19 @@ import { lidDimsMM, winMM, windowPlace } from '../carriers/box.js';
 import { HANDLE_KEYS, HB_END_KEYS, applyHandlePreset, defaultFrontWin, defaultHandle, hbDims, hbNet, hbOpen } from '../carriers/handle-box.js';
 import { SLEEVE_GLUE, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn, sleeveSheet, upgradeSleeve } from '../carriers/sleeve.js';
 import { boxNet } from '../carriers/box-net.js';
-import { applyBoardPreset, boardDefaults, boardFaceMM, boardNet, setBoardCover } from '../carriers/board.js';
+import { applyBoardPreset, boardDefaults, boardFaceMM, boardNet, collarDims, collarOn, setBoardCover } from '../carriers/board.js';
 
 /* printed faces of an object, in tab order; depends on the lid construction */
 /* faces that close into a ring (a sleeve glued into a loop, the wall of a tube, a cup or a cake lid): what runs
    past one end of the face goes on at the other. The axis the ring runs along, or null */
 function loopAxis(o, k) {
   if (k === 'sleeve') return 'y';
-  if ((k === 'wrap' && (o.type === 'tube' || o.type === 'cup')) || (k === 'lidWrap' && o.type === 'torte')) return 'x';
+  if ((k === 'wrap' && (o.type === 'tube' || o.type === 'cup')) || (k === 'lidWrap' && o.type === 'torte') || k === 'collar') return 'x';
   return null;
 }
 function faceKeys(o) {
   if (o.type === 'tube') return ['wrap', 'top', 'bottom'];
-  if (o.type === 'board') return ['top', 'bottom'];
+  if (o.type === 'board') return ['top', 'bottom', ...(collarOn(o) ? ['collar'] : [])];
   if (o.type === 'cup') return ['wrap'];
   if (o.type === 'paperbag') return PB_KEYS;
   if (o.type === 'torte') return ['lidWrap', 'top', ...(carryOn(o) ? ['carry'] : [])];
@@ -60,9 +60,9 @@ const wallMM = o => clamp(Math.max(o.wallT ?? o.thickness, o.thickness), o.thick
 const doubleWall = o => o.type === 'box' && wallMM(o) > o.thickness * 1.6 + .2;
 /* a separate lid can be clear PET (cake boxes): its faces carry only print, the rest is plastic */
 const clearLid = o => o.type === 'box' && o.lidType === 'telescope' && o.lidMat === 'clear';
-const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k))) || (o.type === 'torte' && k !== 'carry');
+const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k))) || (o.type === 'torte' && k !== 'carry') || k === 'collar';
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
-const faceLabel = (o, k) => (o.type === 'board' && k === 'top') ? 'Верх подложки' : (o.type === 'board' && k === 'bottom') ? 'Низ подложки' : (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : ((o.type === 'bag' || o.type === 'paperbag') && BAG_LABEL[k]) || FACE_LABEL[k];
+const faceLabel = (o, k) => (o.type === 'board' && k === 'top') ? 'Верх подложки' : (o.type === 'board' && k === 'bottom') ? 'Низ подложки' : k === 'collar' ? 'Ацетатная лента' : (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : ((o.type === 'bag' || o.type === 'paperbag') && BAG_LABEL[k]) || FACE_LABEL[k];
 function ensureFaces(o) {
   o.stickers ??= [];
   o.netV ??= o.dieline ? 1 : 2;
@@ -137,7 +137,7 @@ const newShape = (kind = 'rect') => ({ id: uid(), type: 'shape', kind, w: kind =
 function faceMM(o, k) {
   const { w, h, d } = o.dims;
   if (o.type === 'tube') return k === 'wrap' ? [Math.PI * w, h] : [w, w];
-  if (o.type === 'board') return boardFaceMM(o);
+  if (o.type === 'board') { if (k === 'collar') { const D = collarDims(o); return [D.len, D.h]; } return boardFaceMM(o); }
   if (o.type === 'paperbag') return k === 'left' || k === 'right' ? [d, h] : [w, h];
   if (o.type === 'cup') { const G = cupGeom(o); return [G.Wr, G.Hr]; }
   if (k === 'carry') { const D = carryDims(o); return [D.bw, D.P]; }
