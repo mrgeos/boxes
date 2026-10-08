@@ -38,7 +38,9 @@ async function openProjects() {
     card.onclick = async e => {
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (a === 'del') {
-        if (!confirm(`Удалить проект «${card.querySelector('.pn').textContent}» из аккаунта? Вернуть его будет нельзя.`)) return;
+        // asked in the card itself (the viewer shows no confirm dialogs): a second click deletes
+        const btn = e.target.closest('[data-a]');
+        if (!btn.classList.contains('sure')) { btn.classList.add('sure'); btn.textContent = 'Удалить?'; btn.title = 'Ещё раз — удалить без возврата'; return; }
         await deleteCloudProject(id); toast('Проект удалён'); return openProjects();
       }
       if (a === 'dup') { await duplicateCloudProject(id); toast('Копия проекта сохранена'); return openProjects(); }
