@@ -145,7 +145,7 @@ function wrapPath(tris, c, d, w, r) {
 const UNIT = 100;   // mm of ribbon per unit of its texture coordinate along it
 /* a ribbon strip along 3D points (mm) with the across-direction at each: a flat bar w wide (or w·wf[i]) and th thick,
    with its edges and cut ends, u by the length so far (len). Options: cup — how much the middle bows out of the edges
-   (a share of the width); C — a point the strip's face turns away from (the object, the knot); wave(i) — { lift,
+   (a share of the width; or cup(i) along the strip); C — a point the strip's face turns away from (the object, the knot); wave(i) — { lift,
    twist } at point i (a tail lying in soft waves, turning at its end); notch — a V cut into the end, as a tail is cut;
    loop — a closed band (no cut ends) */
 const COLS = 6;
@@ -161,7 +161,7 @@ function stripGeo(P, A, w, len, { wf = null, notch = 0, th = .3, cup = 0, C = nu
     for (let j = 0; j <= m; j++) {
       const f = j / m * 2 - 1, back = notch && i === n - 1 ? notch * (1 - Math.abs(f)) : 0;
       // the middle stands out of the edges a little (cup); the cut end is a V (notch)
-      const q = mid.clone().addScaledVector(a, f * hw).addScaledVector(N, cup * w * (1 - f * f)).addScaledVector(T, -back);
+      const q = mid.clone().addScaledVector(a, f * hw).addScaledVector(N, (typeof cup === 'function' ? cup(i) : cup) * w * (1 - f * f)).addScaledVector(T, -back);
       top.push(q.clone().addScaledVector(N, th / 2)); bot.push(q.addScaledVector(N, -th / 2));
       // the print reads along the strip, not mirrored, seen from its outer side
       uvs.push([(len[i] - back) / UNIT, 1 - j / m]);
@@ -208,36 +208,41 @@ function lift(path, c, d) {
 }
 
 /* ---------- the bow ---------- */
-/* one loop of a bow: out from the knot along azimuth psi, rising at elev, length L, its plane leaning by tilt towards
-   its side (so the ribbon's face shows from above); as points and their across-direction */
-function petal(base, psi, elev, L, w, open = 32, tilt = 0) {
+/* one loop of a bow: out of the side of the knot along azimuth psi, rising at elev, length L, its plane leaning by tilt
+   towards its side (so the ribbon's face shows from above). Its two ends go into the knot's side `g` out from the
+   middle, one under the other (the ribbon folded back on itself), and are gathered there into folds. As points, their
+   across-direction, width share and fold depth */
+function petal(base, psi, elev, L, w, open = 32, tilt = 0, g = 0) {
   const h = new THREE.Vector3(Math.cos(psi), 0, Math.sin(psi)), side = new THREE.Vector3(-Math.sin(psi), 0, Math.cos(psi)), Y = new THREE.Vector3(0, 1, 0);
   const up = Y.clone().multiplyScalar(Math.cos(tilt)).addScaledVector(side, Math.sin(tilt)), across = side.clone().multiplyScalar(Math.cos(tilt)).addScaledVector(Y, -Math.sin(tilt));
-  const half = clamp(open + w * .15, 22, 55) * Math.PI / 180, P = [], A = [], wf = [], n = 26;
+  const half = clamp(open + w * .15, 22, 55) * Math.PI / 180, P = [], A = [], wf = [], n = 30, dy = w * .16, o = base.clone().addScaledVector(h, g);
   for (let i = 0; i <= n; i++) {
-    const f = i / n, phi = -half + 2 * half * f, r = L * Math.pow(Math.cos(phi / half * Math.PI / 2), .65), a = elev + phi;
-    P.push(base.clone().addScaledVector(h, r * Math.cos(a)).addScaledVector(up, r * Math.sin(a)));
-    A.push(across); wf.push(.45 + .55 * Math.sin(Math.PI * f));   // gathered into the knot at both ends
+    const f = i / n, phi = -half + 2 * half * f, r = L * Math.pow(Math.cos(phi / half * Math.PI / 2), .6), a = elev + phi;
+    P.push(o.clone().addScaledVector(h, r * Math.cos(a)).addScaledVector(up, r * Math.sin(a) + (f * 2 - 1) * dy));
+    A.push(across); wf.push(.42 + .58 * Math.pow(Math.sin(Math.PI * f), .7));
   }
-  return { P, A, wf };
+  // folds where it is gathered into the knot, smoothing out along the loop
+  const cup = i => .05 + .22 * Math.pow(1 - Math.sin(Math.PI * i / n), 2.5);
+  return { P, A, wf, cup };
 }
-/* the knot over the cross: a short band wrapped round the gathered middle (its axis along x) */
+/* the knot over the cross: a short band wrapped round the gathered middle (its axis along x), narrower than the
+   ribbon and puffed out by the folds under it */
 function knot(base, w, big) {
-  const kz = w * (big ? .5 : .38), ky = w * (big ? .42 : .32), P = [], A = [], n = 24, ax = new THREE.Vector3(1, 0, 0);
+  const kz = w * (big ? .5 : .4), ky = w * (big ? .42 : .3), P = [], A = [], n = 28, ax = new THREE.Vector3(1, 0, 0);
   for (let i = 0; i <= n; i++) { const t = -Math.PI / 2 + i / n * Math.PI * 2; P.push(new THREE.Vector3(base.x, base.y + ky + Math.sin(t) * ky, base.z + Math.cos(t) * kz)); A.push(ax); }
-  return { P, A, wf: P.map(() => big ? .95 : .8) };
+  return { P, A, wf: P.map(() => big ? .9 : .62), cup: big ? .1 : .12 };
 }
 /* the loops of a bow by its style: [{ P, A, wf }] */
 function bowLoops(r, base) {
   const L = clamp(r.bowSize, 8, 200), w = r.w;
   if (r.bow === 'knot') return [];
   if (r.bow === 'puffy') {
-    const out = [], ring = (k, elev, len, rot, open) => { for (let i = 0; i < k; i++) out.push(petal(base, rot + i * Math.PI * 2 / k, elev, len, w, open)); };
+    const out = [], ring = (k, elev, len, rot, open) => { for (let i = 0; i < k; i++) out.push(petal(base, rot + i * Math.PI * 2 / k, elev, len, w, open, 0, w * .12)); };
     ring(8, .22, L * .85, 0, 30); ring(6, .75, L * .68, Math.PI / 6, 28); ring(3, 1.25, L * .45, Math.PI / 3, 26);
     return out;
   }
   // two loops to the sides, leaning to the front, and their open side up
-  return [petal(base, 0, .5, L, w, 40, .45), petal(base, Math.PI, .5, L, w, 40, -.45)];
+  return [petal(base, 0, .32, L, w, 38, .45, w * .28), petal(base, Math.PI, .32, L, w, 38, -.45, w * .28)];
 }
 
 /* ---------- looks ---------- */
@@ -351,9 +356,9 @@ function buildRibbons(o, rt = RT.get(o.id)) {
     // the knot and the loops
     const K = knot(base, w, r.bow === 'knot');
     if (twine) add(new THREE.SphereGeometry(w * .9 * S, 12, 8).translate(base.x * S, (base.y + w * .3) * S, base.z * S));
-    else piece(K.P, K.A, runLen(K.P), { wf: K.wf, cup: .04, C: base.clone().setY(base.y + w * .35) });
-    const lb = base.clone().setY(base.y + (twine ? w * .3 : w * .25));
-    for (const L of bowLoops(r, lb)) piece(L.P, L.A, runLen(L.P), { wf: twine ? null : L.wf, cup: .045, C: lb });
+    else piece(K.P, K.A, runLen(K.P), { wf: K.wf, cup: K.cup, C: base.clone().setY(base.y + w * .35) });
+    const lb = base.clone().setY(base.y + (twine ? w * .3 : w * .34));
+    for (const L of bowLoops(r, lb)) piece(L.P, L.A, runLen(L.P), { wf: twine ? null : L.wf, cup: L.cup, C: lb });
     ribbonLook(o, r);
   });
   showRibbons(o);
