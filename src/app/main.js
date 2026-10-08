@@ -2,6 +2,7 @@
 import { initTabs } from './ui/tabs.js';
 import { initActionBar } from './ui/action-bar.js';
 import { initCtxBar } from './ui/context-bar.js';
+import { initProjects } from './ui/projects.js';
 import { initTextEdit } from './ui/text-edit.js';
 import * as THREE from 'three';
 import { sel, state } from './core/state.js';
@@ -50,5 +51,6 @@ try { const saved = localStorage.getItem(LS_KEY); if (saved) { loadProject(JSON.
 if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
 libLoadBrowser();
+initProjects();
 window.__boxStudio = { library, state, sel, select, setView, faceMM,
   sleeveHoles: o => { const D = sleeveDims(o); return sleeveSheet(D).holes.map(h => h.reduce((a, p) => a + p[1], 0) / h.length / D.P); }, sleeveFold: o => { const D = sleeveDims(o); return D.s0 / D.P; }, RT, camera, THREE, renderer, scene, applyScene, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };

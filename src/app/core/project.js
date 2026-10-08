@@ -8,6 +8,7 @@ import { libAdopt, libStore, library } from './library.js';
 import { vecOf } from './vector.js';
 import { registerFont } from './fonts.js';
 import { emptyKit } from './brand.js';
+import { cloudChanged, detachProject } from './cloud.js';
 import { RT, buildObject, disposeObject, ui } from '../scene/renderer.js';
 import { activeSticker } from '../stickers/placement.js';
 import { applyScene, setLastView, setView } from '../scene/camera.js';
@@ -66,14 +67,21 @@ function projectJSON(withLibrary = true) {
 }
 const LS_KEY = 'box-studio-3d/project';
 let saveTimer, saveWarned = false;
+let opening = false;
 function scheduleSave() {
+  // the project in the account too (a project being opened is not a change)
+  if (!opening) cloudChanged();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try { localStorage.setItem(LS_KEY, projectJSON(false)); }
     catch (e) { if (!saveWarned) { saveWarned = true; toast('Проект слишком большой для автосохранения в браузере. Используйте «Сохранить проект».', 4200); } }
   }, 900);
 }
-function loadProject(d, { resetHistory = true, name = null } = {}) {
+function loadProject(d, opts = {}) {
+  opening = true;
+  try { loadProjectNow(d, opts); } finally { opening = false; }
+}
+function loadProjectNow(d, { resetHistory = true, name = null } = {}) {
   if (!d || !Array.isArray(d.objects)) throw new Error('bad project');
   state.name = String(d.name || name || 'Без названия').slice(0, 120); paintProjectName();
   state.brand = d.brand || emptyKit(); ui.brand = true;
@@ -130,7 +138,8 @@ async function openProjectFile(file) {
   try { d = JSON.parse(await file.text()); } catch { return toast('Файл не читается как проект (.json)'); }
   try {
     if (d.format === 'box-studio') { loadProject(await convertLegacy(d), { resetHistory: false }); toast(`Проект «Студии коробки» открыт: ${file.name}`); }
-    else { loadProject(d, { name: file.name.replace(/(\.boxstudio)?\.json$/i, '') }); toast(`Открыт проект: ${file.name}`); }
+    // a file opened is a project of its own in the account (saved with its first change)
+    else { detachProject(); loadProject(d, { name: file.name.replace(/(\.boxstudio)?\.json$/i, '') }); toast(`Открыт проект: ${file.name}`); }
   } catch { toast('Это не файл проекта Box Studio 3D или «Студии коробки»'); }
 }
 /* projects saved by the first version («Студия коробки», 200×150×50 box with a window) */

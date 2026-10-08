@@ -384,3 +384,24 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .blink button:hover{color:var(--fg)}
 .apick .ctx-h.sub{padding-top:2px;font-size:10px}
 .cpop .btn.sm{height:26px;font-size:12px}
+
+/* the account's autosave by the project's name */
+.cloud-state{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);padding:2px 6px;border-radius:5px;white-space:nowrap}
+.cloud-state:hover{background:var(--field);color:var(--fg)}
+.cloud-state i{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.cloud-state[data-s=pending] i,.cloud-state[data-s=saving] i{background:var(--warn)}
+.cloud-state[data-s=saving] i{animation:galwait 1s linear infinite}
+.cloud-state[data-s=error] i,.cloud-state[data-s=big] i{background:var(--danger)}
+.cloud-state[data-s=error],.cloud-state[data-s=big]{color:var(--danger)}
+/* «Мои проекты» */
+.pdlg-wrap{position:fixed;inset:0;z-index:70;background:rgba(20,16,10,.35);display:grid;place-items:center;padding:16px}
+.pdlg{width:min(860px,100%);max-height:min(80vh,760px);overflow:auto;background:var(--panel);border:1px solid var(--line-2);border-radius:12px;box-shadow:var(--shadow);padding:16px 18px;display:grid;gap:10px;align-content:start}
+.plist{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.pcard{position:relative;display:grid;gap:3px;padding:8px;border:1px solid var(--line);border-radius:10px;cursor:pointer;background:var(--field)}
+.pcard:hover{border-color:var(--line-2)}.pcard.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.pcard.wait{opacity:.5;pointer-events:none}
+.pcard .pt{aspect-ratio:4/3;border-radius:7px;background:var(--checker-b) center/contain no-repeat}
+.pcard .pn{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pcard .pd{font-size:11.5px;color:var(--muted)}
+.pcard .pa{position:absolute;top:12px;right:12px;display:none;gap:2px;background:var(--panel);border-radius:6px;padding:2px}
+.pcard:hover .pa,.pcard:focus-within .pa{display:flex}

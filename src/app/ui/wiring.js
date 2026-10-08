@@ -13,6 +13,7 @@ import { refreshFields } from './fields.js';
 import { renderModel } from './model-panel.js';
 import { renderObjects } from './object-list.js';
 import { pickAsset } from './asset-picker.js';
+import { detachProject } from '../core/cloud.js';
 import { placeLibImage } from './library-panel.js';
 import { addLayer, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers } from './face-panel.js';
 import { renderStickers } from './stickers-panel.js';
@@ -76,10 +77,10 @@ function initWiring() {
   $('#projInput').onchange = e => e.target.files[0] && openProjectFile(e.target.files[0]);
   $('#newBtn').onclick = () => {
     const o = newObject('mailer'); o.name = 'Коробка 1';
-    loadProject({ name: 'Без названия', objects: [o], scene: state.scene, fonts: state.fonts, assets: {} }, { resetHistory: false });
+    detachProject(); loadProject({ name: 'Без названия', objects: [o], scene: state.scene, fonts: state.fonts, assets: {} }, { resetHistory: false });
     toast('Новый проект. Вернуть предыдущий — Ctrl+Z');
   };
-  $('#sampleBtn').onclick = () => { loadProject(sampleProject(), { resetHistory: false }); toast('Загружен пример. Вернуть предыдущий — Ctrl+Z'); };
+  $('#sampleBtn').onclick = () => { detachProject(); loadProject(sampleProject(), { resetHistory: false }); toast('Загружен пример. Вернуть предыдущий — Ctrl+Z'); };
   // the project's name next to the logo: a double click (or Enter, F2) types a new one in place
   const pn = $('#projName');
   const renameInPlace = () => {
