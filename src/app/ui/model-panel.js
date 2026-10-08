@@ -10,7 +10,7 @@ import { applyLid, applyObjMaterials, markFace, markObj, rebuildQueue, ui } from
 import { BAG_MATS, BAG_TOPS, applyBagPreset, bagFilm } from '../carriers/bag.js';
 import { applyDomePreset } from '../carriers/dome.js';
 import { TORTE_COLORS, TORTE_FIN, applyTortePreset } from '../carriers/torte.js';
-import { BOARD_BOTTOM, BOARD_COVER, BOARD_SHAPE, applyBoardPreset, setBoardCover } from '../carriers/board.js';
+import { BOARD_BOTTOM, BOARD_COVER, BOARD_SHAPE, applyBoardPreset, fitCake, setBoardCover } from '../carriers/board.js';
 import { winMM, windowPlace } from '../carriers/box.js';
 import { HANDLE_SHAPES, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, defaultFrontWin, defaultHandle } from '../carriers/handle-box.js';
 import { CARRY_PANEL, CARRY_STYLES, applyCarry, carryDims, carryOn } from '../carriers/carry.js';
@@ -109,7 +109,10 @@ function modelInput(k) {
   if (k === 'cbWrap') { applyObjMaterials(o); ui.net = true; renderModel(); return; }
   if (k.startsWith('cb') || k.startsWith('cake.')) {
     rebuildQueue.add(o.id); ui.net = ui.editor = true; updateFaceMeta();
-    if (['cbShape', 'cbTab.on', 'cake.on'].includes(k)) { renderModel(); renderObjects(); }
+    // a new shape of the board: the cake takes it too, sized to it
+    if (k === 'cbShape') { ensureFaces(o); fitCake(o); }
+    if (k === 'cake.shape') { const cs = o.cake.shape; fitCake(o, cs); }
+    if (['cbShape', 'cbTab.on', 'cake.on', 'cake.shape'].includes(k)) { renderModel(); renderObjects(); }
     return;
   }
   if (k === 'baseColor') { applyObjMaterials(o); $$('#torteSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === o.baseColor)); return; }
@@ -189,8 +192,10 @@ function renderModel() {
           + `<label class="check"><input type="checkbox" data-k="cbTab.on"> Язычок, за который берут (под пирожное)</label>`
           + (o.cbTab?.on ? rangeField('Язычок: ширина, мм', 'cbTab.w', 10, 200, 1) + rangeField('Язычок: длина, мм', 'cbTab.l', 5, 120, 1) : '')
           + `<label class="check"><input type="checkbox" data-k="cake.on"> Торт на подложке</label>`
-          + (o.cake?.on !== false ? rangeField('Высота торта, мм', 'cake.h', 10, 250, 1) : '')
-          + `<p class="hint">Подложка — толстый картон, обтянутый фольгой или ламинированной бумагой с печатью. Дизайн — на гранях «Верх подложки» и «Низ подложки» по форме подложки (с язычком и волнистым краем). Торт стоит сверху, той же формы, чуть меньше.</p>`
+          + (o.cake?.on !== false ? `<div class="field wide"><span class="fl">Форма торта</span><select data-k="cake.shape"><option value="round">Круглый</option><option value="rect">Прямоугольный</option></select></div>`
+            + (o.cake.shape === 'rect' ? rangeField('Торт: ширина, мм', 'cake.w', 20, 800, 1) + rangeField('Торт: глубина, мм', 'cake.l', 20, 800, 1) : rangeField('Диаметр торта, мм', 'cake.d', 20, 600, 1))
+            + rangeField('Высота торта, мм', 'cake.h', 10, 250, 1) + `<div class="row"><button class="btn sm" id="cakeFit">По размеру подложки</button></div>` : '')
+          + `<p class="hint">Подложка — толстый картон, обтянутый фольгой или ламинированной бумагой с печатью. Дизайн — на гранях «Верх подложки» и «Низ подложки» по форме подложки (с язычком и волнистым краем). Торт стоит сверху: круглый или прямоугольный на любой подложке, размеры задаются; «По размеру подложки» подгоняет его заново.</p>`
       : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
     ${box ? `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(LID_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : ''}
     ${box && o.lidType !== 'none' ? rangeField(o.lidType === 'telescope' ? 'Поднять крышку' : o.lidType === 'handle' ? 'Открыть торец' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
@@ -264,6 +269,7 @@ function renderModel() {
     o.product.src = r.id; o.product.aspect = r.aspect;
     rebuildQueue.add(o.id); renderModel(); commit();
   });
+  if ($('#cakeFit')) $('#cakeFit').onclick = () => { fitCake(o, o.cake.shape); rebuildQueue.add(o.id); renderModel(); commit(); };
   if ($('#prodOff')) $('#prodOff').onclick = () => { o.product.src = null; rebuildQueue.add(o.id); renderModel(); commit(); };
   $('#presetSel').onchange = e => {
     const p = PRESETS.find(x => x.id === e.target.value); if (!p) return;

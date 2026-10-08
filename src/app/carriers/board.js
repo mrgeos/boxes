@@ -8,7 +8,8 @@ import { addCake } from './cake.js';
    outline (dims.w × dims.d, a circle: dims.w), its edge plain or scalloped, with a tab to take it by (a pastry
    board) or without. It is covered with gold or silver foil or with printed laminated paper (the top face is the
    design, as any face); the covering is turned over its edge (cbWrap) or the cut board shows there, and its
-   underside is bare grey board or covered as well. A cake stands on it, the shape of the board, a little smaller.
+   underside is bare grey board or covered as well. A cake stands on it: round (cake.d, its diameter) or a slab
+   (cake.w × cake.l), at first the board's shape and a little smaller, any of the two on any board.
    Faces: top (Верх) and bottom (Низ), both of the outline's size (with the tab). All lengths are mm. */
 const BOARD_SHAPE = { round: 'Круглая', rect: 'Прямоугольная' };
 const BOARD_COVER = { 'foil-gold': 'Фольга — золото', 'foil-silver': 'Фольга — серебро', print: 'Бумага с печатью (ламинированная)' };
@@ -111,8 +112,14 @@ function applyBoardPreset(o, p) {
 function boardDefaults(o) {
   o.cbShape ??= 'round'; o.cbCover ??= 'foil-gold'; o.cbEdge ??= 'smooth'; o.cbR ??= 10; o.cbWrap ??= true; o.cbBottom ??= 'raw';
   o.cbTab ??= { on: false, w: 40, l: 25 }; o.cake ??= { on: true };
-  o.cake.h ??= Math.round(clamp(Math.min(o.dims.w, o.dims.d || o.dims.w) * .3, 20, 90));
   if (o.cbShape === 'round') o.dims.d = o.dims.w;
+  o.cake.h ??= Math.round(clamp(Math.min(o.dims.w, o.dims.d || o.dims.w) * .3, 20, 90));
+  if (!o.cake.shape) fitCake(o);
+}
+/* the cake made to fit the board again: its shape, a little smaller (its height stays) */
+function fitCake(o, shape = o.cbShape === 'rect' ? 'rect' : 'round') {
+  const w = o.dims.w, d = boardD(o);
+  Object.assign(o.cake, { shape, d: Math.round(Math.min(w, d) * .82), w: Math.round(w * .84), l: Math.round(d * .84) });
 }
 
 /* ---------- the model ---------- */
@@ -134,11 +141,12 @@ function buildBoard(o, rt) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
   rt.cbSideMat ??= new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide });
   const side = new THREE.Mesh(g, rt.cbSideMat); side.castShadow = side.receiveShadow = true; side.userData = { objId: o.id, face: null, wall: true }; rt.group.add(side);
-  // the cake, the board's shape, a little smaller
-  if (o.cake?.on !== false) {
-    const w = o.dims.w, d = boardD(o), ch = clamp(o.cake?.h ?? Math.min(w, d) * .3, 10, 300);
-    if (o.cbShape === 'round') addCake(rt.group, o, rt, { R: w / 2 * .82, y0: h, h: Math.min(ch, w * .55) });
-    else addCake(rt.group, o, rt, { rect: [w * .84, d * .84, Math.min(w, d) * .06 + (o.cbR || 0) * .5], y0: h, h: ch });
+  // the cake: round or a slab, of its own size, in the middle of the board (the tab aside)
+  const C = o.cake;
+  if (C && C.on !== false) {
+    const ch = clamp(C.h ?? 50, 10, 300);
+    if (C.shape === 'rect') { const cw = clamp(C.w ?? 100, 20, 2000), cl = clamp(C.l ?? 100, 20, 2000); addCake(rt.group, o, rt, { rect: [cw, cl, Math.min(cw, cl) * .06 + (o.cbShape === 'rect' ? (o.cbR || 0) * .5 : 0)], y0: h, h: ch }); }
+    else { const cd = clamp(C.d ?? 100, 20, 2000); addCake(rt.group, o, rt, { R: cd / 2, y0: h, h: Math.min(ch, cd * .7) }); }
   }
   boardColors(o, rt);
 }
@@ -171,4 +179,4 @@ function boardNet(o) {
   return n;
 }
 
-export { BOARD_BOTTOM, BOARD_COVER, BOARD_SHAPE, RAW_BOARD, applyBoardPreset, boardColors, boardDefaults, boardFaceMM, boardFacePath, boardFin, boardGrain, boardNet, boardOutline, buildBoard, setBoardCover };
+export { BOARD_BOTTOM, BOARD_COVER, BOARD_SHAPE, RAW_BOARD, applyBoardPreset, boardColors, boardDefaults, fitCake, boardFaceMM, boardFacePath, boardFin, boardGrain, boardNet, boardOutline, buildBoard, setBoardCover };
