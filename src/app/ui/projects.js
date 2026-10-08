@@ -10,12 +10,13 @@ const STATUS = {
   pending: ['Есть изменения', 'Сохранится через пару секунд'],
   saving: ['Сохраняется…', 'Проект сохраняется в аккаунт'],
   error: ['Не сохранено', 'Не удалось сохранить в аккаунт — попробую ещё раз при следующей правке. Клик — сохранить сейчас'],
+  partial: ['Сохранено без части картинок', 'Проект сохранён, но некоторые картинки не загрузились в хранилище — при следующей правке попробую снова'],
   big: ['Слишком большой', 'Проект больше 250 КБ (без картинок) и не помещается в хранилище. Сохраните его в файл'],
 };
-function paintStatus(s) {
+function paintStatus(s, detail = '') {
   const el = $('#cloudState'); if (!el) return;
   const [t, title] = STATUS[s] || STATUS.off;
-  el.hidden = !t; el.dataset.s = s; el.title = title;
+  el.hidden = !t; el.dataset.s = s; el.title = title + (detail ? `\n${detail}` : '');
   el.innerHTML = `<i></i>${t}`;
 }
 const when = t => { const d = new Date(t), now = new Date(); return d.toDateString() === now.toDateString() ? d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' }); };

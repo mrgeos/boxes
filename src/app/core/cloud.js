@@ -20,7 +20,7 @@ const cardRef = id => ref().collection('projects').doc(id);
 const bodyRef = id => ref().collection('bodies').doc(id);
 const cloudOn = () => !!db;
 const cloudPid = () => pid;
-function setStatus(s) { status = s; onStatus(s); }
+function setStatus(s, detail = '') { status = s; onStatus(s, detail); }
 
 /* the page's stores, if it runs in claude.ai with them granted; null otherwise */
 async function initCloud(statusCb) {
@@ -43,7 +43,7 @@ async function startProject() {
   let local = {}; try { local = JSON.parse(localStorage.getItem(LS) || '{}'); } catch { /* none */ }
   if (local.pid && local.dirty) { pid = local.pid; dirty = true; saveSoon(0); return true; }   // the browser has newer work: push it
   const last = local.pid || prof.last;
-  if (last) { try { await openCloudProject(last); return true; } catch { /* gone: start fresh */ } }
+  if (last) { try { await openCloudProject(last); return true; } catch (e) { console.warn('cloud open', last, e); /* gone: start fresh */ } }
   return false;
 }
 
@@ -52,17 +52,31 @@ const sha1 = async s => [...new Uint8Array(await crypto.subtle.digest('SHA-1', n
 /* the pictures and fonts `ids` in the file store: { project asset id: stored id } (each picture is stored once, by
    its content) */
 async function storeAssets(urls) {
-  const map = {};
+  const map = {}, inline = {}, failed = [];
   for (const [id, url] of Object.entries(urls)) {
     const h = await sha1(url);
     if (!prof.assetMap[h]) {
-      if (!files) throw new Error('no file store');
-      const blob = await (await fetch(url)).blob();
-      prof.assetMap[h] = (await files.upload(blob)).id;
+      try {
+        if (!files) throw new Error('файлового хранилища нет');
+        prof.assetMap[h] = (await files.upload(dataBlob(url))).id;
+      } catch (e) {
+        // not stored: a small one rides in the project's body, a big one is reported
+        failed.push(e?.code || e?.message || 'upload');
+        if (url.length < 60 * 1024) inline[id] = url;
+        continue;
+      }
     }
     map[id] = prof.assetMap[h];
   }
-  return map;
+  return { map, inline, failed };
+}
+/* a data: URL as a file, without fetch (the page may fetch nothing but its own files) */
+function dataBlob(url) {
+  const i = url.indexOf(','), head = url.slice(5, i), body = url.slice(i + 1), type = head.split(';')[0] || 'application/octet-stream';
+  if (!head.includes(';base64')) return new Blob([decodeURIComponent(body)], { type });
+  const bin = atob(body), bytes = new Uint8Array(bin.length);
+  for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+  return new Blob([bytes], { type });
 }
 /* the project as it is now, taken at once (the upload that follows may outlive it: another project can be opened) */
 function snapshotNow() {
@@ -79,12 +93,16 @@ async function saveNow() {
   busy = (async () => {
     try {
       if (snap.json.length > BODY_MAX) throw Object.assign(new Error('too big'), { code: 'too_big' });
-      const map = await storeAssets(snap.urls);
-      await bodyRef(snap.pid).set({ json: snap.json, assets: map });
+      const { map, inline, failed } = await storeAssets(snap.urls);
+      const inl = Object.keys(inline).length && snap.json.length + JSON.stringify(inline).length < BODY_MAX ? inline : {};
+      await bodyRef(snap.pid).set({ json: snap.json, assets: map, inline: inl });
       await cardRef(snap.pid).set(snap.card);
       prof.last = snap.pid; await ref().set(prof);
-      if (snap.pid === pid) setStatus(dirty ? 'pending' : 'saved');
-    } catch (e) { if (snap.pid === pid) { dirty = true; setStatus(e.code === 'too_big' ? 'big' : 'error'); } }
+      if (snap.pid === pid) setStatus(dirty ? 'pending' : failed.length ? 'partial' : 'saved', failed.length ? `Не загрузилось картинок: ${failed.length} (${failed[0]})` : '');
+    } catch (e) {
+      console.warn('cloud save', e);
+      if (snap.pid === pid) { dirty = true; setStatus(e.code === 'too_big' ? 'big' : 'error', e?.code ? `${e.code}: ${e.message || ''}` : String(e?.message || e)); }
+    }
     finally { busy = null; remember(); if (dirty && pid && status !== 'big') saveSoon(); }
   })();
   return busy;
@@ -106,12 +124,19 @@ async function listProjects() {
   const s = await ref().collection('projects').orderBy('updated', 'desc').limit(200).get();
   return s.docs.map(d => ({ id: d.id, ...d.data() }));
 }
-const blobURL = async id => { const b = await (await fetch('/_blob/' + id)).blob(); return new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); }); };
+/* a stored file as a data: URL (the editor keeps its pictures so); if it cannot be read, its own address */
+const blobURL = async id => {
+  try {
+    const res = await fetch('/_blob/' + id); if (!res.ok) throw new Error(res.status);
+    const b = await res.blob();
+    return await new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); });
+  } catch { return '/_blob/' + id; }
+};
 async function openCloudProject(id) {
   clearTimeout(timer); if (dirty && pid) await saveNow();
   const b = await bodyRef(id).get(); if (!b.exists) throw new Error('missing');
-  const { json, assets: map } = b.data(), d = JSON.parse(json);
-  d.assets = {};
+  const { json, assets: map, inline } = b.data(), d = JSON.parse(json);
+  d.assets = { ...(inline || {}) };
   await Promise.all(Object.entries(map || {}).map(async ([local, stored]) => { d.assets[local] = await blobURL(stored); }));
   loadProject(d);
   pid = id; dirty = false; remember(); clearTimeout(timer); setStatus('saved');
