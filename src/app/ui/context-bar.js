@@ -13,16 +13,18 @@ import { activeSticker } from '../stickers/placement.js';
 import { sleeveDims } from '../carriers/sleeve.js';
 import { carryDims } from '../carriers/carry.js';
 import { deleteLayer, duplicateLayer, renderLayerProps } from './face-panel.js';
-import { deleteSticker, duplicateSticker, editStickerText, extraAction } from './stickers-panel.js';
+import { deleteSticker, duplicateSticker, editStickerText, extraAction, renderStickers } from './stickers-panel.js';
 import { deleteIds, duplicateIds } from './object-list.js';
 import { lidAction, toggleLid, turn } from './context-menus.js';
+import { activeRibbon } from '../core/extras.js';
+import { buildRibbons } from '../carriers/ribbon.js';
 import { modelInput, renderModel } from './model-panel.js';
 import { startTextEdit, textEditing } from './text-edit.js';
 import { renderActionBar } from './action-bar.js';
 
 /* What it holds follows the selection: an object — open it (a click, or partly with the slider), turn it by 90°,
    its sizes, zoom to it, duplicate, delete; a layer — crop a picture or type into a text, duplicate, delete; a
-   sticker — duplicate, delete; a sleeve or a carrier — slide it off, delete. It stands over the selection on the
+   sticker — duplicate, delete; a ribbon — how it is tied, delete; a sleeve or a carrier — slide it off, delete. It stands over the selection on the
    screen (under it when there is no room above) and keeps with it as the camera turns; it hides while something
    is dragged on the model or a text is typed. */
 const bar = () => $('#ctxBar');
@@ -45,6 +47,7 @@ function kindNow() {
   const o = activeObj();
   if (!o || sel.group || recording || textEditing()) return null;
   if (activeSticker()) return 'sticker';
+  if (activeRibbon()) return 'ribbon';
   if (activeLayer()) return selectedLayers().length > 1 ? 'layers' : 'layer';
   if (sel.part) return 'part';
   if (sel.bg) return null;
@@ -70,6 +73,10 @@ function build(kind) {
       : one?.type === 'text' ? `<button class="ab wide" id="cbType">${ICON.textT}<span>Править текст</span></button>${sep}` : '';
     return first + ib('cbDup', ICON.copy, 'Дублировать (Ctrl+D)') + ib('cbDel', ICON.trash, 'Удалить (Delete)');
   }
+  if (kind === 'ribbon') {
+    const r = activeRibbon();
+    return `<span class="hint cb-l">Завязка</span>${[['classic', 'Бант'], ['puffy', 'Пышный'], ['knot', 'Узел']].map(([v, t]) => `<button class="ab wide ${r.bow === v ? 'on' : ''}" data-bow="${v}"><span>${t}</span></button>`).join('')}${sep}` + ib('cbDel', ICON.trash, 'Удалить ленту (Delete)');
+  }
   if (kind === 'sticker') return `<button class="ab wide" id="cbType">${ICON.textT}<span>Текст</span></button>${sep}` + ib('cbDup', ICON.copy, 'Дублировать наклейку') + ib('cbDel', ICON.trash, 'Удалить наклейку (Delete)');
   return '';
 }
@@ -91,6 +98,10 @@ function bind(kind) {
     on('cbSlide', 'input', e => { const T = o[k]; T.slide = +e.target.value; modelInput(k + '.slide'); });
     on('cbSlide', 'change', () => { renderModel(); commit(); });
     on('cbDel', 'click', () => extraAction(o, k, 'del'));
+  } else if (kind === 'ribbon') {
+    const r = activeRibbon();
+    bar().querySelectorAll('[data-bow]').forEach(b => b.addEventListener('click', () => { r.bow = b.dataset.bow; buildRibbons(o); renderStickers(); commit(); refresh(); }));
+    on('cbDel', 'click', () => extraAction(o, r.id, 'del'));
   } else if (kind === 'sticker') {
     const st = activeSticker();
     on('cbType', 'click', () => editStickerText(o, st.id));
@@ -105,13 +116,13 @@ function bind(kind) {
 /* the selection's box on the screen (client px): a layer or sticker by its frame, an object by its 3D box */
 const box3 = new THREE.Box3(), v3 = new THREE.Vector3();
 function screenBox(kind) {
-  if (kind !== 'object' && kind !== 'part') {
+  if (kind !== 'object' && kind !== 'part' && kind !== 'ribbon') {
     const q = boxOnScreen(); if (!q) return null;
     const xs = q.map(p => p[0]), ys = q.map(p => p[1]);
     return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
   }
   const rt = RT.get(activeObj().id); if (!rt) return null;
-  const g = kind === 'part' ? rt[sel.part] || rt.group : rt.group;
+  const g = kind === 'part' ? rt[sel.part] || rt.group : kind === 'ribbon' ? rt.ribbonGroups?.get(sel.ribbon) || rt.group : rt.group;
   box3.setFromObject(g); if (box3.isEmpty()) return null;
   const r = cvs.getBoundingClientRect(); let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let i = 0; i < 8; i++) {
@@ -125,7 +136,7 @@ function screenBox(kind) {
 function syncCtxBar(moved = true) {
   const el = bar(); if (!el) return;
   const kind = busy ? null : kindNow(), o = activeObj();
-  const k = kind && [kind, o.id, sel.layer, selectedLayers().length, sel.sticker, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
+  const k = kind && [kind, o.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
   if (!kind) { el.hidden = true; key = ''; return; }
   // nothing new and the view still: it stays where it is
   if (k === key && !moved) return;

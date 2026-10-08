@@ -5,9 +5,9 @@ import { LIGHTS } from './constants.js';
 const state = { name: 'Без названия', objects: [], scene: { v: 2, preset: 'studio', ...LIGHTS.studio, bg: 'gradient', bg1: '#f4f1eb', bg2: '#cec6b8', autoRotate: false }, fonts: [], groups: [], tree: [] };
 // group: the group whose settings are shown; multi: items picked in the object list (Shift / Ctrl-click);
 // layers: the layers picked on the face (see core/layers.js); part: the extra with a face of its own (a sleeve, a
-// carrier) shown as an object of its own, sticker: the sticker shown (core/extras.js); bg: the face's background
+// carrier) shown as an object of its own, sticker / ribbon: the sticker or ribbon shown (core/extras.js); bg: the face's background
 // picked in the layer list
-const sel = { obj: null, face: null, layer: null, layers: [], sticker: null, part: null, bg: false, group: null, multi: [] };
+const sel = { obj: null, face: null, layer: null, layers: [], sticker: null, ribbon: null, part: null, bg: false, group: null, multi: [] };
 const assets = {};
    // id -> dataURL
 const imgCache = {};

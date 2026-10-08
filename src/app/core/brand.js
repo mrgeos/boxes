@@ -7,6 +7,7 @@ import { vecColors } from './vector.js';
 import { ensureFont } from './fonts.js';
 import { markFace } from '../scene/renderer.js';
 import { touchSticker } from '../stickers/placement.js';
+import { ribbonLook } from '../carriers/ribbon.js';
 
 /* The kit lives in the project (state.brand). Its colours, logos and fonts are variables: a field of a layer, a face
    or a sticker that took one keeps a link to it beside its own value (T.links = { color: 'c1', 'grad.color': 'c2',
@@ -30,6 +31,7 @@ function* linkables() {
       for (const L of f.layers) yield { T: L, done: () => markFace(o, k) };
     }
     for (const st of o.stickers || []) yield { T: st, done: () => touchSticker(o, st) };
+    for (const r of o.ribbons || []) yield { T: r, done: () => ribbonLook(o, r) };
   }
 }
 /* the value of a link as the field takes it */

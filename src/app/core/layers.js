@@ -25,7 +25,7 @@ function setLayerSelection(ids, main = ids.at(-1) ?? null) {
   sel.bg = false;
   sel.layers = ids.length > 1 ? [...ids] : [];
   sel.layer = ids.length ? main : null;
-  if (ids.length) sel.sticker = null;
+  if (ids.length) sel.sticker = sel.ribbon = null;
 }
 /* the layers of L's group (or L alone) */
 const groupOf = (face, L) => L?.group ? face.layers.filter(l => l.group === L.group) : L ? [L] : [];

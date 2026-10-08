@@ -15,6 +15,7 @@ import { buildBox } from '../carriers/box.js';
 import { buildSleeve, sleeveColors } from '../carriers/sleeve.js';
 import { buildCarry, carryColors } from '../carriers/carry.js';
 import { buildPaperBag, paperBagColors } from '../carriers/paperbag.js';
+import { buildRibbons, disposeRibbons } from '../carriers/ribbon.js';
 import { computeFrames } from '../stickers/placement.js';
 import { buildStickerFilms } from '../stickers/film.js';
 import { camTween, invalidate, orbitLock, updateShadowCam } from './camera.js';
@@ -139,12 +140,13 @@ function buildObject(o) {
       holeMat: new THREE.MeshBasicMaterial({ color: 0x141414, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), lidPivot: null };
     RT.set(o.id, rt); world.add(rt.group);
   }
+  disposeRibbons(rt);
   rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
   rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null;
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else buildTube(o, rt);
-  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); applyObjMaterials(o); markObj(o);
+  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); applyObjMaterials(o); markObj(o);
   rt.stickerMeshes = []; buildStickerFilms(o);
   if (parentOf(o.id) && JSON.stringify(foot) !== JSON.stringify(rt.foot)) layoutSoon();   // the row makes room for its new size
 }
@@ -162,6 +164,7 @@ function measureFoot(rt) {
 function disposeObject(id) {
   invalidate();
   const rt = RT.get(id); if (!rt) return;
+  disposeRibbons(rt);
   rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
   world.remove(rt.group);
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
@@ -235,6 +238,8 @@ function applyLid(o) {
   }
   if (rt.lidPivot) rt.lidPivot.rotation.x = -o.lid * DEG;
   for (const m of rt.contact || []) m.visible = o.lid < 1.5;
+  // a ribbon is off while the lid is open
+  if (rt.ribbons) rt.ribbons.visible = !(o.lid > .5);
   if (rt.lidGroup) {
     // the separate lid lifts, slides back a little and tilts
     const f = clamp(o.lid / 125, 0, 1), H = o.dims.h * S, LH = clamp(o.lidH, 3, clearLid(o) ? 1000 : o.dims.h) * S;

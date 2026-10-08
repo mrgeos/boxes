@@ -39,7 +39,7 @@ function renderObjects() {
     const acts = `<span class="acts">${rowActs(hid, lck)}</span>`;
     if (g) return `<div class="${cls}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true">
       <button class="caret" data-open aria-label="${g.open ? 'Свернуть' : 'Развернуть'}" aria-expanded="${g.open}">${g.open ? '▾' : '▸'}</button><span class="th">${GROUP_ICON}</span><span class="nm">${esc(g.name)}</span><span class="dm">${count(os.length)}</span>${acts}</div>`;
-    const o = own(id), url = thumbOf(id), xs = extrasOf(o), open = !foldedObj.has(id), xOn = id === sel.obj && (sel.sticker || sel.part);
+    const o = own(id), url = thumbOf(id), xs = extrasOf(o), open = !foldedObj.has(id), xOn = id === sel.obj && (sel.sticker || sel.ribbon || sel.part);
     const th = url ? `<img class="th" src="${url}" alt="">` : `<span class="th">${ICON[o.type] || ICON.box}</span>`;
     // the object's extras (stickers, a sleeve) under it, one level in; the object row folds them
     const kids = open ? xs.map(e => `<div class="obj xtra ${xOn === e.id ? 'on' : ''} ${extraHidden(e) ? 'hidden' : ''} ${e.T.locked ? 'locked' : ''}" data-obj="${id}" data-x="${e.id}" style="--d:${depth + 1}" tabindex="0" role="button">

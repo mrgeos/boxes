@@ -11,6 +11,7 @@ import { emptyKit } from './brand.js';
 import { cloudChanged, detachProject } from './cloud.js';
 import { RT, buildObject, disposeObject, ui } from '../scene/renderer.js';
 import { activeSticker } from '../stickers/placement.js';
+import { activeRibbon } from './extras.js';
 import { applyScene, setLastView, setView } from '../scene/camera.js';
 import { layoutAll, normalizeTree } from './groups.js';
 import { renderFonts, renderLayerProps } from '../ui/face-panel.js';
@@ -39,6 +40,7 @@ function restore(s) {
   sel.multi = sel.multi.filter(id => state.groups.some(g => g.id === id) || state.objects.some(o => o.id === id));
   const f = activeFaceData(); if (!f || !f.layers.some(l => l.id === sel.layer)) sel.layer = null;
   if (!activeSticker()) sel.sticker = null;
+  if (!activeRibbon()) sel.ribbon = null;
   applyScene(); renderAll(); updateUndo(); scheduleSave();
 }
 function undo() { if (hist.i > 0) { hist.i--; restore(hist.stack[hist.i]); } }
@@ -51,6 +53,7 @@ function usedAssets() {
     for (const k in o.faces) for (const l of o.faces[k].layers) if (l.src) used.add(l.src);
     for (const st of o.stickers || []) for (const id of [st.src, st.bgSrc]) if (id) used.add(id);
     if (o.product?.src) used.add(o.product.src);
+    for (const r of o.ribbons || []) if (r.src) used.add(r.src);
   }
   for (const f of state.fonts) used.add(f.asset);
   // the kit's logos and patterns go with the project even when no face shows them

@@ -1,7 +1,7 @@
 // Разделы: слева общее (добавить, модели, загрузки, сцена), справа — выбранный объект (форма, дизайн, допы, развёртка)
 import { $, $$, esc } from '../core/util.js';
 import { activeObj, sel } from '../core/state.js';
-import { extraById, extraName } from '../core/extras.js';
+import { activeRibbon, extraById, extraName } from '../core/extras.js';
 import { activeSticker } from '../stickers/placement.js';
 import { selectObjectItself } from '../core/selection.js';
 import { ui } from '../scene/renderer.js';
@@ -19,29 +19,29 @@ function show(panel, t) {
   $(`#${panel}`).dataset.tab = t;
 }
 /* the tabs the selection has: an object all four; a sleeve or a carrier (an extra with a face) its shape, design and
-   net; a sticker its settings (in the extras' section). A tab missing for the selection is shown as the first one
+   net; a sticker or a ribbon its settings (in the extras' section). A tab missing for the selection is shown as the first one
    it has, and the chosen tab comes back with the next object. */
 function tabsNow() {
   if (sel.group || !activeObj()) return RIGHT;
-  if (activeSticker()) return ['extras'];
+  if (activeSticker() || activeRibbon()) return ['extras'];
   if (sel.part) return ['shape', 'design', 'net'];
   return RIGHT;
 }
 const shownTab = () => { const t = tabsNow(); return t.includes(right) ? right : t.includes('design') ? 'design' : t[0]; };
 function paintRight() {
-  const tabs = tabsNow(), cur = shownTab(), st = activeSticker();
+  const tabs = tabsNow(), cur = shownTab(), st = activeSticker(), rb = !st && activeRibbon();
   show('propPanel', hasSel ? cur : 'none');
   $('#propTabs').hidden = !hasSel || tabs.length < 2;
   $$('#propTabs button').forEach(b => {
     const on = b.dataset.tab === cur; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); b.hidden = !tabs.includes(b.dataset.tab);
-    if (b.dataset.tab === 'extras') b.textContent = st ? 'Наклейка' : 'Допы';
+    if (b.dataset.tab === 'extras') b.textContent = st ? 'Наклейка' : rb ? 'Лента' : 'Допы';
   });
   paintCrumb();
   ui.editor = ui.net = true;
 }
 /* over the tabs of an extra: the object it belongs to (a click goes back to it) › the extra */
 function paintCrumb() {
-  const o = activeObj(), el = $('#propCrumb'), e = o && !sel.group && (activeSticker() ? extraById(o, sel.sticker) : sel.part ? extraById(o, sel.part) : null);
+  const o = activeObj(), el = $('#propCrumb'), e = o && !sel.group && (activeSticker() ? extraById(o, sel.sticker) : activeRibbon() ? extraById(o, sel.ribbon) : sel.part ? extraById(o, sel.part) : null);
   el.hidden = !e;
   if (!e) { el.innerHTML = ''; return; }
   el.innerHTML = `<button class="up" title="К объекту">${esc(o.name)}</button><span class="sep">›</span><b>${esc(extraName(o, e))}</b>`;

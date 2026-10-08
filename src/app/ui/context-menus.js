@@ -70,7 +70,7 @@ function layerItems(o, face, L) {
 /* the latest pictures of the library; `before` selects what gets the picture */
 function libraryItems(before) { return library.slice(-14).reverse().map(it => ({ label: it.name || 'Картинка', run: () => { before(); swapImage(it); } })); }
 function stickerItems(o, st) {
-  const on = fn => () => { if (sel.obj !== o.id) select(o.id); sel.sticker = st.id; sel.layer = null; fn(); };
+  const on = fn => () => { if (sel.obj !== o.id) select(o.id); sel.sticker = st.id; sel.ribbon = null; sel.layer = null; fn(); };
   return [
     { label: 'Дублировать', run: on(() => duplicateSticker(st.id)) },
     { label: 'Удалить', key: 'Delete', run: on(() => deleteSticker(st.id)) },
@@ -160,7 +160,7 @@ function sceneMenu(x, y) {
   const st = stickerHit(h);
   if (st) {
     if (sel.obj !== o.id) select(o.id, h.face || undefined, null);
-    sel.sticker = st.id; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers();
+    sel.sticker = st.id; sel.ribbon = null; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers();
     return openMenu(x, y, stickerItems(o, st), 'Наклейка');
   }
   let L = null;

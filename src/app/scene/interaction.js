@@ -9,14 +9,14 @@ import { library } from '../core/library.js';
 import { RT, camera, controls, cvs, markFace, renderer, ui, world } from './renderer.js';
 import { activeSticker, stickerAt, stickerDirty, touchSticker } from '../stickers/placement.js';
 import { applyViewOffset, focusSelected, lockActive, recording, setCamTween, setView, view } from './camera.js';
-import { pickLayers, select, selectLayer, selectObjectItself } from '../core/selection.js';
+import { pickLayers, select, selectExtra, selectLayer, selectObjectItself } from '../core/selection.js';
 import { boundsOf, clickPick, copyData, moveLayers, pasteData, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
 import { addFontFile, commit, openProjectFile, redo, undo } from '../core/project.js';
 import { refreshFields } from '../ui/fields.js';
 import { addImageToFace, deleteLayer, duplicateLayer, layerCmd, moveLayer, renderFaceTabs, renderLayerProps, renderLayers } from '../ui/face-panel.js';
 import { deleteSticker, editStickerText, extraAction, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
 import { setTab } from '../ui/tabs.js';
-import { isPart } from '../core/extras.js';
+import { activeRibbon, isPart } from '../core/extras.js';
 import { handleAt } from './sel-box.js';
 import { startTextEdit } from '../ui/text-edit.js';
 import { rotateItem, scaleItem, sizeOf } from '../core/transform.js';
@@ -34,10 +34,12 @@ function pick(clientX, clientY, only = null) {
   // hidden and locked objects are passed through (three.js casts rays at hidden meshes too)
   const hits = ray.intersectObjects(only ? [only] : world.children, true);
   const faceOf = x => { const ud = x.object.userData; return ud.faces ? ud.faces[x.face.materialIndex] : ud.face; };
-  // a locked sleeve or carrier is passed through too
-  const h = hits.find(x => { const o = state.objects.find(q => q.id === x.object.userData.objId), f = faceOf(x); return !o || (!o.hidden && !o.locked && !(isPart(f) && o[f]?.locked)); }); if (!h) return null;
+  // a locked sleeve or carrier is passed through too, and a ribbon off the model (hidden, locked, the lid open);
+  // over one object only (a layer dragged on it) ribbons are passed through
+  const ribbonOff = (o, id) => { const r = o.ribbons?.find(q => q.id === id); return only || !r || r.hidden || r.locked || o.lid > .5; };
+  const h = hits.find(x => { const o = state.objects.find(q => q.id === x.object.userData.objId), f = faceOf(x); return !o || (!o.hidden && !o.locked && !(isPart(f) && o[f]?.locked) && !(x.object.userData.ribbon && ribbonOff(o, x.object.userData.ribbon))); }); if (!h) return null;
   const ud = h.object.userData, face = faceOf(h);
-  return { objId: ud.objId, face, wall: !!ud.wall, uv: h.uv, mesh: h.object, mi: h.face.materialIndex };
+  return { objId: ud.objId, face, ribbon: ud.ribbon || null, wall: !!ud.wall, uv: h.uv, mesh: h.object, mi: h.face.materialIndex };
 }
 let down = null, drag3 = null, dragSt = null, xform = null, hoverT = 0;
 /* the sticker under a 3D hit, if any */
@@ -301,13 +303,15 @@ function initInteraction() {
     // a click on empty space drops the selection, as in Figma
     if (!h) { if (sel.obj || sel.group) select(null); return; }
     const o = state.objects.find(x => x.id === h.objId); if (!o) return;
+    // a ribbon is picked as an extra of its own
+    if (h.ribbon) return selectExtra(o.id, h.ribbon);
     const hs = stickerHit(h);
     if (hs) {
       if (o.id !== sel.obj || (h.face && h.face !== sel.face)) select(o.id, h.face || undefined, null, { flash: false });
-      sel.sticker = hs.id; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers(); ui.editor = true;
+      sel.sticker = hs.id; sel.ribbon = null; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers(); ui.editor = true;
       return;
     }
-    if (sel.sticker) { sel.sticker = null; ui.stickers = true; }
+    if (sel.sticker || sel.ribbon) { sel.sticker = sel.ribbon = null; ui.stickers = true; }
     let hitL = null;
     if (h.face && h.uv && !h.wall) { const [W, H] = facePx(o, h.face); hitL = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H); }
     const layerId = hitL?.id ?? null, same = o.id === sel.obj && h.face === sel.face, add = e.shiftKey || e.ctrlKey || e.metaKey;
@@ -326,7 +330,7 @@ function initInteraction() {
     if (e.target === cvs) {
       const h = pick(e.clientX, e.clientY), st = stickerHit(h);
       // onto a sticker: its picture
-      if (st) { const o = state.objects.find(x => x.id === h.objId); select(o.id, st.face); sel.sticker = st.id; return setStickerImage(o, st, it); }
+      if (st) { const o = state.objects.find(x => x.id === h.objId); select(o.id, st.face); sel.sticker = st.id; sel.ribbon = null; return setStickerImage(o, st, it); }
       if (h?.face && !h.wall) { const o = state.objects.find(x => x.id === h.objId); select(o.id, h.face); return placeLibImage(it, o, h.face, h.uv ? [h.uv.x, 1 - h.uv.y] : null); }
     }
     if (e.target === ed && activeObj()) { const [mx, my] = edPoint(e); return placeLibImage(it, activeObj(), sel.face, [mx / edState.dw, my / edState.dh]); }
@@ -415,9 +419,10 @@ function initInteraction() {
     if (!L) {
       // the face's background picked: Esc lets it go; Delete does nothing (it is not the object)
       if (sel.bg) { if (e.key === 'Escape') selectLayer(null); return; }
-      // a sleeve or a carrier picked: the keys act on it, Esc goes back to the object
-      if (sel.part) {
-        if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); extraAction(activeObj(), sel.part, 'del'); }
+      // a sleeve, a carrier or a ribbon picked: the keys act on it, Esc goes back to the object
+      const part = sel.part || (activeRibbon() && sel.ribbon);
+      if (part) {
+        if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); extraAction(activeObj(), part, 'del'); }
         else if (e.key === 'Escape') selectObjectItself();
         return;
       }

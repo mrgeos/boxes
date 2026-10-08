@@ -1,4 +1,4 @@
-// Правая панель: допы объекта (наклейки, рукава) и настройки выбранной наклейки
+// Правая панель: допы объекта (наклейки, рукава, ленты) и настройки выбранной наклейки
 import { $, $$, esc, fmt, uid } from '../core/util.js';
 import { ICON } from '../core/constants.js';
 import { activeObj, sel } from '../core/state.js';
@@ -11,7 +11,7 @@ import { commit } from '../core/project.js';
 import { bindFields, rangeField } from './fields.js';
 import { bindVecColors, vecColorsHTML } from './face-panel.js';
 import { pickAsset } from './asset-picker.js';
-import { addPart, deleteExtra, duplicateExtra, extraById, extraHidden, extraName, extrasOf, isPart, renameExtra, setExtraHidden, setExtraLocked } from '../core/extras.js';
+import { activeRibbon, addPart, addRibbon, deleteExtra, duplicateExtra, extraById, extraHidden, extraName, extrasOf, isPart, renameExtra, setExtraHidden, setExtraLocked } from '../core/extras.js';
 import { sleeveOn } from '../carriers/sleeve.js';
 import { carryOn } from '../carriers/carry.js';
 import { select, selectExtra } from '../core/selection.js';
@@ -19,6 +19,8 @@ import { renameExtraTree, renderObjects } from './object-list.js';
 import { refreshTabs } from './tabs.js';
 import { openMenu } from './menu.js';
 import { renderModel } from './model-panel.js';
+import { ribbonFits } from '../carriers/ribbon.js';
+import { bindRibbon, ribbonHTML } from './ribbon-panel.js';
 
 /* ---------- stickers panel ---------- */
 /* a seal goes across the line where the box opens */
@@ -58,6 +60,9 @@ function renderStickers() {
   const sec = $('#stickerSec'), o = activeObj();
   if (!o) { sec.innerHTML = ''; return; }
   const st = activeSticker();
+  // a picked ribbon shows its own settings
+  const rb = !st && activeRibbon();
+  if (rb) { sec.innerHTML = ribbonHTML(o, rb); return bindRibbon(sec, o); }
   // the object's extras and what can be added; a picked sticker shows its own settings instead
   let html = st ? `<div class="sec-h"><h2>Наклейка</h2><span class="badge">${esc(faceLabel(o, st.face))}</span></div>` : extrasHTML(o);
   if (st) {
@@ -109,15 +114,15 @@ function renderStickers() {
 }
 
 /* ---------- the object's extras ---------- */
-const EXTRA_ICON = { sleeve: ICON.sleeveX, carry: ICON.carryX };
+const EXTRA_ICON = { sleeve: ICON.sleeveX, carry: ICON.carryX, ribbon: ICON.ribbonX };
 const stickerIcon = t => t.kind === 'circle' ? ICON.ell : t.kind === 'rect' ? ICON.rect : ICON.sticker;
 const extraIcon = e => e.kind === 'sticker' ? stickerIcon(e.T) : EXTRA_ICON[e.kind];
 /* lock and eye of an extra's row: on hover, and kept while it is locked or hidden (as for layers) */
 const extraActs = e => { const hid = extraHidden(e), lck = !!e.T.locked; return `<button data-a="lock" class="${lck ? 'pin' : ''}" title="${lck ? 'Разблокировать' : 'Заблокировать: не выбирается и не двигается на модели'}" aria-label="Блокировка">${lck ? ICON.lock : ICON.unlock}</button><button data-a="vis" class="${hid ? 'pin' : ''}" title="${hid ? 'Показать' : 'Скрыть'}" aria-label="Видимость">${hid ? ICON.eyeOff : ICON.eye}</button>`; };
 function extrasHTML(o) {
-  const list = extrasOf(o), sleeveFree = o.type === 'box' && o.lidType !== 'handle' && !sleeveOn(o), carryFree = o.type === 'torte' && !carryOn(o);
+  const list = extrasOf(o), sleeveFree = o.type === 'box' && o.lidType !== 'handle' && !sleeveOn(o), carryFree = o.type === 'torte' && !carryOn(o), ribbon = ribbonFits(o);
   return `<div class="sec-h"><h2>Допы</h2><span class="hint">${list.length || ''}</span></div>
-    <p class="hint">Наклейки, рукава и другое, что надевается на ${o.type === 'torte' ? 'тортницу' : 'объект'} или клеится на него. Выбранный доп настраивается как отдельный объект.</p>
+    <p class="hint">Наклейки, рукава, ленты и другое, что надевается на ${o.type === 'torte' ? 'тортницу' : 'объект'} или клеится на него. Выбранный доп настраивается как отдельный объект.</p>
     <div class="addrow five">
       <button class="btn" id="stCircle">${ICON.ell}Круг</button>
       <button class="btn" id="stRect">${ICON.rect}Прямоуг.</button>
@@ -125,11 +130,11 @@ function extrasHTML(o) {
       <button class="btn" id="stCustom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7Z"/></svg>Своя</button>
       <button class="btn" id="stSeal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="20" rx="1"/><path d="M3 12h18" stroke-dasharray="2 2"/></svg>Пломба</button>
     </div>
-    ${sleeveFree || carryFree ? `<div class="grid2">${sleeveFree ? `<button class="btn sm" id="addSleeve">${ICON.sleeveX}Рукав</button>` : ''}${carryFree ? `<button class="btn sm" id="addCarry">${ICON.carryX}Рукав-переноска</button>` : ''}</div>` : ''}
+    ${sleeveFree || carryFree || ribbon ? `<div class="grid2">${ribbon ? `<button class="btn sm" id="addRibbon">${ICON.ribbonX}Лента с бантом</button>` : ''}${sleeveFree ? `<button class="btn sm" id="addSleeve">${ICON.sleeveX}Рукав</button>` : ''}${carryFree ? `<button class="btn sm" id="addCarry">${ICON.carryX}Рукав-переноска</button>` : ''}</div>` : ''}
     ${list.length ? `<div class="layers" id="extraList">${list.map(e => `<div class="layer ${extraHidden(e) ? 'hidden' : ''} ${e.T.locked ? 'locked' : ''}" data-id="${e.id}">
       <span class="th">${extraIcon(e)}</span><span class="ln">${esc(extraName(o, e))}</span>${e.kind === 'sticker' ? `<span class="dm mono">${fmt(e.T.w)}×${fmt(stickerSize(e.T)[1])}</span>` : ''}
       <span class="acts">${extraActs(e)}</span></div>`).join('')}</div>`
-      : `<div class="empty">Допов пока нет. Наклейка — круг, прямоугольник, фото или своя форма из PNG/SVG${sleeveFree ? '; рукав — бумажная лента вокруг коробки' : ''}${carryFree ? '; рукав-переноска — лента под дном с ручкой' : ''}.</div>`}`;
+      : `<div class="empty">Допов пока нет. Наклейка — круг, прямоугольник, фото или своя форма из PNG/SVG${sleeveFree ? '; рукав — бумажная лента вокруг коробки' : ''}${carryFree ? '; рукав-переноска — лента под дном с ручкой' : ''}${ribbon ? '; лента — крестом с бантом сверху' : ''}.</div>`}`;
 }
 function bindExtras(sec, o) {
   const face = () => sel.face && faceKeys(o).includes(sel.face) && !isPart(sel.face) ? sel.face : faceKeys(o)[0];
@@ -144,6 +149,8 @@ function bindExtras(sec, o) {
   $('#stCustom').onclick = e => pickAsset(e.currentTarget, 'Своя форма: PNG или SVG с прозрачным фоном', r => {
     addSticker(newSticker('custom', face(), { src: r.id, aspect: r.aspect, w: 50, outline: 1.5 }));
   });
+  const rbBtn = $('#addRibbon');
+  if (rbBtn) rbBtn.onclick = () => { const r = addRibbon(o); if (r) { selectExtra(o.id, r.id); renderObjects(); commit(); } };
   for (const kind of ['sleeve', 'carry']) {
     const b = $(kind === 'sleeve' ? '#addSleeve' : '#addCarry');
     if (b) b.onclick = () => { if (addPart(o, kind)) { selectExtra(o.id, kind); renderObjects(); commit(); } };
@@ -165,6 +172,7 @@ function extraAction(o, id, a) {
   if (a === 'del') {
     deleteExtra(o, id);
     if (sel.sticker === id) sel.sticker = null;
+    if (sel.ribbon === id) sel.ribbon = null;
     if (sel.part === id) { sel.part = null; select(o.id, faceKeys(o).find(k => !isPart(k)), null); }
     for (const k of stickerKeys.get(id) || []) markFace(o, k);
   }
