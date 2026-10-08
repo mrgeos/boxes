@@ -11,6 +11,7 @@ import { lidDimsMM, winMM, windowPlace } from '../carriers/box.js';
 import { HANDLE_KEYS, HB_END_KEYS, applyHandlePreset, defaultFrontWin, defaultHandle, hbDims, hbNet, hbOpen } from '../carriers/handle-box.js';
 import { SLEEVE_GLUE, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn, sleeveSheet, upgradeSleeve } from '../carriers/sleeve.js';
 import { boxNet } from '../carriers/box-net.js';
+import { defaultTissue, tissueOn } from '../carriers/tissue.js';
 import { applyBoardPreset, boardDefaults, boardFaceMM, boardNet, collarDims, collarOn, setBoardCover } from '../carriers/board.js';
 
 /* printed faces of an object, in tab order; depends on the lid construction */
@@ -51,6 +52,7 @@ function faceKeys(o) {
   if (lt === 'telescope') k.push(...LID_WALLS);
   k.push('right', 'left', 'back', 'bottom');
   if (sleeveOn(o)) k.push('sleeve');
+  if (tissueOn(o)) k.push('tissue');
   if (lt !== 'none' && !(lt === 'telescope' && o.lidMat === 'clear')) k.push('inside');
   k.push('insideBottom');
   return k;
@@ -62,7 +64,7 @@ const doubleWall = o => o.type === 'box' && wallMM(o) > o.thickness * 1.6 + .2;
 const clearLid = o => o.type === 'box' && o.lidType === 'telescope' && o.lidMat === 'clear';
 const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k))) || (o.type === 'torte' && k !== 'carry') || k === 'collar';
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
-const faceLabel = (o, k) => (o.type === 'board' && k === 'top') ? 'Верх подложки' : (o.type === 'board' && k === 'bottom') ? 'Низ подложки' : k === 'collar' ? 'Ацетатная лента' : (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : ((o.type === 'bag' || o.type === 'paperbag') && BAG_LABEL[k]) || FACE_LABEL[k];
+const faceLabel = (o, k) => k === 'tissue' ? 'Тишью' : (o.type === 'board' && k === 'top') ? 'Верх подложки' : (o.type === 'board' && k === 'bottom') ? 'Низ подложки' : k === 'collar' ? 'Ацетатная лента' : (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : ((o.type === 'bag' || o.type === 'paperbag') && BAG_LABEL[k]) || FACE_LABEL[k];
 function ensureFaces(o) {
   o.stickers ??= [];
   o.netV ??= o.dieline ? 1 : 2;
@@ -77,6 +79,7 @@ function ensureFaces(o) {
     o.lidFit ??= 'over';
     o.handle ??= defaultHandle(o.dims);
     o.sleeve ??= defaultSleeve(o.dims);
+    o.tissue ??= defaultTissue();
     o.sleeve.handle ??= defaultSleeveHandle(); o.sleeve.handle.rf ??= 10;
     if (o.handle.rTop == null) applyHandlePreset(o.handle, o.handle.shape || 'arch');   // projects from before adjustable handles
     o.frontWin ??= defaultFrontWin(o.dims);
@@ -98,7 +101,7 @@ function ensureFaces(o) {
   o.window.place ??= 'edge'; o.window.off ??= 0; o.window.corners ??= 'round';
   if (o.whiteInside === undefined) o.whiteInside = true;
   for (const st of o.stickers) if (!faceKeys(o).includes(st.face)) st.face = faceKeys(o)[0];
-  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) || k === 'sleeve' || k === 'carry' ? '#ffffff' : k.startsWith('inside') || HANDLE_KEYS.includes(k) ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
+  for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) || k === 'sleeve' || k === 'carry' || k === 'tissue' ? '#ffffff' : k.startsWith('inside') || HANDLE_KEYS.includes(k) ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
   if (!o.board) o.board = (o.faces.front || o.faces.wrap).bg;
 }
 function newObject(presetId = 'mailer') {
@@ -126,7 +129,7 @@ function setBoard(o, c) {
   o.board = c;
   // a cake board: the colour of its paper covering (a foil one keeps its metal)
   if (o.type === 'board') { if (!isFoil(o.cbCover) && o.faces.top) o.faces.top.bg = c; setBoardCover(o); return; }
-  for (const k of outerKeys(o)) if (!(o.type === 'bag' && EXT_KEYS.includes(k)) && k !== 'sleeve' && k !== 'carry') o.faces[k].bg = c;
+  for (const k of outerKeys(o)) if (!(o.type === 'bag' && EXT_KEYS.includes(k)) && k !== 'sleeve' && k !== 'carry' && k !== 'tissue') o.faces[k].bg = c;
   // the handle is cut out of the lid: its outside is the board's reverse, like the inside
   for (const k of ['inside', 'insideBottom', ...HANDLE_KEYS]) if (o.faces[k]) o.faces[k].bg = o.whiteInside ? WHITE_INSIDE : c;
 }
@@ -141,6 +144,7 @@ function faceMM(o, k) {
   if (o.type === 'paperbag') return k === 'left' || k === 'right' ? [d, h] : [w, h];
   if (o.type === 'cup') { const G = cupGeom(o); return [G.Wr, G.Hr]; }
   if (k === 'carry') { const D = carryDims(o); return [D.bw, D.P]; }
+  if (k === 'tissue') return [clamp(o.tissue.w || 300, 20, 3000), clamp(o.tissue.l || 300, 20, 3000)];
   if (o.type === 'torte') {
     const G = torteGeom(o);
     return k === 'top' ? [2 * G.Rt, 2 * G.Rt] : [Math.PI * (G.Rl + G.Rs), Math.hypot(G.Rl - G.Rs, G.yS - G.y1)];
@@ -265,6 +269,8 @@ function netLayout(o) {
 }
 /* a sleeve is a separate band below the box's blank */
 function addSleeve(o, n) {
+  // tissue paper: its sheet below the rest (two of them for the crossed layout, the same print)
+  if (tissueOn(o)) { const [tw, tl] = faceMM(o, 'tissue'), y = n.H + 15; n.panels.push({ key: 'tissue', x: 0, y, w: tw, h: tl, part: true }); n.W = Math.max(n.W, tw); n.H = y + tl; }
   if (!sleeveOn(o)) return n;
   const SD = sleeveDims(o), y = n.H + 15, sh = sleeveSheet(SD), m = q => q.map(([a, b]) => [a, y + b]);
   n.panels.push({ key: 'sleeve', x: 0, y, w: SD.bw, h: SD.P, part: true, creases: sh.creases.map(([a, b, c, d]) => [a, y + b, c, y + d]), ...(sh.outline ? { poly: m(sh.outline), holes: sh.holes.map(m), glue: m(sh.glue) } : {}) });

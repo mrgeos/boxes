@@ -14,6 +14,9 @@ import { drawSticker, stickerMask, stickerShadow } from '../stickers/film.js';
 import { drawWrapped, wrapsOnto } from './wrap.js';
 import { clipBase, clipRect, cropOf, cropped, maskPath } from '../core/mask.js';
 import { boardFin } from '../carriers/board.js';
+import * as THREE from 'three';
+/* tissue paper: matt, a soft sheen at grazing angles */
+const TISSUE_FIN = { label: 'Тишью', r: .9, m: 0, cc: 0, ccr: 0, sheen: .45 };
 
 /* the copies of a layer a ring face needs: +1 when it runs over the start of the face, -1 over its end */
 function loopShifts(L, W, H, ax) {
@@ -254,7 +257,7 @@ function renderFace(o, k) {
   // print on a clear PET lid: no board colour, paper grain or kraft, only the layers
   const clear = f.clear = isClearFace(o, k);
   const bf = clear && o.type === 'bag' ? BAG_FILM[o.bagMat] : null;
-  const fin = clear ? bf?.fin || PET_PRINT : o.type === 'board' ? boardFin(o, k) : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : k === 'carry' ? FINISHES[o.carry?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = faceGrain(o, k);
+  const fin = clear ? bf?.fin || PET_PRINT : o.type === 'board' ? boardFin(o, k) : k === 'tissue' ? TISSUE_FIN : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : k === 'carry' ? FINISHES[o.carry?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = faceGrain(o, k);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   if (clear) { ctx.clearRect(0, 0, W, H); if (bf?.ground) { ctx.fillStyle = bf.ground; ctx.fillRect(0, 0, W, H); } }
   else {
@@ -408,7 +411,10 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops, draw) {
   // bag film keeps depth so the flap and stickers on it always cover the side beneath
   m.transparent = !!f.clear; m.depthWrite = !f.clear || o.type === 'bag';
   m.alphaTest = f.win ? .5 : 0;   // a window cut in a paper bag
-  const sig = [!!m.roughnessMap, !!m.bumpMap, m.clearcoat > 0, !!m.clearcoatMap, holo, !!fin.sheen, !!f.clear, !!f.win].join();
+  // tissue paper lets some light through, both its sides show
+  if (k === 'tissue') { m.transparent = true; m.opacity = 1 - clamp(o.tissue?.sheer ?? 25, 0, 70) / 100; m.depthWrite = true; m.side = THREE.DoubleSide; }
+  else m.opacity = 1;
+  const sig = [k === 'tissue', !!m.roughnessMap, !!m.bumpMap, m.clearcoat > 0, !!m.clearcoatMap, holo, !!fin.sheen, !!f.clear, !!f.win].join();
   if (sig !== f.sig) { f.sig = sig; m.needsUpdate = true; }
 }
 function setSkipStickers(v) { skipStickers = v; }

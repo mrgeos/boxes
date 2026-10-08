@@ -202,6 +202,6 @@ function sleeveColors(o, rt) {
   // the inside of the band is unprinted paper; the cut edges show the paper's colour
   rt.sleeveIn.color.copy(o.sleeve?.fin === 'kraft' ? paper : new THREE.Color('#f6f3ec')); rt.sleeveEdge.color.copy(paper).multiplyScalar(.92);
 }
-const faceGrain = (o, k) => o.type === 'board' ? boardGrain(o, k) : k === 'sleeve' ? (o.sleeve?.fin === 'kraft' ? .45 : .06) : k === 'carry' ? (o.carry?.fin === 'kraft' ? .45 : .06) : o.grain;
+const faceGrain = (o, k) => o.type === 'board' ? boardGrain(o, k) : k === 'tissue' ? .3 : k === 'sleeve' ? (o.sleeve?.fin === 'kraft' ? .45 : .06) : k === 'carry' ? (o.carry?.fin === 'kraft' ? .45 : .06) : o.grain;
 
 export { sleeveAt, sleeveLeaf, upgradeSleeve, SLEEVE_AXES, SLEEVE_FIN, SLEEVE_GLUE, SLEEVE_PANEL, applySleeve, buildSleeve, defaultSleeve, defaultSleeveHandle, faceGrain, sleeveColors, sleeveDims, sleeveOn, sleevePanelLabel, sleeveSheet };

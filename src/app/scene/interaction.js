@@ -37,7 +37,9 @@ function pick(clientX, clientY, only = null) {
   // a locked sleeve or carrier is passed through too, and a ribbon off the model (hidden, locked, the lid open);
   // over one object only (a layer dragged on it) ribbons are passed through
   const ribbonOff = (o, id) => { const r = o.ribbons?.find(q => q.id === id); return only || !r || r.hidden || r.locked || o.lid > .5; };
-  const h = hits.find(x => { const o = state.objects.find(q => q.id === x.object.userData.objId), f = faceOf(x); return !o || (!o.hidden && !o.locked && !(isPart(f) && o[f]?.locked) && !(x.object.userData.ribbon && ribbonOff(o, x.object.userData.ribbon))); }); if (!h) return null;
+  // what is not shown (a part hidden, tissue under a closed lid) is passed through as well
+  const shown = m => { for (let n = m; n; n = n.parent) if (!n.visible) return false; return true; };
+  const h = hits.find(x => { const o = state.objects.find(q => q.id === x.object.userData.objId), f = faceOf(x); return !o || (shown(x.object) && !o.hidden && !o.locked && !(isPart(f) && o[f]?.locked) && !(x.object.userData.ribbon && ribbonOff(o, x.object.userData.ribbon))); }); if (!h) return null;
   const ud = h.object.userData, face = faceOf(h);
   return { objId: ud.objId, face, ribbon: ud.ribbon || null, wall: !!ud.wall, uv: h.uv, mesh: h.object, mi: h.face.materialIndex };
 }

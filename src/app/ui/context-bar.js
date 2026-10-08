@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { $, esc, fmt } from '../core/util.js';
 import { ICON } from '../core/constants.js';
 import { activeLayer, activeObj, sel } from '../core/state.js';
-import { RT, applyLid, camera, cvs } from '../scene/renderer.js';
+import { RT, applyLid, camera, cvs, markFace, rebuildQueue, ui } from '../scene/renderer.js';
+import { fitTissue } from '../carriers/tissue.js';
 import { recording, setView } from '../scene/camera.js';
 import { boxOnScreen } from '../scene/sel-box.js';
 import { selectedLayers } from '../core/layers.js';
@@ -64,6 +65,7 @@ function build(kind) {
       + `<span class="cb-dims">${dimKeys(o).map(([k, t]) => `<label title="${t}, мм"><span>${t}</span><input class="num" type="number" min="5" max="2000" step="1" data-dim="${k}" value="${fmt(o.dims[k])}"></label>`).join('')}<span class="hint">мм</span></span>${sep}`
       + ib('cbFocus', ICON.focus, 'Приблизить (F)') + ib('cbDup', ICON.copy, 'Дублировать (Ctrl+D)') + ib('cbDel', ICON.trash, 'Удалить (Delete)');
   }
+  if (kind === 'part' && sel.part === 'tissue') return `<span class="hint cb-l">Тишью</span>${[['flat', '1 лист'], ['cross', '2 листа']].map(([v, t]) => `<button class="ab wide ${o.tissue.layout === v ? 'on' : ''}" data-lay="${v}"><span>${t}</span></button>`).join('')}${sep}` + ib('cbDel', ICON.trash, 'Удалить (Delete)');
   if (kind === 'part') {
     const [k, t, max] = partSlide(o, sel.part), v = sel.part === 'sleeve' ? o.sleeve.slide : o.carry.slide;
     return `<span class="hint cb-l">${t}</span><input type="range" id="cbSlide" data-k="${k}" min="0" max="${max}" step="1" value="${v || 0}" aria-label="${t}">${sep}` + ib('cbDel', ICON.trash, 'Удалить (Delete)');
@@ -96,6 +98,7 @@ function bind(kind) {
     on('cbDup', 'click', () => duplicateIds([o.id])); on('cbDel', 'click', () => deleteIds([o.id]));
   } else if (kind === 'part') {
     const k = sel.part;
+    bar().querySelectorAll('[data-lay]').forEach(b => b.addEventListener('click', () => { o.tissue.layout = b.dataset.lay; fitTissue(o); rebuildQueue.add(o.id); markFace(o, 'tissue'); ui.net = true; renderModel(); commit(); refresh(); }));
     on('cbSlide', 'input', e => { const T = o[k]; T.slide = +e.target.value; modelInput(k + '.slide'); });
     on('cbSlide', 'change', () => { renderModel(); commit(); });
     on('cbDel', 'click', () => extraAction(o, k, 'del'));
@@ -137,7 +140,7 @@ function screenBox(kind) {
 function syncCtxBar(moved = true) {
   const el = bar(); if (!el) return;
   const kind = busy ? null : kindNow(), o = activeObj();
-  const k = kind && [kind, o.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
+  const k = kind && [kind, o.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, o.tissue?.layout, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
   if (!kind) { el.hidden = true; key = ''; return; }
   // nothing new and the view still: it stays where it is
   if (k === key && !moved) return;

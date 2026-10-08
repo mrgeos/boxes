@@ -10,6 +10,9 @@ import { applyLid, applyObjMaterials, markFace, markObj, rebuildQueue, ui } from
 import { BAG_MATS, BAG_TOPS, applyBagPreset, bagFilm } from '../carriers/bag.js';
 import { applyDomePreset } from '../carriers/dome.js';
 import { TORTE_COLORS, TORTE_FIN, applyTortePreset } from '../carriers/torte.js';
+import { TISSUE_LAYOUT, fitTissue } from '../carriers/tissue.js';
+import { setLink } from '../core/brand.js';
+import { newImage } from '../core/model.js';
 import { BOARD_BOTTOM, BOARD_COVER, BOARD_SHAPE, COLLAR_OVERLAP, applyBoardPreset, fitCake, setBoardCover } from '../carriers/board.js';
 import { winMM, windowPlace } from '../carriers/box.js';
 import { HANDLE_SHAPES, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, defaultFrontWin, defaultHandle } from '../carriers/handle-box.js';
@@ -68,6 +71,13 @@ function modelInput(k) {
   if (k.startsWith('pb.')) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'pb.handles') renderModel(); return; }
   if (k === 'sleeve.slide') { applySleeve(o); return; }
   if (k === 'carry.slide') { applyCarry(o); return; }
+  if (k.startsWith('tissue.')) {
+    if (k === 'tissue.layout' || k === 'tissue.over') fitTissue(o);
+    if (k === 'tissue.sheer') { markFace(o, 'tissue'); return; }
+    rebuildQueue.add(o.id); markFace(o, 'tissue'); ui.net = ui.editor = true; updateFaceMeta();
+    if (k === 'tissue.layout' || k === 'tissue.over') { renderModel(); renderObjects(); }
+    return;
+  }
   if (k.startsWith('carry.')) {
     ensureFaces(o); rebuildQueue.add(o.id); markFace(o, 'carry'); ui.net = ui.editor = true; updateFaceMeta();
     if (['carry.on', 'carry.style', 'carry.cut.on'].includes(k)) { select(o.id, k === 'carry.on' && o.carry.on ? 'carry' : faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]); renderModel(); renderFaceTabs(); }
@@ -145,11 +155,44 @@ function renderPartModel(sec, o) {
   const k = sel.part, e = extraById(o, k); if (!e) return;
   sec.innerHTML = `<div class="sec-h"><h2>${EXTRA_LABEL[k]}</h2></div>
     <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="${k}.name" placeholder="${esc(extraName(o, { ...e, T: { ...e.T, name: '' } }))}" aria-label="Название"></div>
-    ${k === 'sleeve' ? sleeveFields(o) : carryFields(o)}
+    ${k === 'sleeve' ? sleeveFields(o) : k === 'tissue' ? tissueFields(o) : carryFields(o)}
     <div class="grid2"><button class="btn sm" id="partHide">${e.T.hidden ? 'Показать' : 'Скрыть'}</button><button class="btn sm danger" id="partDel">Удалить</button></div>`;
   bindFields(sec, activeObj, modelInput, modelCommit);
   $('#partHide').onclick = () => { extraAction(o, k, 'vis'); renderModel(); };
   $('#partDel').onclick = () => extraAction(o, k, 'del');
+  if (k === 'tissue') bindTissue(sec, o);
+}
+/* tissue paper in the box: how it is laid, its sheet, paper and a quick pattern (a tiled picture on its face) */
+const patLayer = o => o.faces.tissue?.layers.find(L => L.pattern) || null;
+function tissueFields(o) {
+  const T = o.tissue, P = patLayer(o), [fw] = faceMM(o, 'tissue');
+  return `<div class="field wide"><span class="fl">Укладка</span><select data-k="tissue.layout">${Object.entries(TISSUE_LAYOUT).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+    <label class="check"><input type="checkbox" data-k="tissue.over"> Края наружу через борт</label>
+    ${rangeField(T.layout === 'cross' ? 'Лист (каждый): ширина, мм' : 'Лист: ширина, мм', 'tissue.w', 50, 1500, 1)}${rangeField(T.layout === 'cross' ? 'Лист (каждый): длина, мм' : 'Лист: длина, мм', 'tissue.l', 50, 1500, 1)}
+    ${T.layout === 'cross' ? rangeField('Поворот второго листа, °', 'tissue.angle', 0, 90, 1) : ''}
+    <div class="row"><button class="btn sm" id="tissueFit">По размеру коробки</button></div>
+    <div class="row"><span class="hint">Цвет бумаги</span><input type="color" id="tissueColor" value="${o.faces.tissue?.bg || '#ffffff'}" aria-label="Цвет бумаги"><span class="grow"></span></div>
+    ${rangeField('Просвечивает, %', 'tissue.sheer', 0, 70, 1)}${rangeField('Мятость, %', 'tissue.crumple', 0, 100, 1)}
+    <div class="field wide"><span class="fl">Узор</span><div class="row"><button class="btn sm" id="patPick">${P ? 'Заменить картинку…' : 'Логотип или картинка узором…'}</button>${P ? '<button class="btn sm" id="patOff">Убрать</button>' : ''}</div></div>
+    ${P ? `<div class="field"><span class="fl">Узор: размер, мм</span><input type="range" id="patSize" min="10" max="${Math.round(fw / 2)}" step="1" value="${Math.round(P.w * fw)}"><input class="num" type="number" id="patSizeN" min="10" max="${Math.round(fw)}" value="${Math.round(P.w * fw)}"></div>
+      <div class="field"><span class="fl">Узор: поворот, °</span><input type="range" id="patRot" min="-90" max="90" step="1" value="${P.rot || 0}"><input class="num" type="number" id="patRotN" min="-90" max="90" value="${P.rot || 0}"></div>` : ''}
+    <p class="hint">Тишью видна при открытой крышке. Узор — картинка, повторённая по листу; свой дизайн — во вкладке «Дизайн», грань «Тишью» (оба листа печатаются одинаково). На развёртке — лист тишью отдельно${T.layout === 'cross' ? ', нужно два' : ''}.</p>`;
+}
+function bindTissue(sec, o) {
+  const fw = () => faceMM(o, 'tissue')[0], redraw = () => { markFace(o, 'tissue'); ui.net = ui.editor = true; };
+  $('#tissueFit').onclick = () => { fitTissue(o); rebuildQueue.add(o.id); redraw(); renderModel(); commit(); };
+  $('#tissueColor').oninput = e => { o.faces.tissue.bg = e.target.value; redraw(); };
+  $('#tissueColor').onchange = () => commit();
+  $('#patPick').onclick = e => pickAsset(e.currentTarget, 'Узор на тишью', it => {
+    let P = patLayer(o);
+    if (!P) { P = Object.assign(newImage(it.id, it.aspect), { tile: true, w: 70 / fw(), rot: 20, opacity: .9, pattern: true, name: 'Узор' }); o.faces.tissue.layers.unshift(P); }
+    P.src = it.id; P.aspect = it.aspect; P.recolor = {}; setLink(P, 'src', it.brand || null);
+    redraw(); renderModel(); commit();
+  }, { brand: true });
+  if ($('#patOff')) $('#patOff').onclick = () => { o.faces.tissue.layers = o.faces.tissue.layers.filter(L => !L.pattern); redraw(); renderModel(); commit(); };
+  const pair = (r, n, set) => { for (const el of [$(r), $(n)]) if (el) { el.oninput = () => { const v = +el.value; if (!(v === v)) return; set(v); $(r).value = $(n).value = v; redraw(); }; el.onchange = () => commit(); } };
+  pair('#patSize', '#patSizeN', v => { patLayer(o).w = Math.max(5, v) / fw(); });
+  pair('#patRot', '#patRotN', v => { patLayer(o).rot = v; });
 }
 function renderModel() {
   const o = activeObj(), sec = $('#modelSec');
