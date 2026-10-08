@@ -13,7 +13,7 @@ import { activeSticker } from '../stickers/placement.js';
 import { sleeveDims } from '../carriers/sleeve.js';
 import { carryDims } from '../carriers/carry.js';
 import { deleteLayer, duplicateLayer, renderLayerProps } from './face-panel.js';
-import { deleteSticker, duplicateSticker, extraAction } from './stickers-panel.js';
+import { deleteSticker, duplicateSticker, editStickerText, extraAction } from './stickers-panel.js';
 import { deleteIds, duplicateIds } from './object-list.js';
 import { lidAction, toggleLid, turn } from './context-menus.js';
 import { modelInput, renderModel } from './model-panel.js';
@@ -70,7 +70,7 @@ function build(kind) {
       : one?.type === 'text' ? `<button class="ab wide" id="cbType">${ICON.textT}<span>Править текст</span></button>${sep}` : '';
     return first + ib('cbDup', ICON.copy, 'Дублировать (Ctrl+D)') + ib('cbDel', ICON.trash, 'Удалить (Delete)');
   }
-  if (kind === 'sticker') return ib('cbDup', ICON.copy, 'Дублировать наклейку') + ib('cbDel', ICON.trash, 'Удалить наклейку (Delete)');
+  if (kind === 'sticker') return `<button class="ab wide" id="cbType">${ICON.textT}<span>Текст</span></button>${sep}` + ib('cbDup', ICON.copy, 'Дублировать наклейку') + ib('cbDel', ICON.trash, 'Удалить наклейку (Delete)');
   return '';
 }
 function bind(kind) {
@@ -93,6 +93,7 @@ function bind(kind) {
     on('cbDel', 'click', () => extraAction(o, k, 'del'));
   } else if (kind === 'sticker') {
     const st = activeSticker();
+    on('cbType', 'click', () => editStickerText(o, st.id));
     on('cbDup', 'click', () => duplicateSticker(st.id)); on('cbDel', 'click', () => deleteSticker(st.id));
   } else {
     const L = activeLayer();

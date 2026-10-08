@@ -92,7 +92,9 @@ function renderStickers() {
     const t = activeSticker(); if (!t) return;
     if (k === 'kind' && t.kind === 'custom' && !t.src) { $('#stShape')?.click(); }
     if (k === 'name') { renderObjects(); refreshTabs(); return; }
-    if (k === 'kind' || k === 'face' || k === 'text') { touchSticker(o, t); renderObjects(); refreshTabs(); return renderStickers(); }
+    // the text: the sticker and its name in the list follow as it is typed; the panel stays (it would lose the focus)
+    if (k === 'text') { touchSticker(o, t); renderObjects(); refreshTabs(); return; }
+    if (k === 'kind' || k === 'face') { touchSticker(o, t); renderObjects(); refreshTabs(); return renderStickers(); }
     touchSticker(o, t);
   });
   $('#stDel').onclick = () => deleteSticker(st.id);
@@ -192,10 +194,15 @@ function renameExtraRow(o, row) {
   for (const t of ['click', 'pointerdown']) inp.addEventListener(t, ev => ev.stopPropagation());
 }
 
+/* types into a sticker's text: the sticker is picked and its text field gets the caret, its text selected */
+function editStickerText(o, id) {
+  selectExtra(o.id, id);
+  requestAnimationFrame(() => { const ta = $('#stickerSec textarea[data-k="text"]'); if (ta) { ta.focus(); ta.select(); } });
+}
 /* a picture put into a sticker (from the library, dropped on it): the shape of a custom one, the background of the others */
 function setStickerImage(o, st, it) {
   if (st.kind === 'custom') { st.src = it.id; st.aspect = it.aspect; st.recolor = {}; } else st.bgSrc = it.id;
   touchSticker(o, st); renderStickers(); commit();
 }
 
-export { addSticker, deleteSticker, duplicateSticker, extraAction, extraIcon, extraActs, extraMenu, renderStickers, setStickerImage };
+export { addSticker, deleteSticker, duplicateSticker, editStickerText, extraAction, extraIcon, extraActs, extraMenu, renderStickers, setStickerImage };

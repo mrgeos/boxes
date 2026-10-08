@@ -14,7 +14,7 @@ import { boundsOf, clickPick, copyData, moveLayers, pasteData, rotateLayers, sca
 import { addFontFile, commit, openProjectFile, redo, undo } from '../core/project.js';
 import { refreshFields } from '../ui/fields.js';
 import { addImageToFace, deleteLayer, duplicateLayer, layerCmd, moveLayer, renderFaceTabs, renderLayerProps, renderLayers } from '../ui/face-panel.js';
-import { deleteSticker, extraAction, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
+import { deleteSticker, editStickerText, extraAction, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
 import { setTab } from '../ui/tabs.js';
 import { isPart } from '../core/extras.js';
 import { handleAt } from './sel-box.js';
@@ -212,6 +212,9 @@ function initInteraction() {
     const h = pick(e.clientX, e.clientY); if (!h) return setView('fit');
     // a double click on a layer of a picked group picks it alone (inside the group)
     const o = state.objects.find(x => x.id === h.objId);
+    // a sticker: its text is typed (in its panel, the sticker changes as it goes)
+    const st = tool() === 'select' && stickerHit(h);
+    if (st) { editStickerText(o, st.id); return; }
     if (o && h.face === sel.face && h.uv && !h.wall && tool() === 'select') {
       const [W, H] = facePx(o, h.face), hl = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H);
       if (hl?.group && selectedIds().length > 1) { pickLayers([hl.id]); return; }
