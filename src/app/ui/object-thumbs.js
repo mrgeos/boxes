@@ -38,7 +38,7 @@ function shoot(o) {
   // the object on its own, unturned at the origin, without the selection frame drawn on it
   const parent = g.parent, pos = g.position.clone(), rotY = g.rotation.y, vis = g.visible, off = [];
   g.traverse(m => { if ((m.isLine || m.isPoints) && m.visible) { m.visible = false; off.push(m); } });
-  s.environment = scene.environment; s.environmentIntensity = scene.environmentIntensity;
+  s.environment = scene.environment; s.environmentIntensity = scene.environmentIntensity; s.environmentRotation.copy(scene.environmentRotation);
   s.add(g); g.position.set(0, 0, 0); g.rotation.y = 0; g.visible = true; g.updateMatrixWorld(true);
   try {
     const box = new THREE.Box3().setFromObject(g), c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;

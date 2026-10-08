@@ -16,6 +16,7 @@ import { syncSelBox } from './sel-box.js';
 import { syncCtxBar } from '../ui/context-bar.js';
 import { renderBrand } from '../ui/brand-panel.js';
 import { layoutPending } from '../core/groups.js';
+import { applyEnv, spinEnv } from './environments.js';
 
 function sceneBounds(onlyActive = false) {
   const b = new THREE.Box3();
@@ -104,7 +105,7 @@ function applyScene() {
   invalidate();
   const s = state.scene;
   keyLight.intensity = s.light; fillLight.intensity = s.light * .18;
-  scene.environmentIntensity = s.env; floor.material.opacity = s.shadow;
+  scene.environmentIntensity = s.env; floor.material.opacity = s.shadow; applyEnv();
   renderer.toneMappingExposure = s.exposure; controls.autoRotate = !!s.autoRotate;
   const st = $('#stage');
   st.classList.toggle('checker', s.bg === 'transparent');
@@ -153,6 +154,7 @@ function initCamera() {
     controls.enablePan = !lockActive();
     if (syncRings()) changed = true;
     if (syncSelBox()) changed = true;
+    if (spinEnv(now)) changed = true;
     if (recording) recording.step(now);
     else if (controls.update()) changed = true;
     for (const rt of RT.values()) for (const k in rt.faces) {

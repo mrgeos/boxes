@@ -10,7 +10,7 @@ import { openMenu } from './menu.js';
 import { select } from '../core/selection.js';
 import { addFontFile, commit, loadProject, openProjectFile, paintProjectName, projectJSON, redo, renameProject, saveFile, undo } from '../core/project.js';
 import { refreshFields } from './fields.js';
-import { renderModel } from './model-panel.js';
+import { paintHdr, renderModel } from './model-panel.js';
 import { renderObjects } from './object-list.js';
 import { pickAsset } from './asset-picker.js';
 import { detachProject } from '../core/cloud.js';
@@ -22,7 +22,7 @@ import { exportPNG, exportVideo, setPngScale } from '../export/image.js';
 import { exportFlat, exportTemplate } from '../net/template.js';
 import { sampleProject } from '../core/sample.js';
 
-function renderAll() { renderLibrary(); renderObjects(); renderModel(); renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); renderStickers(); renderFonts(); refreshFields($('#sceneSec'), state.scene); $('#lightPreset').value = state.scene.preset; ui.editor = ui.net = true; }
+function renderAll() { renderLibrary(); renderObjects(); renderModel(); renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); renderStickers(); renderFonts(); refreshFields($('#sceneSec'), state.scene); $('#lightPreset').value = state.scene.preset; paintHdr(); ui.editor = ui.net = true; }
 /* a new object from a preset: at a point of the floor (mm), or to the right of the scene */
 function addObject(presetId, at = null) {
   const o = newObject(presetId);

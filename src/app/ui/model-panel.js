@@ -1,7 +1,9 @@
 // Левая панель: объекты, форма и размеры, материал, сцена
-import { $, $$, esc } from '../core/util.js';
+import { $, $$, esc, toast } from '../core/util.js';
 import { BOARD, FINISHES, LID_COLORS, LID_TYPES, LIGHTS, PRESETS } from '../core/constants.js';
-import { activeObj, sel, state } from '../core/state.js';
+import { activeObj, assets, sel, state } from '../core/state.js';
+import { addAsset } from '../core/assets.js';
+import { ENVS, setHdrFile } from '../scene/environments.js';
 import { clearLid, ensureFaces, faceKeys, faceMM, setBoard } from '../core/model.js';
 import { pickAsset } from './asset-picker.js';
 import { applyLid, applyObjMaterials, markFace, markObj, rebuildQueue, ui } from '../scene/renderer.js';
@@ -303,12 +305,23 @@ function windowFields(o) {
                         : rangeField('Окно: сдвиг к переду, мм', 'window.off', -400, 400, 1))
     + (o.window.corners !== 'square' ? rangeField('Окно: радиус, мм', 'window.r', 0, 60, .5) : '');
 }
+/* the HDR row shows with «Свой HDR» picked */
+function paintHdr() { const s = state.scene; $('#envHdrRow').hidden = s.envMap !== 'hdr'; $('#envHdrName').textContent = s.envMap === 'hdr' ? (s.envHdr && assets[s.envHdr] ? 'панорама загружена' : 'выберите файл .hdr') : ''; }
 function bindScene() {
   const sec = $('#sceneSec');
-  $('#sceneFields').innerHTML = rangeField('Свет', 'light', 0, 6, .05) + rangeField('Направление, °', 'az', -180, 180, 1) + rangeField('Высота света, °', 'el', 5, 89, 1) + rangeField('Отражения', 'env', 0, 2, .01) + rangeField('Тень', 'shadow', 0, 100, 1, 100) + rangeField('Экспозиция', 'exposure', .4, 1.8, .01);
-  bindFields(sec, () => state.scene, () => applyScene());
+  $('#sceneFields').innerHTML = rangeField('Свет', 'light', 0, 6, .05) + rangeField('Направление, °', 'az', -180, 180, 1) + rangeField('Высота света, °', 'el', 5, 89, 1) + rangeField('Тень', 'shadow', 0, 100, 1, 100) + rangeField('Экспозиция', 'exposure', .4, 1.8, .01);
+  // what metal and gloss reflect: a studio or a HDR of one's own, turned round the model, how strong
+  $('#envMap').innerHTML = Object.entries(ENVS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('');
+  $('#envFields').innerHTML = rangeField('Поворот, °', 'envRot', -180, 180, 1) + rangeField('Сила', 'env', 0, 2, .01);
+  $('#envHdrBtn').onclick = () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.hdr';
+    inp.onchange = async () => { const f = inp.files[0]; if (!f) return; if (await setHdrFile(f, addAsset)) { refreshFields(sec, state.scene); paintHdr(); commit(); } else toast('Это не HDR-панорама (.hdr)'); };
+    inp.click();
+  };
+  bindFields(sec, () => state.scene, k => { applyScene(); if (k === 'envMap') { paintHdr(); if (state.scene.envMap === 'hdr' && !assets[state.scene.envHdr]) $('#envHdrBtn').click(); } });
+  paintHdr();
   $('#lightPreset').value = state.scene.preset;
-  $('#lightPreset').onchange = e => { Object.assign(state.scene, LIGHTS[e.target.value], { preset: e.target.value }); refreshFields(sec, state.scene); applyScene(); commit(); };
+  $('#lightPreset').onchange = e => { Object.assign(state.scene, LIGHTS[e.target.value], { preset: e.target.value }); refreshFields(sec, state.scene); paintHdr(); applyScene(); commit(); };
 }
 
-export { bindScene, modelInput, renderModel };
+export { bindScene, modelInput, paintHdr, renderModel };

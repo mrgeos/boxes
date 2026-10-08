@@ -1,6 +1,6 @@
 // Правая панель: грани, слои и их свойства
 import { $, $$, esc, fmt, toast } from '../core/util.js';
-import { BLENDS, EFFECTS, ICON, SWATCHES } from '../core/constants.js';
+import { BLENDS, EFFECTS, ICON, SWATCHES, UV_THICK } from '../core/constants.js';
 import { activeFaceData, activeLayer, activeObj, assets, sel, state } from '../core/state.js';
 import { faceKeys, faceLabel, faceMM, facePx, isClearFace, newImage } from '../core/model.js';
 import { getImg, importImageFile } from '../core/assets.js';
@@ -311,6 +311,7 @@ function renderLayerProps() {
   html += `
     ${materialsHTML(L, effOpts)}
     ${cropHTML(o, L)}`;
+  if (L.effect === 'spot-uv') L.uv ??= 'normal';
   sec.innerHTML = html;
   bindFields(sec, activeLayer, (k) => {
     const L = activeLayer();
@@ -319,7 +320,7 @@ function renderLayerProps() {
     if (k === 'font') setLink(L, 'font', L.font.startsWith('@') ? L.font.slice(1) : null);
     if (k === 'font' || k === 'weight' || k === 'italic') ensureFont(L);
     if (k === 'text' || k === 'effect') ui.layers = true;
-    if (k === 'kind' || k === 'tile') renderLayerProps();
+    if (k === 'kind' || k === 'tile' || k === 'effect') renderLayerProps();
     if (k === 'w' && L.type === 'image') ui.layers = true;
     markFace(activeObj(), sel.face);
   });
@@ -356,6 +357,7 @@ function materialsHTML(L, effOpts) {
     ${rangeField('Непрозрачность', 'opacity', 0, 100, 1, 100)}
     ${colors}
     <div class="field wide"><span class="fl">Отделка</span><select data-k="effect">${effOpts}</select></div>
+    ${L.effect === 'spot-uv' ? `<div class="field wide"><span class="fl">Толщина лака</span><select data-k="uv">${Object.entries(UV_THICK).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select></div>` : ''}
     <div class="field wide"><span class="fl">Наложение</span><select data-k="blend">${Object.entries(BLENDS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div></div>`;
 }
 /* ---------- the background row and its settings ---------- */

@@ -1,6 +1,6 @@
 // Печать на гранях: слои, текст, отделка, карты материалов
 import { DEG, clamp, luminance } from '../core/util.js';
-import { FINISHES, FOILS, PET_PRINT, isFoil } from '../core/constants.js';
+import { FINISHES, FOIL_METAL, PET_PRINT, UV_THICK, isFoil } from '../core/constants.js';
 import { faceKeys, faceMM, isClearFace, loopAxis, netLayout, outerKeys } from '../core/model.js';
 import { getImg } from '../core/assets.js';
 import { artImg } from '../core/vector.js';
@@ -110,15 +110,17 @@ function cropImg(im, c) {
 const tmp = document.createElement('canvas');
  const tctx = tmp.getContext('2d');
 const tileC = document.createElement('canvas'), clipC = document.createElement('canvas');
+/* the colour of a foil: its metal, a little uneven (the shine and the dark come from what it reflects, in 3D) */
 function foilPaint(ctx, effect, W, H) {
-  if (effect === 'foil-holo') {
-    const g = ctx.createLinearGradient(0, 0, W, H);
-    ['#f9c5e4', '#c3e8ff', '#d9ffd2', '#fff6c2', '#e6ccff', '#bdf3ff'].forEach((c, i, a) => g.addColorStop(i / (a.length - 1), c));
-    return g;
-  }
-  const [a, b, c] = FOILS[effect];
+  const [a, b] = FOIL_METAL[effect] || FOIL_METAL['foil-gold'];
   const g = ctx.createLinearGradient(0, 0, W * .6, H);
-  g.addColorStop(0, a); g.addColorStop(.45, b); g.addColorStop(.7, a); g.addColorStop(1, c);
+  g.addColorStop(0, a); g.addColorStop(.5, b); g.addColorStop(1, a);
+  return g;
+}
+/* a holo foil's rainbow: the film's thickness (green) running in bands across the face, its strength (red) full */
+function holoPaint(ctx, W, H) {
+  const g = ctx.createLinearGradient(0, 0, W, H * .7);
+  for (let i = 0; i <= 12; i++) g.addColorStop(i / 12, `rgb(255,${Math.round(127 + 120 * Math.sin(i * 1.9))},0)`);
   return g;
 }
 /* draws a layer into a face-sized context; `paint` overrides its colours (silhouette), `op` its blending */
@@ -343,14 +345,15 @@ let skipStickers = false;
 function updateFaceMaterial(o, k, f, fxl, fin, ops, draw) {
   const m = f.mat;
   const needFx = ops.length > 0 || fxl.some(({ L }) => isFoil(L.effect) || L.effect === 'spot-uv');
-  const needBump = ops.length > 0 || fxl.some(({ L }) => isFoil(L.effect) || L.effect === 'emboss' || L.effect === 'deboss');
+  const holo = fxl.some(({ L }) => L.effect === 'foil-holo'), uv = fxl.some(({ L }) => L.effect === 'spot-uv');
+  const needBump = ops.length > 0 || fxl.some(({ L }) => isFoil(L.effect) || L.effect === 'emboss' || L.effect === 'deboss' || L.effect === 'spot-uv');
   const opsDraw = (x, ppx, color) => { for (const { st, M } of ops) { x.setTransform(M[0] * ppx, M[1] * ppx, M[2] * ppx, M[3] * ppx, M[4] * ppx, M[5] * ppx); stickerMask(x, st, color(st)); } x.setTransform(1, 0, 0, 1, 0, 0); };
   if (needFx) {
     const c = aux(f, 'fx'), x = f.fxCtx, W = c.width, H = c.height;
     x.globalAlpha = 1; x.fillStyle = `rgb(0,${Math.round(fin.r * 255)},${Math.round(fin.m * 255)})`; x.fillRect(0, 0, W, H);
     for (const it of fxl) {
       const e = it.L.effect;
-      if (isFoil(e)) draw(x, it, W, H, `rgb(0,${e === 'foil-holo' ? 30 : 58},255)`, 1);
+      if (isFoil(e)) draw(x, it, W, H, `rgb(0,${e === 'foil-holo' ? 30 : 46},255)`, 1);
       else if (e === 'spot-uv') draw(x, it, W, H, `rgb(0,10,${Math.round(fin.m * 255)})`, 1);
     }
     opsDraw(x, W / faceMM(o, k)[0], st => { const [r, mt] = STICKER_FX[st.finish] || STICKER_FX.gloss; return `rgb(0,${Math.round(r * 255)},${Math.round(mt * 255)})`; });
@@ -366,12 +369,15 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops, draw) {
       x.globalCompositeOperation = 'overlay'; x.globalAlpha = faceGrain(o, k) * .6; x.fillStyle = p; x.fillRect(0, 0, W, H);
       x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1;
     }
-    x.filter = `blur(${Math.max(.6, f.ppm / 2 * .35)}px)`;
+    const blur = Math.max(.6, f.ppm / 2 * .35);
     for (const it of fxl) {
       const e = it.L.effect;
+      x.filter = `blur(${blur}px)`;
       if (e === 'emboss') draw(x, it, W, H, '#ffffff', 1);
       else if (e === 'deboss') draw(x, it, W, H, '#000000', 1);
       else if (isFoil(e)) draw(x, it, W, H, '#5c5c5c', 1);
+      // the varnish stands up from the print: its edge catches the light even off its highlight
+      else if (e === 'spot-uv') { const u = UV_THICK[it.L.uv] || UV_THICK.normal; x.filter = `blur(${blur * u.blur}px)`; draw(x, it, W, H, u.bump, 1); }
     }
     opsDraw(x, W / faceMM(o, k)[0], () => '#a6a6a6');   // a sticker stands a little proud of the board
     x.filter = 'none';
@@ -379,12 +385,27 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops, draw) {
     m.bumpMap = f.bumpTex; m.bumpScale = 4;
   } else if (faceGrain(o, k) > 0 && !f.clear) { m.bumpMap = f.grain; m.bumpScale = faceGrain(o, k) * 1.2; }
   else m.bumpMap = null;
-  m.clearcoat = fin.cc; m.clearcoatRoughness = fin.ccr;
+  // spot varnish is a glossy coat of its own over the print (red: coat, green: its roughness), on any board
+  if (uv) {
+    const c = aux(f, 'coat'), x = f.coatCtx, W = c.width, H = c.height;
+    x.globalAlpha = 1; x.filter = 'none'; x.fillStyle = `rgb(${Math.round(fin.cc * 255)},${Math.round(fin.ccr * 255)},0)`; x.fillRect(0, 0, W, H);
+    for (const it of fxl) if (it.L.effect === 'spot-uv') draw(x, it, W, H, 'rgb(255,6,0)', 1);
+    f.coatTex.needsUpdate = true;
+    m.clearcoatMap = m.clearcoatRoughnessMap = f.coatTex; m.clearcoat = 1; m.clearcoatRoughness = 1;
+  } else { m.clearcoatMap = m.clearcoatRoughnessMap = null; m.clearcoat = fin.cc; m.clearcoatRoughness = fin.ccr; }
+  // holo foil: a thin film over the metal, its rainbow shifting with the angle
+  if (holo) {
+    const c = aux(f, 'iri'), x = f.iriCtx, W = c.width, H = c.height;
+    x.globalAlpha = 1; x.filter = 'none'; x.fillStyle = '#000'; x.fillRect(0, 0, W, H);
+    for (const it of fxl) if (it.L.effect === 'foil-holo') draw(x, it, W, H, holoPaint(x, W, H), 1);
+    f.iriTex.needsUpdate = true;
+    m.iridescenceMap = m.iridescenceThicknessMap = f.iriTex; m.iridescence = 1; m.iridescenceIOR = 1.8; m.iridescenceThicknessRange = [250, 850];
+  } else { m.iridescenceMap = m.iridescenceThicknessMap = null; m.iridescence = 0; }
   m.sheen = fin.sheen || 0; m.sheenRoughness = .8; m.sheenColor.set(0xffffff);
   // bag film keeps depth so the flap and stickers on it always cover the side beneath
   m.transparent = !!f.clear; m.depthWrite = !f.clear || o.type === 'bag';
   m.alphaTest = f.win ? .5 : 0;   // a window cut in a paper bag
-  const sig = [!!m.roughnessMap, !!m.bumpMap, fin.cc > 0, !!fin.sheen, !!f.clear, !!f.win].join();
+  const sig = [!!m.roughnessMap, !!m.bumpMap, m.clearcoat > 0, !!m.clearcoatMap, holo, !!fin.sheen, !!f.clear, !!f.win].join();
   if (sig !== f.sig) { f.sig = sig; m.needsUpdate = true; }
 }
 function setSkipStickers(v) { skipStickers = v; }

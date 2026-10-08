@@ -66,7 +66,7 @@ function thumbOf(p) {
     for (const k of faceKeys(o)) renderFace(o, k);
   } finally { Math.random = rnd; }
   const rt = RT.get(o.id), { s, cam, cv } = stage;
-  s.environment = scene.environment; s.environmentIntensity = scene.environmentIntensity;
+  s.environment = scene.environment; s.environmentIntensity = scene.environmentIntensity; s.environmentRotation.copy(scene.environmentRotation);
   s.add(rt.group); rt.group.position.set(0, 0, 0); rt.group.rotation.set(0, 0, 0); rt.group.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(rt.group), c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
   const dir = new THREE.Vector3(.78, .55, 1).normalize(), dist = r / Math.sin(cam.fov / 2 * Math.PI / 180) * 1.02;

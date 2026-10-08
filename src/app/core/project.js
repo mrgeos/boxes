@@ -56,6 +56,7 @@ function usedAssets() {
     for (const r of o.ribbons || []) if (r.src) used.add(r.src);
   }
   for (const f of state.fonts) used.add(f.asset);
+  if (state.scene.envMap === 'hdr' && state.scene.envHdr) used.add(state.scene.envHdr);
   // the kit's logos and patterns go with the project even when no face shows them
   for (const l of [...(state.brand?.logos || []), ...(state.brand?.patterns || [])]) used.add(l.src);
   return used;

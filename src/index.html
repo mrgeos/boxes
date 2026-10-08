@@ -83,6 +83,10 @@
           <option value="flat">Ровный каталожный</option>
         </select></div>
       <div id="sceneFields"></div>
+      <div class="field wide"><span class="fl">Отражения</span><select data-k="envMap" id="envMap" aria-label="Что отражается в фольге и глянце"></select></div>
+      <div class="row" id="envHdrRow"><button class="btn sm" id="envHdrBtn">Загрузить HDR…</button><span class="hint grow" id="envHdrName"></span></div>
+      <div id="envFields"></div>
+      <label class="check"><input type="checkbox" data-k="envSpin"> Блики гуляют (отражения медленно вращаются)</label>
       <div class="field wide"><span class="fl">Фон</span>
         <select data-k="bg" id="bgMode"><option value="gradient">Градиент</option><option value="solid">Сплошной</option><option value="transparent">Прозрачный</option></select></div>
       <div class="row"><span class="hint grow">Цвета фона</span><input type="color" data-k="bg1" aria-label="Цвет фона 1"><input type="color" data-k="bg2" aria-label="Цвет фона 2"></div>

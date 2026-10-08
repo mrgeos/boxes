@@ -66,6 +66,11 @@ const FOILS = {
   'foil-gold': ['#fbe7a1', '#d6a53c', '#8f6516'], 'foil-silver': ['#f7f8fa', '#bfc4cc', '#7d838d'],
   'foil-copper': ['#f6c29c', '#bf6f3f', '#7c3e1b'], 'foil-holo': null,
 };
+/* the metal of a foil (its colour seen straight on; what it shines with comes from what it reflects); holo is silver
+   with a rainbow that changes with the angle */
+const FOIL_METAL = { 'foil-gold': ['#f6dc8e', '#e7c262'], 'foil-silver': ['#f3f5f8', '#dde1e7'], 'foil-copper': ['#f4b48e', '#dc8f63'], 'foil-holo': ['#eef1f5', '#dfe4ea'] };
+/* spot UV varnish: how high it stands (bump grey) and how soft its edge is (blur, × the usual) */
+const UV_THICK = { normal: { label: 'Обычный', bump: '#b8b8b8', blur: 1 }, thin: { label: 'Тонкий', bump: '#9c9c9c', blur: .7 }, thick: { label: 'Толстый (3D-лак)', bump: '#ffffff', blur: 2.6 } };
 const isFoil = e => e && e.startsWith('foil');
 const BLENDS = { 'source-over': 'Обычное', multiply: 'Умножение', screen: 'Осветление', overlay: 'Перекрытие' };
 const PRESETS = [
@@ -129,10 +134,10 @@ const BOARD = [['#f4f1e9', 'Белый'], ['#c39460', 'Крафт'], ['#2e3530',
 const WHITE_INSIDE = '#f8f6ef';
 const SWATCHES = ['#ffffff', '#f3ead6', '#1c1b19', '#20392b', '#0a7aa1', '#b8461b', '#e6007e', '#ffe500'];
 const LIGHTS = {
-  studio: { light: 1.6, az: 38, el: 52, env: .55, shadow: .38, exposure: .85 },
-  day:    { light: 2.2, az: -30, el: 62, env: .42, shadow: .5, exposure: .88 },
-  drama:  { light: 3.0, az: 70, el: 24, env: .14, shadow: .62, exposure: .85 },
-  flat:   { light: .7, az: 20, el: 70, env: .95, shadow: .18, exposure: .9 },
+  studio: { light: 1.6, az: 38, el: 52, env: .55, shadow: .38, exposure: .85, envMap: 'softbox' },
+  day:    { light: 2.2, az: -30, el: 62, env: .42, shadow: .5, exposure: .88, envMap: 'bright' },
+  drama:  { light: 3.0, az: 70, el: 24, env: .14, shadow: .62, exposure: .85, envMap: 'contrast' },
+  flat:   { light: .7, az: 20, el: 70, env: .95, shadow: .18, exposure: .9, envMap: 'bright' },
 };
 
-export { BLENDS, BOARD, EFFECTS, FACE_LABEL, FINISHES, FOILS, FONTS, ICON, LID_COLORS, LID_TYPES, LID_WALLS, LIGHTS, PET_PRINT, PRESETS, SWATCHES, WHITE_INSIDE, isFoil };
+export { BLENDS, BOARD, EFFECTS, FACE_LABEL, FINISHES, FOIL_METAL, FOILS, UV_THICK, FONTS, ICON, LID_COLORS, LID_TYPES, LID_WALLS, LIGHTS, PET_PRINT, PRESETS, SWATCHES, WHITE_INSIDE, isFoil };

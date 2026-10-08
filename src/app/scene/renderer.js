@@ -1,7 +1,6 @@
 // Three.js: рендерер, сцена, свет, пол, фактура бумаги; объекты сцены и их материалы
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { $, DEG, S, clamp } from '../core/util.js';
 import { FINISHES, LID_COLORS, WHITE_INSIDE } from '../core/constants.js';
 import { sel } from '../core/state.js';
@@ -36,7 +35,6 @@ const cvs = renderer.domElement;
 const maxAniso = renderer.capabilities.getMaxAnisotropy();
 const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 const world = new THREE.Group();
  scene.add(world);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 400);
@@ -106,7 +104,7 @@ function ensureFaceRT(o, k) {
     f.tex = new THREE.CanvasTexture(f.canvas);
     f.tex.colorSpace = THREE.SRGBColorSpace; f.tex.anisotropy = maxAniso;
     f.mat.map = f.tex;
-    for (const n of ['fx', 'bump']) if (f[n]) { f[n + 'Tex'].dispose(); f[n] = null; }
+    for (const n of ['fx', 'bump', 'coat', 'iri']) if (f[n]) { f[n + 'Tex'].dispose(); f[n] = null; }
     f.mat.needsUpdate = true;
   }
   const [mw, mh] = faceMM(o, k);
@@ -167,7 +165,7 @@ function disposeObject(id) {
   disposeRibbons(rt);
   rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
   world.remove(rt.group);
-  for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
+  for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.coatTex?.dispose(); f.iriTex?.dispose(); f.grain?.dispose(); }
   for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
   rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); rt.cupLidMat.dispose(); rt.holeMat.dispose();
   rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); rt.baseMat?.dispose(); rt.trayMat?.dispose(); rt.cakeMats?.forEach(m => m.dispose()); rt.sleeveIn?.dispose(); rt.sleeveEdge?.dispose(); RT.delete(id);
@@ -273,4 +271,4 @@ function applyObjMaterials(o) {
   rt.innerMat.bumpScale = o.grain * 1.2; rt.innerMat.needsUpdate = true;
 }
 
-export { RT, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, rebuildQueue, renderer, scene, ui, viewport, world };
+export { RT, pmrem, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, rebuildQueue, renderer, scene, ui, viewport, world };
