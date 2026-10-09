@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { S, clamp, toast } from './util.js';
 import { assets, state } from './state.js';
-import { addAsset } from './assets.js';
+import { keepModel, myModelRow, useMyModel } from './model-library.js';
 import { FOOD } from './food-library.js';
 import { rebuildQueue } from '../scene/renderer.js';
 import { invalidate } from '../scene/camera.js';
@@ -42,7 +42,13 @@ async function assetGLB(id) {
   if (url.startsWith('data:')) return b64ToBuf(url.slice(url.indexOf(',') + 1));
   return (await fetch(url)).arrayBuffer();
 }
-const keyOf = ref => ref?.lib ? 'lib:' + ref.lib : ref?.asset ? 'asset:' + ref.asset : '';
+const keyOf = ref => ref?.lib ? 'lib:' + ref.lib : ref?.my ? 'my:' + ref.my : ref?.asset ? 'asset:' + ref.asset : '';
+/* a model of «Мои модели»: from the project when it carries it, else from the browser's library */
+async function myGLB(ref) {
+  if (ref.asset && assets[ref.asset]) return assetGLB(ref.asset);
+  const row = await myModelRow(ref.my); if (!row) throw new Error('Модели нет в библиотеке этого браузера');
+  return b64ToBuf(row.url.slice(row.url.indexOf(',') + 1));
+}
 /* loaded models: key → { status, group, size: [x, y, z] in its own units } */
 const cache = new Map();
 /* the model ready to place, or null (then it is being loaded, and its objects are built again when it is) */
@@ -52,7 +58,7 @@ function modelOf(ref) {
   if (c) return c.status === 'ready' ? c : null;
   const entry = { status: 'loading' }; cache.set(k, entry);
   (async () => {
-    const [L, glb] = await Promise.all([loader(), ref.lib ? foodGLB(ref.lib) : assetGLB(ref.asset)]);
+    const [L, glb] = await Promise.all([loader(), ref.lib ? foodGLB(ref.lib) : ref.my ? myGLB(ref) : assetGLB(ref.asset)]);
     const g = await L.parse(glb);
     // its meshes with their placement in the model (a file may nest them in nodes)
     g.updateMatrixWorld(true);
@@ -116,9 +122,11 @@ const QUALITY = { light: { label: 'Лёгкая (слабые компьютер
 async function importModel(files, quality = 'normal') {
   const Q = QUALITY[quality] || QUALITY.normal, L = await loader();
   const r = await L.importFiles(files, { maxTris: Q.tris, maxTex: Q.tex });
-  const b64 = bufToB64(r.glb), id = addAsset('data:model/gltf-binary;base64,' + b64);
-  const longest = Math.max(...r.size), mm = longest * 1000;
-  return { ref: { asset: id }, name: r.name, tris: r.tris, before: r.before, kb: Math.round(r.glb.byteLength / 1024), size: mm >= 20 && mm <= 600 ? Math.round(mm) : 200 };   // a size that does not look like a thing on a table: a guess
+  const url = 'data:model/gltf-binary;base64,' + bufToB64(r.glb), longest = Math.max(...r.size), mm = longest * 1000;
+  const size = mm >= 20 && mm <= 600 ? Math.round(mm) : 200, kb = Math.round(r.glb.byteLength / 1024);   // a size that does not look like a thing on a table: a guess
+  // kept in «Мои модели» for other projects too; in this project as an asset
+  const card = await keepModel(url, { name: r.name, size, tris: r.tris, kb }), { ref } = await useMyModel(card.hash);
+  return { ref, name: r.name, tris: r.tris, before: r.before, kb, size };   // a size that does not look like a thing on a table: a guess
 }
 function bufToB64(buf) { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
 const isModelFile = f => /\.(glb|gltf|obj|fbx|usdz|mtl|bin)$/i.test(f.name || '');

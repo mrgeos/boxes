@@ -9,6 +9,7 @@ import { sel, state } from './core/state.js';
 import { faceMM } from './core/model.js';
 import { sleeveDims, sleeveSheet } from './carriers/sleeve.js';
 import { libLoadBrowser, library } from './core/library.js';
+import { loadMyModels } from './core/model-library.js';
 import { markAllText } from './core/fonts.js';
 import { RT, camera, controls, markObj, rebuildQueue, renderer, scene } from './scene/renderer.js';
 import { placementsFor } from './stickers/placement.js';
@@ -50,7 +51,7 @@ let booted = false;
 try { const saved = localStorage.getItem(LS_KEY); if (saved) { loadProject(JSON.parse(saved)); booted = true; } } catch {}
 if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
-libLoadBrowser();
+libLoadBrowser(); loadMyModels();
 initProjects();
 window.__boxStudio = { library, state, sel, select, setView, faceMM,
   sleeveHoles: o => { const D = sleeveDims(o); return sleeveSheet(D).holes.map(h => h.reduce((a, p) => a + p[1], 0) / h.length / D.P); }, sleeveFold: o => { const D = sleeveDims(o); return D.s0 / D.P; }, RT, camera, THREE, renderer, scene, applyScene, markObj, rebuildQueue, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };

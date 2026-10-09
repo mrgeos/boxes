@@ -13,6 +13,7 @@ import { RT, buildObject, disposeObject, ui } from '../scene/renderer.js';
 import { activeSticker } from '../stickers/placement.js';
 import { activeFill, activeRibbon } from './extras.js';
 import { modelRefs } from './models3d.js';
+import { adoptModels, loadMyModelsDone } from './model-library.js';
 import { applyScene, setLastView, setView } from '../scene/camera.js';
 import { layoutAll, normalizeTree } from './groups.js';
 import { renderFonts, renderLayerProps } from '../ui/face-panel.js';
@@ -101,6 +102,8 @@ function loadProjectNow(d, { resetHistory = true, name = null } = {}) {
   state.objects = d.objects; state.groups = d.groups || []; state.tree = d.tree || []; state.scene = { ...state.scene, ...(d.scene || {}) }; state.fonts = d.fonts || [];
   if ((d.scene?.v || 1) < 2) Object.assign(state.scene, LIGHTS[state.scene.preset] || LIGHTS.studio, { v: 2 });
   state.fonts.forEach(registerFont);
+  // models the project brought join «Мои модели» of this browser
+  loadMyModelsDone().then(() => adoptModels(state.objects.flatMap(modelRefs)));
   for (const o of state.objects) { ensureFaces(o); buildObject(o); }
   layoutAll();
   sel.obj = state.objects[0]?.id ?? null; sel.face = null; sel.layer = null; sel.group = null; sel.multi = sel.obj ? [sel.obj] : [];

@@ -3,6 +3,7 @@ import { $, esc, toast } from '../core/util.js';
 import { activeFill, deleteExtra } from '../core/extras.js';
 import { FILL_LAYOUT } from '../carriers/fill.js';
 import { FOOD, importModel, modelName } from '../core/models3d.js';
+import { myModels, useMyModel } from '../core/model-library.js';
 import { rebuildQueue } from '../scene/renderer.js';
 import { commit } from '../core/project.js';
 import { selectObjectItself } from '../core/selection.js';
@@ -15,11 +16,14 @@ import { modelQuality } from './wiring.js';
 /* a model picker shared by the filling and the cake: the food library and the user's own file */
 function modelOptions(ref, extra = '') {
   const lib = ref?.lib;
-  return extra + FOOD.map(x => `<option value="${x.id}" ${x.id === lib ? 'selected' : ''}>${esc(x.name)}</option>`).join('')
-    + (ref?.asset ? `<option value="" selected>${esc(modelName(ref))} (свой файл)</option>` : '') + '<option value="@file">Свой файл…</option>';
+  const my = ref?.my;
+  return extra + (myModels.length ? `<optgroup label="Мои модели">${myModels.map(c => `<option value="@my:${c.hash}" ${c.hash === my ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</optgroup>` : '')
+    + `<optgroup label="Библиотека еды">${FOOD.map(x => `<option value="${x.id}" ${x.id === lib ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</optgroup>`
+    + (ref?.asset && !myModels.some(c => c.hash === my) ? `<option value="" selected>${esc(modelName(ref))} (свой файл)</option>` : '') + '<option value="@file">Загрузить файл…</option>';
 }
 /* what the picker chose: a library model, or a file brought in (then cb gets its ref) */
 function pickModel(value, cb) {
+  if (value.startsWith('@my:')) { useMyModel(value.slice(4)).then(r => cb(r.ref), e => toast(e.message)); return; }
   if (value !== '@file') { if (value) cb({ lib: value }); return; }
   const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = '.glb,.gltf,.bin,.obj,.mtl,.fbx,.usdz,.jpg,.jpeg,.png,.webp';
   inp.onchange = async () => {
