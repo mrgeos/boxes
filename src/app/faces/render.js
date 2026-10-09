@@ -34,6 +34,8 @@ function drawNetPanel(c, src, p, x, y, w, h, crop = null, inv = false) {
     return;
   }
   c.save();
+  // a panel at any angle (a pyramid's side): its picture fw × fh turned by ang about its middle cx, cy
+  if (p.ang != null && !inv) { const k = w / p.w; c.translate(x + (p.cx - p.x) * k, y + (p.cy - p.y) * k); c.rotate(p.ang); c.drawImage(src, ...(crop || []), -p.fw * k / 2, -p.fh * k / 2, p.fw * k, p.fh * k); c.restore(); return; }
   // quarter turns (q) of a panel lying on the sheet; inv cuts a sheet region back into the face
   const q = p.q ?? (p.rot ? 2 : 0);
   if (q) { c.translate(x + w / 2, y + h / 2); c.rotate((inv ? -q : q) * Math.PI / 2); if (q % 2) [w, h] = [h, w]; x = -w / 2; y = -h / 2; }
@@ -271,7 +273,7 @@ function renderFace(o, k) {
     const im = getImg(o.dieline), net = netLayout(o), p = net.panels.find(p => p.key === k);
     if (im && p?.fan) ctx.drawImage(fanToRect(p.fan, im, W, H, o.dieline), 0, 0);
     // a face on several panels (halves on two flaps): each part of the sheet into its part of the face
-    else if (im && p) for (const q of net.panels.filter(q => q.key === k)) {
+    else if (im && p) for (const q of net.panels.filter(q => q.key === k && q.ang == null)) {
       const c = q.crop || [0, 0, 1, 1];
       drawNetPanel(ctx, im, q, c[0] * W, c[1] * H, (c[2] - c[0]) * W, (c[3] - c[1]) * H, [q.x / net.W * im.naturalWidth, q.y / net.H * im.naturalHeight, q.w / net.W * im.naturalWidth, q.h / net.H * im.naturalHeight], true);
     }

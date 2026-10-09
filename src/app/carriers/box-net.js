@@ -3,6 +3,9 @@ import { clamp } from '../core/util.js';
 import { doubleWall, faceKeys, faceMM } from '../core/model.js';
 import { mailerNet } from './mailer.js';
 import { rscNet } from './rsc.js';
+import { bookNet } from './book.js';
+import { casketNet, drawerNet } from './rigid.js';
+import { gableNet, hexNet, pillowNet, pyramidNet } from './shapes.js';
 
 /* The base is one blank laid out as a cross: the bottom in the middle, the four walls folded up from its
    edges (front above it, back below, the sides left and right), the inner strips of double walls beyond them.
@@ -21,6 +24,13 @@ function boxNet(o) {
   const { w, h, d } = o.dims, keys = faceKeys(o), lt = o.lidType || 'flat', t = clamp(o.thickness, .3, 10);
   if (lt === 'f0427') return mailerNet(o);
   if (lt === 'f0201') return rscNet(o);
+  if (lt === 'book') return bookNet(o);
+  if (lt === 'casket') return casketNet(o);
+  if (lt === 'drawer') return drawerNet(o);
+  if (lt === 'pillow') return pillowNet(o);
+  if (lt === 'gable') return gableNet(o);
+  if (lt === 'pyramid') return pyramidNet(o);
+  if (lt === 'hexagon') return hexNet(o);
   const panels = [], tabs = [];
   const lidOnBack = keys.includes('top') && lt !== 'telescope';
   const FD = !lidOnBack && doubleWall(o) ? Math.max(1, h - t) : 0;
@@ -82,7 +92,13 @@ function dieLines(pieces) {
   const joined = (A, B) => (!A.joins || A.joins.includes(B.key)) && (!B.joins || B.joins.includes(A.key));
   pieces.forEach((A, i) => edges[i].forEach(([a, b]) => {
     const hor = Math.abs(a[1] - b[1]) < eps, ver = Math.abs(a[0] - b[0]) < eps;
-    if (!hor && !ver) { cuts.push([...a, ...b]); return; }
+    if (!hor && !ver) {
+      // a slanted edge: a crease where another piece has the same edge and is joined to this one
+      const same = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < eps * 10;
+      const j = pieces.findIndex((B, k) => k !== i && edges[k].some(([p, q]) => (same(p, a) && same(q, b)) || (same(p, b) && same(q, a))));
+      if (j < 0) cuts.push([...a, ...b]); else if (i < j) (joined(A, pieces[j]) ? creases : cuts).push([...a, ...b]);
+      return;
+    }
     const ax = hor ? 0 : 1, c = a[1 - ax], lo = Math.min(a[ax], b[ax]), hi = Math.max(a[ax], b[ax]), shared = [];
     pieces.forEach((B, j) => {
       if (j === i) return;

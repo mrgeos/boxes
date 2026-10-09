@@ -33,6 +33,7 @@ const ICON = {
   dieline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8v5h5v8h-5v5H8v-5H3V8h5z"/></svg>',
   sticker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-8-8h8v8Z"/><path d="M20 12h-5a3 3 0 0 1-3-3V4"/></svg>',
   row: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="8" width="5" height="8" rx="1"/><rect x="9.5" y="8" width="5" height="8" rx="1"/><rect x="17" y="8" width="5" height="8" rx="1"/></svg>',
+  insertX: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="1"/><circle cx="8" cy="12" r="2.2"/><circle cx="16" cy="12" r="2.2"/></svg>',
   tissueX: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h18v9H3z"/><path d="M5 10l2-6 3 4 2-5 2 5 3-4 2 6"/></svg>',
   ribbonX: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9c-2-4-7-5-7-1.5S10 11 12 9Zm0 0c2-4 7-5 7-1.5S14 11 12 9Z"/><path d="m11 10-3 9 2.5-1.5L12 20m1-10 3 9-2.5-1.5"/></svg>',
   sleeveX: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="12" rx="1"/><path d="M9 7v12M15 7v12"/></svg>',
@@ -84,6 +85,14 @@ const PRESETS = [
   { id: 'mailer', label: 'Мейлер FEFCO 0427', type: 'box', dims: { w: 260, h: 80, d: 170 }, finish: 'matte', edge: '#cdb08a', thick: 1.5, flute: 'E', lid: { type: 'f0427', flapH: 45 } },
   { id: 'lidbase', label: 'Крышка-дно', type: 'box', dims: { w: 220, h: 90, d: 160 }, finish: 'soft', edge: '#e2ddd4', thick: 1.5, lid: { type: 'telescope', lidH: 45 } },
   { id: 'shipping', label: 'Гофрокороб FEFCO 0201', type: 'box', dims: { w: 400, h: 300, d: 300 }, finish: 'kraft', edge: '#a87f50', thick: 4, flute: 'C', lid: { type: 'f0201' }, tape: 'clear' },
+  { id: 'bookMagnet', label: 'Коробка-книжка на магните', type: 'box', dims: { w: 220, h: 70, d: 160 }, finish: 'soft', edge: '#1f2a36', thick: 2, board: '#1f2a36', whiteInside: false, lid: { type: 'book' } },
+  { id: 'bookMagnetWhite', label: 'Коробка-книжка белая 300×100×220', type: 'box', dims: { w: 300, h: 100, d: 220 }, finish: 'matte', edge: '#f4f1e9', thick: 2, board: '#f4f1e9', lid: { type: 'book' } },
+  { id: 'casket', label: 'Шкатулка с бархатом 160×120×60', type: 'box', dims: { w: 160, h: 60, d: 120 }, finish: 'soft', edge: '#2a2a2e', thick: 2, board: '#2a2a2e', lining: '#5b1a2a', lid: { type: 'casket', lidH: 22 } },
+  { id: 'drawerBox', label: 'Коробка с выдвижным ящиком 200×140×60', type: 'box', dims: { w: 200, h: 60, d: 140 }, finish: 'matte', edge: '#f4f1e9', thick: 1.5, board: '#f4f1e9', pull: 'ribbon', lid: { type: 'drawer' } },
+  { id: 'pillow', label: 'Коробка-подушка 100×180×35', type: 'box', dims: { w: 100, h: 35, d: 180 }, finish: 'matte', edge: '#e2ddd4', thick: .4, board: '#f2a9b4', lid: { type: 'pillow' } },
+  { id: 'gable', label: 'Коробка-домик с ручкой 160×100×100', type: 'box', dims: { w: 160, h: 100, d: 100 }, finish: 'kraft', edge: '#a87f50', thick: .6, board: '#c39460', grain: .45, lid: { type: 'gable' } },
+  { id: 'pyramid', label: 'Пирамида 100×100×120', type: 'box', dims: { w: 100, h: 120, d: 100 }, finish: 'soft', edge: '#e2ddd4', thick: .5, board: '#879c79', lid: { type: 'pyramid' } },
+  { id: 'hexagon', label: 'Шестигранная коробка с крышкой 140×90', type: 'box', dims: { w: 140, h: 90, d: 121 }, finish: 'matte', edge: '#e2ddd4', thick: 1, board: '#1f3b57', lid: { type: 'hexagon', lidH: 30 } },
   { id: 'product', label: 'Коробка для продукта', type: 'box', dims: { w: 70, h: 180, d: 70 }, finish: 'gloss', edge: '#ece8e0', thick: .6 },
   { id: 'cake', label: 'Коробка для торта, белая', type: 'box', dims: { w: 220, h: 45, d: 220 }, finish: 'matte', edge: '#ece8e0', thick: .8, wallT: 6, board: '#f7f5f0', lid: { type: 'telescope', lidH: 120, mat: 'clear', fit: 'inside' } },
   { id: 'cakeKraft', label: 'Коробка для торта, крафт', type: 'box', dims: { w: 220, h: 45, d: 220 }, finish: 'matte', edge: '#b88d5c', thick: .8, wallT: 6, board: '#c39460', grain: .45, whiteInside: false, lid: { type: 'telescope', lidH: 120, mat: 'clear', fit: 'inside' } },
@@ -135,13 +144,20 @@ const LID_TYPES = {
   flap: 'Откидная с клапаном снаружи',
   f0427: 'Мейлер FEFCO 0427 (самосборный)',
   f0201: 'Четыре клапана FEFCO 0201 (гофрокороб)',
+  book: 'Книжка на магните (жёсткая)',
+  casket: 'Шкатулка: крышка на петлях (жёсткая)',
+  drawer: 'Футляр с выдвижным ящиком (жёсткая)',
+  pillow: 'Коробка-подушка',
+  gable: 'Коробка-домик с ручкой',
+  pyramid: 'Пирамида',
+  hexagon: 'Многогранник с крышкой',
   tuck: 'Откидная с клапаном внутрь (упрощённая)',
   telescope: 'Отдельная крышка (крышка-дно)',
   handle: 'С ручкой: крышка с передней стенкой (торт)',
   none: 'Без крышки (лоток)',
 };
 const LID_WALLS = ['lidFront', 'lidRight', 'lidLeft', 'lidBack'];
-const FACE_LABEL = { sleeve: 'Рукав', carry: 'Рукав-переноска', handleFront: 'Ручка: перед', handleBack: 'Ручка: зад', rightTop: 'Правый торец: верх', rightBottom: 'Правый торец: низ', leftTop: 'Левый торец: верх', leftBottom: 'Левый торец: низ', tray: 'Подложка', extFront: 'Экстендер: перед', extBack: 'Экстендер: зад', fold: 'Внутренний борт', flap: 'Клапан', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
+const FACE_LABEL = { sleeve: 'Рукав', carry: 'Рукав-переноска', handleFront: 'Ручка: перед', handleBack: 'Ручка: зад', rightTop: 'Правый торец: верх', rightBottom: 'Правый торец: низ', leftTop: 'Левый торец: верх', leftBottom: 'Левый торец: низ', tray: 'Подложка', extFront: 'Экстендер: перед', extBack: 'Экстендер: зад', fold: 'Внутренний борт', flap: 'Клапан', trayFront: 'Лоток: перед', roofFront: 'Скат и ручка: перед', roofBack: 'Скат и ручка: зад', earLeft: 'Ушко левое', earRight: 'Ушко правое', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', top: 'Крышка', bottom: 'Дно', inside: 'Крышка изнутри', insideBottom: 'Дно изнутри', wrap: 'Обечайка' };
 const BOARD = [['#f4f1e9', 'Белый'], ['#c39460', 'Крафт'], ['#2e3530', 'Графит'], ['#879c79', 'Шалфей'], ['#d28f84', 'Розовый'], ['#8aacca', 'Голубой']];
 const WHITE_INSIDE = '#f8f6ef';
 const SWATCHES = ['#ffffff', '#f3ead6', '#1c1b19', '#20392b', '#0a7aa1', '#b8461b', '#e6007e', '#ffe500'];

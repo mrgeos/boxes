@@ -4,13 +4,15 @@ import { modelShape, placeMany } from '../core/models3d.js';
 import { boxInside, tissueOn } from './tissue.js';
 import { domeGeom } from './dome.js';
 import { torteGeom } from './torte.js';
+import { insertOn, insertSpots } from './insert.js';
+import { isShape } from './shapes.js';
 
 /* o.fill: a model ({ lib } / { asset }), how many (count), each size mm (its longest side; 0 — as large as fits),
    how they lie (rows: a neat grid; loose: turned a little each, as laid by hand) and their turn. They stand on the
    floor of the box (on the tissue, if there is one), of the dome's tray or of the cake container's base, spread
    evenly over it. However many there are, each mesh of the model is drawn once for all (instancing). */
 const FILL_LAYOUT = { rows: 'Ровными рядами', loose: 'Свободно, как руками' };
-const fillFits = o => (o.type === 'box' && o.lidType !== 'handle') || o.type === 'dome' || o.type === 'torte';
+const fillFits = o => (o.type === 'box' && o.lidType !== 'handle' && o.lidType !== 'drawer' && !isShape(o)) || o.type === 'dome' || o.type === 'torte';
 const fillOn = o => fillFits(o) && !!o.fill?.on;
 const defaultFill = () => ({ on: false, model: { lib: 'croissant' }, count: 4, size: 0, layout: 'loose', rot: 0, gap: 6 });
 /* where things lie: half sizes of the floor (mm), its height, round or not */
@@ -46,7 +48,8 @@ function fillSpots(o) {
 function buildFill(o, rt) {
   rt.fill = null;
   if (!fillOn(o) || o.fill.hidden) return;
-  const { spots, size } = fillSpots(o), r = placeMany(rt.group, o, o.fill.model, spots, { size, rotY: o.fill.rot || 0 });
+  // in an insert: one in each cell, as big as the cell (unless a size is set)
+  const ins = insertOn(o), { spots, size } = ins ? insertSpots(o) : fillSpots(o), r = placeMany(rt.group, o, o.fill.model, spots, { size: ins && o.fill.size > 0 ? o.fill.size : size, rotY: o.fill.rot || 0 });
   if (r) rt.fill = r.group;
 }
 

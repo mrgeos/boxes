@@ -3,16 +3,20 @@ import * as THREE from 'three';
 import { S, clamp } from '../core/util.js';
 import { RT } from '../scene/renderer.js';
 import { invalidate } from '../scene/camera.js';
+import { bookDims } from './book.js';
+import { isShape } from './shapes.js';
 
 /* Tissue paper laid in a box: thin, a little see-through, crumpled. One sheet lies on the floor and its edges
    rise up the walls; or two square sheets cross as a star: one straight, its corners into the box's corners, the
    other turned (by angle, 45° at first), its sharp corners running up the middles of the walls. With `over` the edges that reach the rim fold over it and hang down outside. Both sheets are the
    same print: the face `tissue` (the sheet's size, w × l). It is seen with the lid open only. All lengths mm. */
 const TISSUE_LAYOUT = { flat: 'Один лист по дну', cross: 'Два листа крест-накрест' };
-const tissueOn = o => o.type === 'box' && o.lidType !== 'handle' && !!o.tissue?.on;
+const tissueOn = o => o.type === 'box' && o.lidType !== 'handle' && o.lidType !== 'drawer' && !isShape(o) && !!o.tissue?.on;
 const defaultTissue = () => ({ on: false, layout: 'flat', over: false, w: 0, l: 0, angle: 45, off: 25, sheer: 25, crumple: 50 });
 /* the inside of the box: half width / depth, floor, rim (mm) */
 function boxInside(o) {
+  // a book box: inside its tray, which stands on the case's bottom
+  if (o.lidType === 'book') { const B = bookDims(o); return { A: B.tw / 2 - B.t - .4, B: B.td / 2 - B.t - .4, y0: 2 * B.t + .3, top: o.dims.h - B.t - .2, ox: B.tw / 2 + .5, oz: B.td / 2 + .5 }; }
   const t = clamp(o.thickness, .3, 20), wall = clamp(Math.max(o.wallT ?? t, t), t, Math.min(o.dims.w, o.dims.d) / 4);
   return { A: o.dims.w / 2 - wall - .4, B: o.dims.d / 2 - wall - .4, y0: t + .3, top: o.dims.h - .2, ox: o.dims.w / 2 + .5, oz: o.dims.d / 2 + .5 };
 }

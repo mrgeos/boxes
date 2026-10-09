@@ -11,13 +11,14 @@ import { defaultFill, fillFits, fillOn } from '../carriers/fill.js';
 import { modelName } from './models3d.js';
 import { STICKER_KIND, touchSticker } from '../stickers/placement.js';
 import { buildRibbons, newRibbon, ribbonFits, ribbonName, ribbonsOf, showRibbons } from '../carriers/ribbon.js';
+import { applyInsert, insertDims, insertOn } from '../carriers/insert.js';
 
 /* A sleeve and a carrier are parts with a face of their own (the key of the part is the key of its face) and
    their own settings (o.sleeve, o.carry); stickers lie in o.stickers, ribbons in o.ribbons (carriers/ribbon.js). Every extra has a name, can be hidden
    (not drawn) and locked (not picked on the model). */
-const PART_KEYS = ['sleeve', 'carry', 'tissue'];
+const PART_KEYS = ['sleeve', 'carry', 'tissue', 'insert'];
 const isPart = k => PART_KEYS.includes(k);
-const EXTRA_LABEL = { sticker: 'Наклейка', sleeve: 'Рукав', carry: 'Рукав-переноска', ribbon: 'Лента', tissue: 'Бумага тишью', fill: 'Начинка' };
+const EXTRA_LABEL = { sticker: 'Наклейка', sleeve: 'Рукав', carry: 'Рукав-переноска', ribbon: 'Лента', tissue: 'Бумага тишью', insert: 'Ложемент', fill: 'Начинка' };
 
 /* the object's extras, in list order: { kind, id, T: its own data } */
 function extrasOf(o) {
@@ -26,6 +27,7 @@ function extrasOf(o) {
     ...(sleeveOn(o) ? [{ kind: 'sleeve', id: 'sleeve', T: o.sleeve }] : []),
     ...(carryOn(o) ? [{ kind: 'carry', id: 'carry', T: o.carry }] : []),
     ...(tissueOn(o) ? [{ kind: 'tissue', id: 'tissue', T: o.tissue }] : []),
+    ...(insertOn(o) ? [{ kind: 'insert', id: 'insert', T: o.insert }] : []),
     ...ribbonsOf(o).map(r => ({ kind: 'ribbon', id: r.id, T: r })),
     ...(fillOn(o) ? [{ kind: 'fill', id: 'fill', T: o.fill }] : []),
     ...(o.stickers || []).map(st => ({ kind: 'sticker', id: st.id, T: st })),
@@ -37,6 +39,7 @@ function extraName(o, e) {
   if (e.kind === 'sleeve') return o.sleeve.handle?.on ? 'Рукав с ручкой' : 'Рукав';
   if (e.kind === 'carry') return 'Рукав-переноска';
   if (e.kind === 'tissue') return o.tissue.layout === 'cross' ? 'Тишью, два листа' : 'Бумага тишью';
+  if (e.kind === 'insert') return `Ложемент ${o.insert.cols}×${o.insert.rows}${o.insert.mat === 'foam' ? ', пена' : ''}`;
   if (e.kind === 'ribbon') return ribbonName(e.T);
   if (e.kind === 'fill') return `Начинка: ${modelName(o.fill.model).toLowerCase()} ×${o.fill.count}`;
   const st = e.T;
@@ -56,7 +59,7 @@ function setExtraHidden(o, id, on) {
   if (on) e.T.hidden = true; else delete e.T.hidden;
   if (e.kind === 'ribbon') return showRibbons(o);
   if (e.kind === 'fill') { rebuildQueue.add(o.id); return; }
-  e.kind === 'sleeve' ? applySleeve(o) : e.kind === 'tissue' ? applyTissue(o) : applyCarry(o); invalidate();
+  e.kind === 'sleeve' ? applySleeve(o) : e.kind === 'tissue' ? applyTissue(o) : e.kind === 'insert' ? applyInsert(o) : applyCarry(o); invalidate();
 }
 function setExtraLocked(o, id, on) { const e = extraById(o, id); if (!e) return; if (on) e.T.locked = true; else delete e.T.locked; }
 function renameExtra(o, id, name) { const e = extraById(o, id); if (e && name.trim()) e.T.name = name.trim().slice(0, 80); }
@@ -65,7 +68,10 @@ function addPart(o, kind) {
   const T = o[kind]; if (!T) return false;
   T.on = true; delete T.hidden;
   // tissue: a sheet sized to the box, and the lid opened to show it
-  if (kind === 'tissue') { fitTissue(o); if (o.lidType !== 'none' && !(o.lid > 2)) o.lid = o.lidType === 'telescope' ? 125 : 100; }
+  if (kind === 'tissue') fitTissue(o);
+  // an insert: its height and pockets as they come out for this box, to be changed from there
+  if (kind === 'insert') { const D = insertDims(o); o.insert.h ||= D.h; o.insert.depth ||= Math.round(D.h * .7); }
+  if ((kind === 'tissue' || kind === 'insert') && o.lidType !== 'none' && !(o.lid > 2)) o.lid = o.lidType === 'telescope' || o.lidType === 'f0201' ? 125 : 100;
   ensureFaces(o); rebuildQueue.add(o.id); markFace(o, kind);
   return true;
 }

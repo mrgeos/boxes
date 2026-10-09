@@ -4,6 +4,7 @@ import { S, clamp, uid } from '../core/util.js';
 import { RT, applyLid, contactMat, maxAniso } from '../scene/renderer.js';
 import { invalidate } from '../scene/camera.js';
 import { artImg } from '../core/vector.js';
+import { isShape } from './shapes.js';
 
 /* A ribbon is tied crosswise: one band goes round the object across its width, the other across its depth, both
    through the middle of the top (ox, oz: the cross moved off the middle, mm; 0 for now), and they are tied over
@@ -16,7 +17,7 @@ const RIBBON_BOW = { classic: 'Классический бант', puffy: 'Пы�
 const RIBBON_PRINT = { none: 'Без печати', text: 'Текст', logo: 'Логотип' };
 const MAT_COLOR = { satin: '#b3243b', grosgrain: '#1f3b63', twine: '#c4a57a' };
 /* what a ribbon can be tied round: boxes (but a handle box, whose handle is on top) and the round ones */
-const ribbonFits = o => !!o && (o.type === 'box' ? o.lidType !== 'handle' : ['dome', 'tube', 'torte'].includes(o.type));
+const ribbonFits = o => !!o && (o.type === 'box' ? o.lidType !== 'handle' && !isShape(o) : ['dome', 'tube', 'torte'].includes(o.type));
 const ribbonsOf = o => ribbonFits(o) ? o.ribbons || [] : [];
 const THICK = { satin: .35, grosgrain: .7, twine: 0 };
 /* how thick the tape is (twine: its diameter, its width) */

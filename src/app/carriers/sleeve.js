@@ -5,6 +5,7 @@ import { FINISHES } from '../core/constants.js';
 import { boardGrain } from './board.js';
 import { RT } from '../scene/renderer.js';
 import { quadGeo } from '../scene/geometry.js';
+import { isShape } from './shapes.js';
 
 /* ---------- sleeve ----------
    A paper band glued into a tube around a closed box (or round an open tray: a matchbox-style box).
@@ -15,7 +16,7 @@ const SLEEVE_AXES = { x: 'Поперёк ширины: верх, перед, д�
 const SLEEVE_FIN = { matte: 'Матовая бумага', gloss: 'Глянцевая ламинация', soft: 'Soft-touch', kraft: 'Крафт' };
 const SLEEVE_GLUE = 15;
    // mm of glue flap on the die
-const sleeveOn = o => o.type === 'box' && o.lidType !== 'handle' && !!o.sleeve?.on;
+const sleeveOn = o => o.type === 'box' && o.lidType !== 'handle' && !isShape(o) && !!o.sleeve?.on;
 const defaultSleeveHandle = () => ({ on: false, join: 'ends', h: 75, r: 18, rf: 10, hole: { w: 70, h: 22, y: 38, r: 11 } });
 const defaultSleeve = dims => ({ on: false, axis: 'x', w: Math.round(dims.w * .5), x: 0, slide: 0, fin: 'matte', handle: defaultSleeveHandle() });
 /* the closed box's outline the sleeve wraps (mm): x half width, z front/back, y top */

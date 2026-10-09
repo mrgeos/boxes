@@ -68,6 +68,7 @@ function build(kind) {
       + ib('cbFocus', ICON.focus, 'Приблизить (F)') + ib('cbDup', ICON.copy, 'Дублировать (Ctrl+D)') + ib('cbDel', ICON.trash, 'Удалить (Delete)');
   }
   if (kind === 'part' && sel.part === 'tissue') return `<span class="hint cb-l">Тишью</span>${[['flat', '1 лист'], ['cross', '2 листа']].map(([v, t]) => `<button class="ab wide ${o.tissue.layout === v ? 'on' : ''}" data-lay="${v}"><span>${t}</span></button>`).join('')}${sep}` + ib('cbDel', ICON.trash, 'Удалить (Delete)');
+  if (kind === 'part' && sel.part === 'insert') return `<span class="hint cb-l">Ложемент</span>${[['board', 'Картон'], ['foam', 'Пена']].map(([v, t]) => `<button class="ab wide ${o.insert.mat === v ? 'on' : ''}" data-imat="${v}"><span>${t}</span></button>`).join('')}${sep}` + ib('cbDel', ICON.trash, 'Удалить (Delete)');
   if (kind === 'part') {
     const [k, t, max] = partSlide(o, sel.part), v = sel.part === 'sleeve' ? o.sleeve.slide : o.carry.slide;
     return `<span class="hint cb-l">${t}</span><input type="range" id="cbSlide" data-k="${k}" min="0" max="${max}" step="1" value="${v || 0}" aria-label="${t}">${sep}` + ib('cbDel', ICON.trash, 'Удалить (Delete)');
@@ -102,6 +103,7 @@ function bind(kind) {
   } else if (kind === 'part') {
     const k = sel.part;
     bar().querySelectorAll('[data-lay]').forEach(b => b.addEventListener('click', () => { o.tissue.layout = b.dataset.lay; fitTissue(o); rebuildQueue.add(o.id); markFace(o, 'tissue'); ui.net = true; renderModel(); commit(); refresh(); }));
+    bar().querySelectorAll('[data-imat]').forEach(b => b.addEventListener('click', () => { o.insert.mat = b.dataset.imat; modelInput('insert.mat'); commit(); }));
     on('cbSlide', 'input', e => { const T = o[k]; T.slide = +e.target.value; modelInput(k + '.slide'); });
     on('cbSlide', 'change', () => { renderModel(); commit(); });
     on('cbDel', 'click', () => extraAction(o, k, 'del'));
@@ -147,7 +149,7 @@ function screenBox(kind) {
 function syncCtxBar(moved = true) {
   const el = bar(); if (!el) return;
   const kind = busy ? null : kindNow(), o = activeObj();
-  const k = kind && [kind, o.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, o.tissue?.layout, o.fill?.count, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
+  const k = kind && [kind, o.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, o.tissue?.layout, o.insert?.mat, o.fill?.count, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
   if (!kind) { el.hidden = true; key = ''; return; }
   // nothing new and the view still: it stays where it is
   if (k === key && !moved) return;

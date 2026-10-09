@@ -1,5 +1,5 @@
 // Левая панель: объекты, форма и размеры, материал, сцена
-import { $, $$, esc, toast } from '../core/util.js';
+import { $, $$, esc, fmt, toast } from '../core/util.js';
 import { BOARD, FINISHES, LID_COLORS, LID_TYPES, LIGHTS, PRESETS, isFoil } from '../core/constants.js';
 import { activeObj, assets, sel, state } from '../core/state.js';
 import { addAsset } from '../core/assets.js';
@@ -36,6 +36,9 @@ import { renderGroupPanel } from './group-panel.js';
 import { commit } from '../core/project.js';
 import { bindFields, rangeField, refreshFields } from './fields.js';
 import { renderFacePanel, renderFaceTabs, updateFaceMeta } from './face-panel.js';
+import { INSERT_CELL, INSERT_MAT, insertDims } from '../carriers/insert.js';
+import { LININGS } from '../carriers/rigid.js';
+import { isShape } from '../carriers/shapes.js';
 
 /* the paper sleeve round a box: its own shape panel (an extra, core/extras.js) */
 function sleeveFields(o) { const SD = sleeveDims(o); return `<div class="field wide"><span class="fl">Рукав опоясывает</span><select data-k="sleeve.axis">${Object.entries(SLEEVE_AXES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
@@ -70,8 +73,9 @@ function modelInput(k) {
   if (k === 'sleeve.name' || k === 'carry.name') { renderObjects(); renderStickers(); refreshTabs(); return; }
   if (k === 'name') { renderObjects(); $('#objBadge').textContent = o.name; return; }
   if (k === 'type') { o.dims = { ...PRESETS.find(p => p.type === o.type).dims }; ensureFaces(o); if (o.type === 'board') setBoardCover(o); rebuildQueue.add(o.id); select(o.id, faceKeys(o)[0]); renderModel(); renderObjects(); return; }
-  if (k === 'lidType') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
-  if (k === 'wallT' || k === 'lidFit' || k === 'tape') { rebuildQueue.add(o.id); applyObjMaterials(o); ui.net = true; updateFaceMeta(); return; }
+  if (k === 'sides' || k === 'roofH' || k === 'gripH') { ensureFaces(o); rebuildQueue.add(o.id); ui.net = true; select(o.id, faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]); updateFaceMeta(); if (k === 'sides') renderModel(); return; }
+  if (k === 'lidType') { if (o.lidType === 'pyramid' || o.lidType === 'hexagon') o.sides = o.lidType === 'pyramid' ? 4 : 6; if (o.lidType === 'gable') { o.roofH ??= Math.round(o.dims.d * .45); o.gripH ??= Math.round(Math.min(80, o.dims.w * .3)); } ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+  if (k === 'wallT' || k === 'lidFit' || k === 'tape' || k === 'pull' || k === 'pullColor') { rebuildQueue.add(o.id); applyObjMaterials(o); ui.net = true; updateFaceMeta(); return; }
   if (k === 'lidMat') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
   if (k.startsWith('pb.')) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'pb.handles') renderModel(); return; }
   if (k === 'sleeve.slide') { applySleeve(o); return; }
@@ -82,6 +86,11 @@ function modelInput(k) {
     if (k === 'tissue.sheer') { markFace(o, 'tissue'); return; }
     rebuildQueue.add(o.id); markFace(o, 'tissue'); ui.net = ui.editor = true; updateFaceMeta();
     if (k === 'tissue.layout' || k === 'tissue.over') { renderModel(); renderObjects(); }
+    return;
+  }
+  if (k.startsWith('insert.')) {
+    if (k === 'insert.mat') { o.faces.insert.bg = o.insert.mat === 'foam' ? '#26272b' : o.board; markFace(o, 'insert'); renderModel(); }
+    rebuildQueue.add(o.id); markFace(o, 'insert'); applyObjMaterials(o); ui.net = ui.editor = true; updateFaceMeta(); renderObjects();
     return;
   }
   if (k.startsWith('carry.')) {
@@ -161,7 +170,7 @@ function renderPartModel(sec, o) {
   const k = sel.part, e = extraById(o, k); if (!e) return;
   sec.innerHTML = `<div class="sec-h"><h2>${EXTRA_LABEL[k]}</h2></div>
     <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="${k}.name" placeholder="${esc(extraName(o, { ...e, T: { ...e.T, name: '' } }))}" aria-label="Название"></div>
-    ${k === 'sleeve' ? sleeveFields(o) : k === 'tissue' ? tissueFields(o) : carryFields(o)}
+    ${k === 'sleeve' ? sleeveFields(o) : k === 'tissue' ? tissueFields(o) : k === 'insert' ? insertFields(o) : carryFields(o)}
     <div class="grid2"><button class="btn sm" id="partHide">${e.T.hidden ? 'Показать' : 'Скрыть'}</button><button class="btn sm danger" id="partDel">Удалить</button></div>`;
   bindFields(sec, activeObj, modelInput, modelCommit);
   $('#partHide').onclick = () => { extraAction(o, k, 'vis'); renderModel(); };
@@ -190,6 +199,25 @@ function renderModelObject(sec, o, group) {
     };
     inp.click();
   };
+}
+/* the constructions of a box, grouped */
+const LID_GROUPS = [['Крышка', ['flat', 'flap', 'tuck', 'telescope', 'handle', 'none']], ['Гофрокартон', ['f0427', 'f0201']], ['Жёсткие', ['book', 'casket', 'drawer']], ['Особая форма', ['pillow', 'gable', 'pyramid', 'hexagon']]];
+const SHAPE_HINT = {
+  pillow: 'Коробка-подушка: плоская трубка, концы вдавлены по дуговым биговкам. Ширина — поперёк, глубина — длина, высота — толщина посередине. Печать: верх и низ (грани «Перед» и «Зад» — лицо и оборот).',
+  gable: 'Коробка-домик: стенки, над передом и задом скаты сходятся к ручке из двух слоёв с проймой; бока заканчиваются фронтонами. Высота — высота стенок, скат и ручка — сверху.',
+  pyramid: 'Пирамида: треугольные грани от основания (вписано в ширину × глубину) к вершине на заданной высоте. Каждая грань печатается отдельно.',
+  hexagon: 'Многогранник: стенки по многоугольнику (вписан в ширину × глубину), крышка-колпак с тем же числом граней. Стенки — одна лента, рисуйте их подряд.',
+};
+/* an insert in the box: board or foam, its cells, its height */
+function insertFields(o) {
+  const T = o.insert, D = insertDims(o), foam = T.mat === 'foam';
+  return `<div class="field wide"><span class="fl">Материал</span><select data-k="insert.mat">${Object.entries(INSERT_MAT).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+    <div class="field wide"><span class="fl">Ячейки</span><select data-k="insert.cell">${Object.entries(INSERT_CELL).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+    ${rangeField('Рядов', 'insert.rows', 1, 12, 1)}${rangeField('В ряду', 'insert.cols', 1, 12, 1)}
+    ${rangeField('Размер ячейки, % места', 'insert.size', 20, 100, 1)}
+    ${rangeField(foam ? 'Высота вкладыша, мм' : 'Высота площадки, мм', 'insert.h', 3, 600, 1)}
+    ${foam ? rangeField('Глубина ячеек, мм', 'insert.depth', 2, 600, 1) : ''}
+    <p class="hint">Ячейка ${D.round ? `⌀${fmt(D.cw, 1)}` : `${fmt(D.cw, 1)}×${fmt(D.cd, 1)}`} мм. ${foam ? 'Цвет пены — фон грани «Ложемент» (вкладка «Дизайн»). Пена вырезается отдельно, на развёртку не попадает.' : 'Картонная площадка: ячейки вырублены насквозь, края загнуты вниз до дна; печать — грань «Ложемент», вырубка — на развёртке под коробкой.'} Начинка (3D) раскладывается по ячейкам. Ложемент виден при открытой крышке.</p>`;
 }
 /* tissue paper in the box: how it is laid, its sheet, paper and a quick pattern (a tiled picture on its face) */
 const patLayer = o => o.faces.tissue?.layers.find(L => L.pattern) || null;
@@ -275,8 +303,12 @@ function renderModel() {
             + (o.cake.model ? '' : rangeField('Высота торта, мм', 'cake.h', 10, 250, 1)) + `<div class="row"><button class="btn sm" id="cakeFit">По размеру подложки</button></div>` : '')
           + `<p class="hint">Подложка — толстый картон, обтянутый фольгой или ламинированной бумагой с печатью. Дизайн — на гранях «Верх подложки» и «Низ подложки» по форме подложки (с язычком и волнистым краем). Торт стоит сверху: круглый или прямоугольный на любой подложке, размеры задаются; «По размеру подложки» подгоняет его заново.</p>`
       : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
-    ${box ? `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(LID_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : ''}
-    ${box && o.lidType !== 'none' ? rangeField(o.lidType === 'telescope' ? 'Поднять крышку' : o.lidType === 'handle' ? 'Открыть торец' : o.lidType === 'f0201' ? 'Открыть клапаны' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
+    ${box ? `<div class="field wide"><span class="fl">Конструкция</span><select data-k="lidType">${LID_GROUPS.map(([g, ks]) => `<optgroup label="${g}">${ks.map(k => `<option value="${k}">${LID_TYPES[k]}</option>`).join('')}</optgroup>`).join('')}</select></div>` : ''}
+    ${box && (o.lidType === 'pyramid' || o.lidType === 'hexagon') ? rangeField('Граней', 'sides', 3, o.lidType === 'pyramid' ? 8 : 12, 1) : ''}
+    ${box && o.lidType === 'gable' ? rangeField('Подъём ската, мм', 'roofH', 5, 400, 1) + rangeField('Высота ручки, мм', 'gripH', 20, 200, 1) : ''}
+    ${box && o.lidType === 'hexagon' ? rangeField('Высота крышки, мм', 'lidH', 5, 600, 1) : ''}
+    ${box && isShape(o) ? `<p class="hint">${SHAPE_HINT[o.lidType]}</p>` : ''}
+    ${box && o.lidType !== 'none' && (!isShape(o) || o.lidType === 'hexagon') ? rangeField(o.lidType === 'telescope' || o.lidType === 'hexagon' ? 'Поднять крышку' : o.lidType === 'handle' ? 'Открыть торец' : o.lidType === 'f0201' ? 'Открыть клапаны' : o.lidType === 'drawer' ? 'Выдвинуть ящик' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
     ${box && (o.lidType === 'flap' || o.lidType === 'tuck' || o.lidType === 'f0427') ? rangeField('Клапан, мм', 'flapH', 3, 300, 1) : ''}
     ${box && o.lidType === 'handle' ? `<div class="field wide"><span class="fl">Открывается</span><select data-k="hbSides">${Object.entries(HB_SIDES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + rangeField('Выдвинуть подложку, мм', 'tray.out', 0, o.dims.w, 1)
@@ -306,11 +338,14 @@ function renderModel() {
     ${box && o.lidType === 'flap' && o.earsOn && !o.earFull ? rangeField('Длина ушек, мм', 'earLen', 5, 800, 1) : ''}
     ${box && o.lidType === 'telescope' ? `<div class="field wide"><span class="fl">Материал крышки</span><select data-k="lidMat"><option value="board">Картон, как дно</option><option value="clear">Прозрачный пластик (ПЭТ)</option></select></div>` : ''}
     ${box && clearLid(o) ? `<div class="field wide"><span class="fl">Посадка крышки</span><select data-k="lidFit"><option value="inside">Внутри дна (дно обхватывает крышку)</option><option value="over">Поверх дна</option></select></div>` : ''}
-    ${box && o.lidType === 'telescope' ? rangeField('Высота крышки, мм', 'lidH', 3, 600, 1) : ''}
+    ${box && (o.lidType === 'telescope' || o.lidType === 'casket') ? rangeField('Высота крышки, мм', 'lidH', 3, 600, 1) : ''}
+    ${box && o.lidType === 'casket' ? `<div class="field wide"><span class="fl">Внутри</span><div class="row"><div class="swatches" id="liningSw"><button class="sw" style="background:repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)" data-c="" title="Без бархата: печать на бумаге" aria-label="Без бархата" aria-pressed="${!o.lining}"></button>${LININGS.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.lining === c}"></button>`).join('')}</div><input type="color" id="liningColor" value="${o.lining || '#5b1a2a'}" aria-label="Свой цвет бархата"></div></div><p class="hint">Шкатулка из переплётного картона, оклеенная бумагой: дно и крышка одной площади сходятся по линии разъёма, крышка на двух петлях сзади. Внутри бархат (или печать на бумаге — грани «Крышка изнутри» и «Дно изнутри»).</p>` : ''}
+    ${box && o.lidType === 'drawer' ? `<div class="field wide"><span class="fl">Язычок ящика</span><select data-k="pull"><option value="ribbon">Ленточка</option><option value="none">Без язычка</option></select></div>${o.pull !== 'none' ? `<div class="field wide"><span class="fl">Цвет ленточки</span><div class="row"><input type="color" data-k="pullColor" aria-label="Цвет ленточки"></div></div>` : ''}<p class="hint">Жёсткий футляр (верх, дно, бока и закрытый зад) и ящик, который выдвигается вперёд; лицо ящика — грань «Перед». Ползунок «Выдвинуть ящик». На футляр можно надеть рукав.</p>` : ''}
     ${box && clearLid(o) ? `<p class="hint">${o.lidFit === 'inside' ? 'Крышка стоит на дне лотка внутри бортов; высота считается от дна.' : 'Если крышка выше дна, она стоит на столе и закрывает лоток целиком.'} На прозрачные грани можно нанести печать: всё, что не закрыто слоями, остаётся прозрачным.</p>` : ''}
     ${box || dome ? rangeField(o.flute && box ? 'Толщина (по профилю гофры), мм' : 'Толщина, мм', 'thickness', .3, 8, .1) : ''}
-    ${box && o.lidType !== 'f0427' && o.lidType !== 'f0201' ? rangeField('Стенки дна, мм', 'wallT', .3, 30, .1) : ''}
-    ${box && o.lidType !== 'f0427' && o.lidType !== 'f0201' ? `<p class="hint">Стенки толще картона — двойной борт: стенка загибается внутрь, сверху виден сгиб.</p>` : ''}
+    ${box && !['f0427', 'f0201', 'book', 'casket', 'drawer'].includes(o.lidType) ? rangeField('Стенки дна, мм', 'wallT', .3, 30, .1) : ''}
+    ${box && o.lidType === 'book' ? `<p class="hint">Жёсткая коробка из переплётного картона, оклеенная бумагой: дно, корешок, крышка и передний клапан — один переплёт, клапан держится на скрытых магнитах. Внутри лоток, приклеенный к дну и корешку; его бока видны снаружи (грани «Левый бок», «Правый бок»), перед — при открытой крышке («Лоток: перед»). Толщина — толщина картона.</p>` : ''}
+    ${box && !['f0427', 'f0201', 'book', 'casket', 'drawer'].includes(o.lidType) ? `<p class="hint">Стенки толще картона — двойной борт: стенка загибается внутрь, сверху виден сгиб.</p>` : ''}
     ${box && o.lidType === 'f0201' ? `<div class="field wide"><span class="fl">Скотч</span><select data-k="tape">${Object.entries(TAPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div><p class="hint">FEFCO 0201: стенки — одна лента, склеенная клеевым клапаном; сверху и снизу по четыре клапана высотой в половину глубины. Клапаны переда и зада сходятся посередине, боковые — под ними. Грань «Крышка» — две половины на наружных клапанах (рисуйте как на закрытой коробке), «Дно» — так же снизу. Скотч виден, пока коробка закрыта.</p>` : ''}
     ${box && o.lidType === 'f0427' ? `<p class="hint">FEFCO 0427 собирается без клея: боковые стенки и перед двойные, завёрнуты внутрь и встают замками в прорези дна; ушки передней и задней стенок зажаты в боковых. Крышка — на задней стенке, её передний край завёрнут, клапан с пылевыми ушками уходит внутрь за переднюю стенку.</p>` : ''}
     ${box && windowPlace(o) ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
@@ -343,6 +378,10 @@ function renderModel() {
   bindFields(sec, activeObj, modelInput, modelCommit);
   const board = c => { setBoard(o, c); applyObjMaterials(o); markObj(o); renderFacePanel(); $$('#boardSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === c)); $('#boardColor').value = c; };
   $$('#boardSw .sw').forEach(b => b.onclick = () => { board(b.dataset.c); commit(); });
+  // the casket's velvet: a colour, or none (the printed paper)
+  const lining = c => { o.lining = c; ensureFaces(o); rebuildQueue.add(o.id); ui.net = true; select(o.id, faceKeys(o).includes(sel.face) ? sel.face : 'top'); renderModel(); };
+  $$('#liningSw .sw').forEach(b => b.onclick = () => { lining(b.dataset.c); commit(); });
+  $('#liningColor')?.addEventListener('change', e => { lining(e.target.value); commit(); });
   if ($('#fluteSel')) $('#fluteSel').onchange = e => { setFlute(o, e.target.value); rebuildQueue.add(o.id); renderModel(); commit(); };
   $$('#lidSw .sw').forEach(b => b.onclick = () => { o.lidColor = b.dataset.c; applyObjMaterials(o); renderModel(); commit(); });
   $$('#torteSw .sw').forEach(b => b.onclick = () => { o.baseColor = b.dataset.c; applyObjMaterials(o); renderModel(); commit(); });
@@ -365,7 +404,7 @@ function renderModel() {
       o.lidType = p.lid?.type ?? 'flat';
       for (const [k, v] of [['flapH', p.lid?.flapH], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
       o.lidMat = p.lid?.mat ?? 'board'; o.lidFit = p.lid?.fit ?? 'over'; o.wallT = p.wallT ?? o.thickness;
-      o.earsOn = true; o.earFull = true; o.flute = p.flute || ''; o.tape = p.tape ?? 'clear';
+      o.earsOn = true; o.earFull = true; o.flute = p.flute || ''; o.tape = p.tape ?? 'clear'; o.lining = p.lining ?? ''; o.pull = p.pull ?? 'ribbon';
       if (p.sleeve) { o.sleeve = { ...defaultSleeve(o.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true }; ensureFaces(o); if (p.sleeve.bg) o.faces.sleeve.bg = p.sleeve.bg; }
       if (o.lidType === 'handle') {
         o.handle = applyHandlePreset({ ...defaultHandle(o.dims), ...(p.handle || {}) }, p.handle?.shape || 'arch');

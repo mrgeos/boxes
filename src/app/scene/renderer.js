@@ -27,6 +27,8 @@ import { layoutSoon, parentOf, placeOf } from '../core/groups.js';
 import { moving } from './move.js';
 import { wrapTouch } from '../faces/wrap.js';
 import { corrugateEdges } from '../carriers/corrugated.js';
+import { applyInsert, buildInsert } from '../carriers/insert.js';
+import { drawerOut } from '../carriers/rigid.js';
 
 const viewport = $('#viewport');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -146,11 +148,11 @@ function buildObject(o) {
   }
   disposeRibbons(rt);
   rt.group.traverse(m => { if ((m.isMesh || m.isLine) && !m.userData.shared) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null; rt.rsc = null; rt.rscTape = null;
+  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.insert = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null; rt.rsc = null; rt.rscTape = null; rt.drawer = null;
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else if (o.type === 'board') buildBoard(o, rt); else if (o.type === 'model') buildModelObject(o, rt); else buildTube(o, rt);
-  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); buildTissue(o, rt); buildFill(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); corrugateEdges(o, rt); applyObjMaterials(o); markObj(o);
+  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); buildTissue(o, rt); buildInsert(o, rt); buildFill(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); corrugateEdges(o, rt); applyObjMaterials(o); markObj(o);
   rt.stickerMeshes = []; buildStickerFilms(o);
   if (parentOf(o.id) && JSON.stringify(foot) !== JSON.stringify(rt.foot)) layoutSoon();   // the row makes room for its new size
 }
@@ -241,11 +243,13 @@ function applyLid(o) {
     if (rt.hb.tray) rt.hb.tray.position.x = rt.hb.dir * clamp(o.tray?.out ?? 0, 0, o.dims.w) * S;
   }
   if (rt.rsc) applyRsc(o);
+  if (rt.drawer) rt.drawer.position.z = drawerOut(o) * S;
   if (rt.lidPivot) rt.lidPivot.rotation.x = -o.lid * DEG;
   for (const m of rt.contact || []) m.visible = o.lid < 1.5;
   // a ribbon is off while the lid is open
   if (rt.ribbons) rt.ribbons.visible = !(o.lid > .5);
   if (rt.tissue) applyTissue(o);
+  if (rt.insert) applyInsert(o);
   if (rt.lidGroup) {
     // the separate lid lifts, slides back a little and tilts
     const f = clamp(o.lid / 125, 0, 1), H = o.dims.h * S, LH = clamp(o.lidH, 3, clearLid(o) ? 1000 : o.dims.h) * S;
@@ -274,6 +278,7 @@ function applyObjMaterials(o) {
     Object.assign(rt.baseMat, { metalness: metal ? .85 : 0, roughness: metal ? .32 : .22, clearcoat: metal ? .3 : .8, clearcoatRoughness: .08 });
     rt.baseMat.color.set(o.baseColor || TORTE_COLORS[0][0]);
   }
+  if (rt.cellMat) rt.cellMat.color.set(o.insert?.mat === 'foam' ? o.faces.insert?.bg || '#222222' : '#' + rt.innerMat.color.getHexString());
   rt.cardMat.color.set(o.faces.extFront?.bg || '#ffffff');
   rt.foldMat.bumpMap = o.grain > 0 ? rt.faces.front?.grain ?? null : null; rt.foldMat.bumpScale = o.grain * 1.2; rt.foldMat.needsUpdate = true;
   rt.innerMat.bumpMap = o.grain > 0 ? rt.faces.inside?.grain ?? null : null;
