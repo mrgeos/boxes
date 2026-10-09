@@ -1,6 +1,8 @@
 // Развёртка коробки как настоящая заготовка: лоток-крест с угловыми клапанами, крышка на задней стенке
 import { clamp } from '../core/util.js';
 import { doubleWall, faceKeys, faceMM } from '../core/model.js';
+import { mailerNet } from './mailer.js';
+import { rscNet } from './rsc.js';
 
 /* The base is one blank laid out as a cross: the bottom in the middle, the four walls folded up from its
    edges (front above it, back below, the sides left and right), the inner strips of double walls beyond them.
@@ -17,6 +19,8 @@ function cornerTabs(tabs, wall, x, y0, y1, side, tw, chamfer) {
 }
 function boxNet(o) {
   const { w, h, d } = o.dims, keys = faceKeys(o), lt = o.lidType || 'flat', t = clamp(o.thickness, .3, 10);
+  if (lt === 'f0427') return mailerNet(o);
+  if (lt === 'f0201') return rscNet(o);
   const panels = [], tabs = [];
   const lidOnBack = keys.includes('top') && lt !== 'telescope';
   const FD = !lidOnBack && doubleWall(o) ? Math.max(1, h - t) : 0;

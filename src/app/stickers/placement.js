@@ -40,7 +40,8 @@ function computeFrames(o, rt) {
     if (!m.isMesh || !k || m.userData.wall || m.userData.noFrame || frames[k]) return;
     const gp = m.geometry.parameters;
     const M = inv.clone().multiply(m.matrixWorld), [w, h] = m.userData.face ? faceMM(o, k) : [gp.width / S, gp.height / S];
-    const c = new THREE.Vector3().applyMatrix4(M).divideScalar(S);
+    // a face spread over several parts (the halves of a carton's top): its middle, off the part's own (mm)
+    const off = m.userData.frameOff || [0, 0], c = new THREE.Vector3(off[0] * S, off[1] * S, 0).applyMatrix4(M).divideScalar(S);
     const u = new THREE.Vector3(1, 0, 0).transformDirection(M), v = new THREE.Vector3(0, 1, 0).transformDirection(M);
     const pinv = inv.clone().multiply(m.parent.matrixWorld).invert();   // object space → the part's own space (closed)
     frames[k] = { c, u, v, n: new THREE.Vector3().crossVectors(u, v).normalize(), w, h, parent: m.parent, pinv };

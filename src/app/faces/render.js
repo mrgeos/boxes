@@ -40,6 +40,8 @@ function drawNetPanel(c, src, p, x, y, w, h, crop = null, inv = false) {
   if (crop) c.drawImage(src, ...crop, x, y, w, h); else c.drawImage(src, x, y, w, h);
   c.restore();
 }
+/* the part of a face a panel shows (a flap carrying half of the closed top), in the face canvas' pixels */
+const cropPx = (src, p) => p.crop ? [p.crop[0] * src.width, p.crop[1] * src.height, (p.crop[2] - p.crop[0]) * src.width, (p.crop[3] - p.crop[1]) * src.height] : null;
 const mctx = document.createElement('canvas').getContext('2d');
 const hasLS = 'letterSpacing' in mctx;
 function textMetrics(L, H) {
@@ -268,7 +270,11 @@ function renderFace(o, k) {
   if (!clear && o.dieline && outerKeys(o).includes(k)) {
     const im = getImg(o.dieline), net = netLayout(o), p = net.panels.find(p => p.key === k);
     if (im && p?.fan) ctx.drawImage(fanToRect(p.fan, im, W, H, o.dieline), 0, 0);
-    else if (im && p) drawNetPanel(ctx, im, p, 0, 0, W, H, [p.x / net.W * im.naturalWidth, p.y / net.H * im.naturalHeight, p.w / net.W * im.naturalWidth, p.h / net.H * im.naturalHeight], true);
+    // a face on several panels (halves on two flaps): each part of the sheet into its part of the face
+    else if (im && p) for (const q of net.panels.filter(q => q.key === k)) {
+      const c = q.crop || [0, 0, 1, 1];
+      drawNetPanel(ctx, im, q, c[0] * W, c[1] * H, (c[2] - c[0]) * W, (c[3] - c[1]) * H, [q.x / net.W * im.naturalWidth, q.y / net.H * im.naturalHeight, q.w / net.W * im.naturalWidth, q.h / net.H * im.naturalHeight], true);
+    }
   }
   // the face's own layers, then the parts of neighbours' layers that run over an edge onto it
   const fxl = [], ax = loopAxis(o, k);
@@ -419,4 +425,4 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops, draw) {
 }
 function setSkipStickers(v) { skipStickers = v; }
 
-export { drawLayer, drawNetPanel, layerBox, renderFace, setTextCaret, textIndexAt, setSkipStickers, tmp };
+export { cropPx, drawLayer, drawNetPanel, layerBox, renderFace, setSkipStickers, setTextCaret, textIndexAt, tmp };

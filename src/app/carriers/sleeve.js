@@ -22,7 +22,7 @@ const defaultSleeve = dims => ({ on: false, axis: 'x', w: Math.round(dims.w * .5
 function boxEnvelope(o) {
   const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4), lt = o.lidType || 'flat';
   let hx = w / 2, zf = d / 2, zb = -d / 2, top = h;
-  if (lt === 'flat' || lt === 'tuck') top = h + t;
+  if (lt === 'flat' || lt === 'tuck' || lt === 'f0427') top = h + t;
   if (lt === 'flap') { hx = w / 2 + t + .3; zf = d / 2 + t + .3; top = h + t; }
   if (lt === 'telescope') {
     if (o.lidMat === 'clear') {

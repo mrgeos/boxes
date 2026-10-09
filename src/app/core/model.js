@@ -13,6 +13,7 @@ import { SLEEVE_GLUE, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn, 
 import { boxNet } from '../carriers/box-net.js';
 import { defaultTissue, tissueOn } from '../carriers/tissue.js';
 import { applyBoardPreset, boardDefaults, boardFaceMM, boardNet, collarDims, collarOn, setBoardCover } from '../carriers/board.js';
+import { mailerDims } from '../carriers/mailer.js';
 
 /* printed faces of an object, in tab order; depends on the lid construction */
 /* faces that close into a ring (a sleeve glued into a loop, the wall of a tube, a cup or a cake lid): what runs
@@ -48,7 +49,7 @@ function faceKeys(o) {
   }
   const k = ['front'];
   if (lt !== 'none') k.push('top');
-  if (lt === 'flap' || lt === 'tuck') k.push('flap');
+  if (lt === 'flap' || lt === 'tuck' || lt === 'f0427') k.push('flap');
   if (lt === 'flap' && o.earsOn) k.push('earLeft', 'earRight');
   if (lt === 'telescope') k.push(...LID_WALLS);
   k.push('right', 'left', 'back', 'bottom');
@@ -78,6 +79,7 @@ function ensureFaces(o) {
     o.lidMat ??= 'board';
     o.wallT ??= o.thickness;
     o.lidFit ??= 'over';
+    o.tape ??= 'clear';
     o.handle ??= defaultHandle(o.dims);
     o.sleeve ??= defaultSleeve(o.dims);
     o.tissue ??= defaultTissue();
@@ -113,7 +115,7 @@ function newObject(presetId = 'mailer') {
     sleeve: p.sleeve ? { ...defaultSleeve(p.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true } : undefined,
     handle: p.handle ? applyHandlePreset({ ...defaultHandle(p.dims), ...p.handle }, p.handle.shape || 'arch') : undefined,
     frontWin: p.frontWin ? { ...defaultFrontWin(p.dims), ...p.frontWin } : undefined,
-    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2, flute: p.flute || '' };
+    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2, flute: p.flute || '', tape: p.tape };
   if (p.bag) applyBagPreset(o, p);
   if (p.dome) applyDomePreset(o, p);
   if (p.torte) applyTortePreset(o, p);
@@ -179,6 +181,7 @@ function faceMM(o, k) {
     const ld = lidDimsMM(o);
     return k === 'flap' ? [ld.wl, ld.fh] : k.startsWith('ear') ? [ld.el, ld.fh] : [ld.wl, ld.dl];
   }
+  if (k === 'flap' && o.lidType === 'f0427') { const m = mailerDims(o); return [m.fw, m.fh]; }
   if (k === 'flap') return [w, clamp(o.flapH, 3, h)];
   const lh = clamp(o.lidH, 3, o.lidMat === 'clear' ? 1000 : h);
   if (k === 'lidFront' || k === 'lidBack') return [lw, lh];

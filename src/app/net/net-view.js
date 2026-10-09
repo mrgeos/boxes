@@ -5,7 +5,7 @@ import { faceKeys, netLayout } from '../core/model.js';
 import { RT } from '../scene/renderer.js';
 import { fanOutline, fanXY } from '../carriers/cup.js';
 import { cutNetWindow, netWindowPath, netWindows } from '../carriers/box.js';
-import { drawNetPanel } from '../faces/render.js';
+import { cropPx, drawNetPanel } from '../faces/render.js';
 import { select } from '../core/selection.js';
 import { isPart } from '../core/extras.js';
 
@@ -55,7 +55,7 @@ function drawNet() {
   for (const p of n.panels) {
     const x = pad + p.x * k, y = pad + p.y * k, w = p.w * k, h = p.h * k, fc = rt?.faces[p.key]?.canvas;
     c.save(); c.beginPath(); panelPath(c, p, pad, pad, k); c.clip();
-    if (fc) drawNetPanel(c, fc, p, x, y, w, h); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
+    if (fc) drawNetPanel(c, fc, p, x, y, w, h, cropPx(fc, p)); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
     else if (p.blank) { c.fillStyle = 'rgba(120,110,95,.14)'; c.fillRect(x, y, w, h); }
     c.restore();
     c.beginPath();
