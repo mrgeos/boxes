@@ -18,6 +18,7 @@ import { setLink } from '../core/brand.js';
 import { newImage } from '../core/model.js';
 import { BOARD_BOTTOM, BOARD_COVER, BOARD_SHAPE, COLLAR_OVERLAP, applyBoardPreset, fitCake, setBoardCover } from '../carriers/board.js';
 import { winMM, windowPlace } from '../carriers/box.js';
+import { FLUTES, setFlute } from '../carriers/corrugated.js';
 import { HANDLE_SHAPES, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, defaultFrontWin, defaultHandle } from '../carriers/handle-box.js';
 import { CARRY_PANEL, CARRY_STYLES, applyCarry, carryDims, carryOn } from '../carriers/carry.js';
 import { EXTRA_LABEL, extraById, extraName } from '../core/extras.js';
@@ -306,7 +307,7 @@ function renderModel() {
     ${box && clearLid(o) ? `<div class="field wide"><span class="fl">Посадка крышки</span><select data-k="lidFit"><option value="inside">Внутри дна (дно обхватывает крышку)</option><option value="over">Поверх дна</option></select></div>` : ''}
     ${box && o.lidType === 'telescope' ? rangeField('Высота крышки, мм', 'lidH', 3, 600, 1) : ''}
     ${box && clearLid(o) ? `<p class="hint">${o.lidFit === 'inside' ? 'Крышка стоит на дне лотка внутри бортов; высота считается от дна.' : 'Если крышка выше дна, она стоит на столе и закрывает лоток целиком.'} На прозрачные грани можно нанести печать: всё, что не закрыто слоями, остаётся прозрачным.</p>` : ''}
-    ${box || dome ? rangeField('Толщина, мм', 'thickness', .3, 6, .1) : ''}
+    ${box || dome ? rangeField(o.flute && box ? 'Толщина (по профилю гофры), мм' : 'Толщина, мм', 'thickness', .3, 8, .1) : ''}
     ${box ? rangeField('Стенки дна, мм', 'wallT', .3, 30, .1) : ''}
     ${box ? `<p class="hint">Стенки толще картона — двойной борт: стенка загибается внутрь, сверху виден сгиб.</p>` : ''}
     ${box && windowPlace(o) ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
@@ -327,6 +328,7 @@ function renderModel() {
     <div class="field wide"><span class="fl">${bag || pbag ? 'Цвет бумаги' : 'Цвет картона'}</span><div class="row">
       <div class="swatches" id="boardSw">${BOARD.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.board === c}"></button>`).join('')}</div>
       <input type="color" id="boardColor" value="${o.board || '#ffffff'}" aria-label="Свой цвет картона"></div></div>
+    ${box ? `<div class="field wide"><span class="fl">Картон</span><select id="fluteSel"><option value="">Коробочный (листовой)</option><optgroup label="Гофрокартон">${Object.entries(FLUTES).map(([k, v]) => `<option value="${k}" ${o.flute === k ? 'selected' : ''}>${v.label}</option>`).join('')}</optgroup></select></div>` : ''}
     <label class="check"><input type="checkbox" data-k="whiteInside"> Белая внутренняя сторона</label>
     <div class="field wide"><span class="fl">Покрытие</span><select data-k="finish">${Object.entries(FINISHES).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('')}</select></div>
     ${rangeField('Фактура бумаги', 'grain', 0, 100, 1, 100)}`}
@@ -338,6 +340,7 @@ function renderModel() {
   bindFields(sec, activeObj, modelInput, modelCommit);
   const board = c => { setBoard(o, c); applyObjMaterials(o); markObj(o); renderFacePanel(); $$('#boardSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === c)); $('#boardColor').value = c; };
   $$('#boardSw .sw').forEach(b => b.onclick = () => { board(b.dataset.c); commit(); });
+  if ($('#fluteSel')) $('#fluteSel').onchange = e => { setFlute(o, e.target.value); rebuildQueue.add(o.id); renderModel(); commit(); };
   $$('#lidSw .sw').forEach(b => b.onclick = () => { o.lidColor = b.dataset.c; applyObjMaterials(o); renderModel(); commit(); });
   $$('#torteSw .sw').forEach(b => b.onclick = () => { o.baseColor = b.dataset.c; applyObjMaterials(o); renderModel(); commit(); });
   $('#boardColor')?.addEventListener('input', e => board(e.target.value));
@@ -359,7 +362,7 @@ function renderModel() {
       o.lidType = p.lid?.type ?? 'flat';
       for (const [k, v] of [['flapH', p.lid?.flapH], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
       o.lidMat = p.lid?.mat ?? 'board'; o.lidFit = p.lid?.fit ?? 'over'; o.wallT = p.wallT ?? o.thickness;
-      o.earsOn = true; o.earFull = true;
+      o.earsOn = true; o.earFull = true; o.flute = p.flute || '';
       if (p.sleeve) { o.sleeve = { ...defaultSleeve(o.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true }; ensureFaces(o); if (p.sleeve.bg) o.faces.sleeve.bg = p.sleeve.bg; }
       if (o.lidType === 'handle') {
         o.handle = applyHandlePreset({ ...defaultHandle(o.dims), ...(p.handle || {}) }, p.handle?.shape || 'arch');
