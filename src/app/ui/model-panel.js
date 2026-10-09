@@ -10,6 +10,7 @@ import { applyDomePreset } from '../carriers/dome.js';
 import { TORTE_COLORS, TORTE_FIN, applyTortePreset } from '../carriers/torte.js';
 import { winMM, windowPlace } from '../carriers/box.js';
 import { HANDLE_SHAPES, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, defaultFrontWin, defaultHandle } from '../carriers/handle-box.js';
+import { BOX_STYLES } from '../carriers/carton-net.js';
 import { CARRY_PANEL, CARRY_STYLES, applyCarry, carryDims, carryOn } from '../carriers/carry.js';
 import { SLEEVE_AXES, SLEEVE_FIN, SLEEVE_PANEL, applySleeve, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn } from '../carriers/sleeve.js';
 import { applyScene, lastView, setView, updateShadowCam } from '../scene/camera.js';
@@ -76,6 +77,7 @@ function renderModel() {
       : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
     ${box ? `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(LID_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : ''}
     ${box && o.lidType !== 'none' ? rangeField(o.lidType === 'telescope' ? 'Поднять крышку' : o.lidType === 'handle' ? 'Открыть торец' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
+    ${box && o.lidType === 'tuck' ? `<div class="field wide"><span class="fl">Конструкция</span><select data-k="style">${Object.entries(BOX_STYLES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select></div>` : ''}
     ${box && (o.lidType === 'flap' || o.lidType === 'tuck') ? rangeField('Клапан, мм', 'flapH', 3, 300, 1) : ''}
     ${box && o.lidType === 'handle' ? `<div class="field wide"><span class="fl">Открывается</span><select data-k="hbSides">${Object.entries(HB_SIDES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + rangeField('Выдвинуть подложку, мм', 'tray.out', 0, o.dims.w, 1)
@@ -169,6 +171,7 @@ function renderModel() {
       return;
     }
     if (k === 'earsOn' || k === 'earFull') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+    if (k === 'style') { ui.net = true; updateFaceMeta(); return; }
     if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
     if (k.startsWith('dims') || k === 'thickness') { if (sleeveOn(o)) markFace(o, 'sleeve'); if (carryOn(o)) markFace(o, 'carry'); rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
     if (k === 'lid') { applyLid(o); return; }
@@ -224,6 +227,7 @@ function renderModel() {
     o.window = p.window ? { ...p.window } : { ...o.window, on: false };
     if (o.type === 'box') {
       o.lidType = p.lid?.type ?? 'flat';
+      if (p.lid?.style) o.style = p.lid.style;
       for (const [k, v] of [['flapH', p.lid?.flapH], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
       o.lidMat = p.lid?.mat ?? 'board'; o.lidFit = p.lid?.fit ?? 'over'; o.wallT = p.wallT ?? o.thickness;
       o.earsOn = true; o.earFull = true;

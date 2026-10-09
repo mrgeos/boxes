@@ -68,6 +68,7 @@ function ensureFaces(o) {
   upgradeSleeve(o);
   if (o.type === 'box') {
     o.lidType ??= 'flat';
+    o.style ??= 'mailer';
     o.flapH ??= Math.round(o.dims.h * .35);
     o.earsOn ??= true; o.earFull ??= true; o.earLen ??= o.dims.d;
     o.lidH ??= Math.round(o.dims.h * .45);
@@ -107,7 +108,7 @@ function newObject(presetId = 'mailer') {
     sleeve: p.sleeve ? { ...defaultSleeve(p.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true } : undefined,
     handle: p.handle ? applyHandlePreset({ ...defaultHandle(p.dims), ...p.handle }, p.handle.shape || 'arch') : undefined,
     frontWin: p.frontWin ? { ...defaultFrontWin(p.dims), ...p.frontWin } : undefined,
-    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2 };
+    lidType: p.lid?.type ?? 'flat', style: p.lid?.style, flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2 };
   if (p.bag) applyBagPreset(o, p);
   if (p.dome) applyDomePreset(o, p);
   if (p.torte) applyTortePreset(o, p);

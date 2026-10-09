@@ -1,6 +1,7 @@
 // Развёртка коробки как настоящая заготовка: лоток-крест с угловыми клапанами, крышка на задней стенке, мейлер FEFCO 0427
 import { clamp } from '../core/util.js';
 import { doubleWall, faceKeys, faceMM } from '../core/model.js';
+import { cartonNet, isCarton } from './carton-net.js';
 
 /* The base is one blank laid out as a cross: the bottom in the middle, the four walls folded up from its
    edges (front above it, back below, the sides left and right), the inner strips of double walls beyond them.
@@ -20,6 +21,7 @@ function cornerTabs(tabs, wall, x, y0, y1, side, tw, chamfer, label) {
 }
 function boxNet(o) {
   const { w, h, d } = o.dims, keys = faceKeys(o), lt = o.lidType || 'flat', t = clamp(o.thickness, .3, 10), v = o.netV ?? NET_V;
+  if (isCarton(o)) return cartonNet(o);
   if (lt === 'tuck' && v >= 3) return mailerNet(o);
   const panels = [], tabs = [];
   const lidOnBack = keys.includes('top') && lt !== 'telescope';
@@ -112,14 +114,13 @@ function mailerNet(o) {
   return n;
 }
 
-/* moves a sheet so it starts at 0, 0 and measures it */
+/* moves a sheet so it starts at 0, 0 and measures it (a panel cut to an outline by its outline) */
 function toOrigin(n) {
-  const { panels, tabs } = n;
-  const xs = [...panels.flatMap(p => [p.x, p.x + p.w]), ...tabs.flatMap(t => t.pts.map(v => v[0]))];
-  const ys = [...panels.flatMap(p => [p.y, p.y + p.h]), ...tabs.flatMap(t => t.pts.map(v => v[1]))];
+  const { panels, tabs } = n, pts = [...panels.flatMap(p => p.poly || [[p.x, p.y], [p.x + p.w, p.y + p.h]]), ...tabs.flatMap(t => t.pts)];
+  const xs = pts.map(v => v[0]), ys = pts.map(v => v[1]);
   const x0 = Math.min(...xs), y0 = Math.min(...ys), mv = ([x, y]) => [x - x0, y - y0];
-  for (const p of panels) { p.x -= x0; p.y -= y0; if (p.poly) p.poly = p.poly.map(mv); }
-  for (const tb of tabs) tb.pts = tb.pts.map(mv);
+  for (const p of panels) { p.x -= x0; p.y -= y0; if (p.poly) p.poly = p.poly.map(mv); if (p.ly != null) p.ly -= y0; }
+  for (const tb of tabs) { tb.pts = tb.pts.map(mv); if (tb.glue) tb.glue = tb.glue.map(mv); if (tb.creases) tb.creases = tb.creases.map(([a, b, c, e]) => [a - x0, b - y0, c - x0, e - y0]); }
   if (n.slots) n.slots = n.slots.map(q => q.map(mv));
   return Object.assign(n, { W: Math.max(...xs) - x0, H: Math.max(...ys) - y0 });
 }
@@ -163,4 +164,4 @@ function dieLines(pieces) {
   return { cuts, creases };
 }
 
-export { NET_V, boxNet, dieLines, netPoint };
+export { NET_V, boxNet, cornerTabs, dieLines, netPoint, toOrigin };
