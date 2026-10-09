@@ -77,6 +77,11 @@ function applyInsert(o) {
   rt.insert.visible = !o.insert.hidden && (o.lidType === 'none' || o.lid > 2);
   invalidate();
 }
+/* the cells on the insert's face, for its window (fractions: u right, v down) */
+function insertOutline(o) {
+  const D = insertDims(o);
+  return { outer: null, holes: D.cells.map(c => cellPts(D, c).map(([x, y]) => [x / D.pw + .5, .5 - y / D.pd])), folds: [] };
+}
 /* where the filling goes in an insert: a thing per cell, as big as the cell lets it */
 function insertSpots(o) {
   const D = insertDims(o), y = o.insert.mat === 'foam' ? D.y0 + D.h - D.depth : D.y0;
@@ -92,4 +97,4 @@ function insertPanels(o, x0, y0) {
     { key: 'fold', fold: true, part: true, joins: ['insert'], x: x0, y, w: D.h, h: D.pd }, { key: 'fold', fold: true, part: true, joins: ['insert'], x: x + D.pw, y, w: D.h, h: D.pd }];
 }
 
-export { INSERT_CELL, INSERT_MAT, applyInsert, buildInsert, defaultInsert, insertDims, insertOn, insertPanels, insertSpots };
+export { INSERT_CELL, INSERT_MAT, applyInsert, insertOutline, buildInsert, defaultInsert, insertDims, insertOn, insertPanels, insertSpots };

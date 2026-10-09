@@ -19,6 +19,8 @@ import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
 import { rotateItem, scaleItem } from '../core/transform.js';
 import { boardFacePath } from '../carriers/board.js';
+import { shapeOutline } from '../carriers/shapes.js';
+import { insertOutline } from '../carriers/insert.js';
 
 const ed = $('#editor'), ectx = ed.getContext('2d');
 /* the face is drawn with a margin round it (PAD px), where the part of a layer past its edge shows */
@@ -75,6 +77,21 @@ function drawEditor() {
     });
     c.setLineDash([]); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1.2;
     for (const q of [sh.outline, ...sh.holes]) { c.beginPath(); q.forEach(([x, y], i) => c[i ? 'lineTo' : 'moveTo'](x * kx, y * ky)); c.closePath(); c.stroke(); }
+    c.restore();
+  }
+  // a face that is not all printed (a triangle, a gable, holes cut through it) and its folds: the rest veiled
+  const fo = sel.face === 'insert' && o.insert?.on ? insertOutline(o) : shapeOutline(o, sel.face);
+  if (fo) {
+    const poly = q => { q.forEach(([u, v], i) => c[i ? 'lineTo' : 'moveTo'](u * dw, v * dh)); c.closePath(); };
+    c.save(); c.beginPath();
+    if (fo.outer) { c.rect(-1, -1, dw + 2, dh + 2); poly(fo.outer); }
+    for (const q of fo.holes) poly(q);
+    c.fillStyle = 'rgba(244,241,234,.78)'; c.fill('evenodd');
+    c.strokeStyle = 'rgba(0,160,227,.9)'; c.setLineDash([5, 4]); c.lineWidth = 1.2;
+    if (fo.outer) { c.beginPath(); poly(fo.outer); c.stroke(); }
+    for (const q of fo.holes) { c.beginPath(); poly(q); c.stroke(); }
+    c.strokeStyle = 'rgba(230,0,126,.7)'; c.setLineDash([4, 3]);
+    for (const [u1, v1, u2, v2] of fo.folds) { c.beginPath(); c.moveTo(u1 * dw, v1 * dh); c.lineTo(u2 * dw, v2 * dh); c.stroke(); }
     c.restore();
   }
   const fw = faceWindow(o, sel.face);

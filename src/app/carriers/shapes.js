@@ -212,6 +212,30 @@ function hexNet(o) {
   row('lidWrap', X.lid, X.PL, ly, X.lh, 0); cap('top', X.lid, 0, ly, false);
   return shiftNet(panels, tabs, { shape: 'hexagon' });
 }
+/* what of a face's rectangle is printed and where it folds, for the face's window (fractions: u right, v down):
+   { outer: the printed outline or null (all of it), holes, folds: [[u1, v1, u2, v2]] } */
+function shapeOutline(o, k) {
+  const lt = o.lidType;
+  if (lt === 'pyramid' && /^side\d+$/.test(k)) return { outer: [[0, 1], [1, 1], [.5, 0]], holes: [], folds: [] };
+  if (lt === 'gable' && (k === 'left' || k === 'right')) { const G = gableDims(o), r = G.rh / (o.dims.h + G.rh); return { outer: [[0, 1], [1, 1], [1, r], [.5, 0], [0, r]], holes: [], folds: [] }; }
+  if (lt === 'gable' && k.startsWith('roof')) {
+    const G = gableDims(o), H = G.sl + G.gh, cy = (G.gh - G.hy) / H, w = o.dims.w;
+    const hole = rrectPts(0, 0, G.hw, G.hhole, G.hhole / 2).map(v => [.5 + v.x / w, cy - v.y / H]);
+    return { outer: null, holes: [hole], folds: [[0, G.gh / H, 1, G.gh / H]] };
+  }
+  if (lt === 'hexagon' && (k === 'wrap' || k === 'lidWrap')) {
+    const X = hexDims(o), pts = k === 'wrap' ? X.pts : X.lid, P = k === 'wrap' ? X.P : X.PL, folds = []; let s = 0;
+    pts.forEach((p, i) => { if (i) folds.push([s / P, 0, s / P, 1]); const q = pts[(i + 1) % pts.length]; s += Math.hypot(q[0] - p[0], q[1] - p[1]); });
+    return { outer: null, holes: [], folds };
+  }
+  if (lt === 'hexagon' && (k === 'top' || k === 'bottom')) {
+    const g = k === 'top' ? hexDims(o).t + .4 : 0, W = o.dims.w + 2 * g, D = o.dims.d + 2 * g;
+    // the top is seen from above (the back up), the bottom from below (the front up)
+    return { outer: polyPts(o, g).map(([x, z]) => [x / W + .5, k === 'top' ? .5 + z / D : .5 - z / D]), holes: [], folds: [] };
+  }
+  if (lt === 'pyramid' && k === 'bottom') return { outer: polyPts(o).map(([x, z]) => [x / o.dims.w + .5, .5 - z / o.dims.d]), holes: [], folds: [] };
+  return null;
+}
 function shiftNet(panels, tabs, extra) {
   const all = [...panels.flatMap(p => p.poly || [[p.x, p.y], [p.x + p.w, p.y + p.h]]), ...tabs.flatMap(t => t.pts)];
   const x0 = Math.min(...all.map(v => v[0])), y0 = Math.min(...all.map(v => v[1])), mv = ([x, y]) => [x - x0, y - y0];
@@ -220,4 +244,4 @@ function shiftNet(panels, tabs, extra) {
   return { v: 2, W: Math.max(...all.map(v => v[0])) - x0, H: Math.max(...all.map(v => v[1])) - y0, panels, tabs, ...extra };
 }
 
-export { SHAPES, buildGable, buildHexagon, buildPillow, buildPyramid, gableDims, gableNet, hexDims, hexNet, isShape, pillowDims, pillowNet, pyramidNet, pyramidSides, shapeSides };
+export { SHAPES, shapeOutline, buildGable, buildHexagon, buildPillow, buildPyramid, gableDims, gableNet, hexDims, hexNet, isShape, pillowDims, pillowNet, pyramidNet, pyramidSides, shapeSides };
