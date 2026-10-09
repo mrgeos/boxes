@@ -88,7 +88,7 @@ function initWiring() {
   };
   $('#dielineOffBtn').onclick = () => { const o = activeObj(); if (!o) return; o.dieline = null; o.netV = 2; markObj(o); ui.net = true; renderFacePanel(); commit(); };
   $('#tplBtn').onclick = $('#tplBtn2').onclick = () => { closeMenu(); exportTemplate(); };
-  $('#flatBtn').onclick = () => { closeMenu(); exportFlat(); };
+  $('#flatBtn').onclick = $('#flatBtn2').onclick = () => { closeMenu(); exportFlat(); };
   $('#pngBtn').onclick = () => { closeMenu(); exportPNG(); };
   $('#videoBtn').onclick = () => { closeMenu(); exportVideo(); };
   $$('#pngScale button').forEach(b => b.onclick = () => { setPngScale(+b.dataset.v); $$('#pngScale button').forEach(x => x.classList.toggle('on', x === b)); });
