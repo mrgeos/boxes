@@ -10,7 +10,7 @@ import { PB_KEYS, defaultPaperBag, pbNet } from '../carriers/paperbag.js';
 import { lidDimsMM, winMM, windowPlace } from '../carriers/box.js';
 import { HANDLE_KEYS, HB_END_KEYS, applyHandlePreset, defaultFrontWin, defaultHandle, hbDims, hbNet, hbOpen } from '../carriers/handle-box.js';
 import { SLEEVE_GLUE, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn, sleeveSheet, upgradeSleeve } from '../carriers/sleeve.js';
-import { boxNet } from '../carriers/box-net.js';
+import { NET_V, boxNet } from '../carriers/box-net.js';
 
 /* printed faces of an object, in tab order; depends on the lid construction */
 /* faces that close into a ring (a sleeve glued into a loop, the wall of a tube, a cup or a cake lid): what runs
@@ -63,7 +63,8 @@ const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBo
 const faceLabel = (o, k) => (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : ((o.type === 'bag' || o.type === 'paperbag') && BAG_LABEL[k]) || FACE_LABEL[k];
 function ensureFaces(o) {
   o.stickers ??= [];
-  o.netV ??= o.dieline ? 1 : 2;
+  // a sheet without an uploaded design is always laid out the current way
+  o.netV = o.dieline ? o.netV ?? 1 : NET_V;
   upgradeSleeve(o);
   if (o.type === 'box') {
     o.lidType ??= 'flat';

@@ -17,6 +17,7 @@ import { renderLibrary } from './library-panel.js';
 import { exportPNG, exportVideo, setPngScale } from '../export/image.js';
 import { exportFlat, exportTemplate } from '../net/template.js';
 import { sampleProject } from '../core/sample.js';
+import { NET_V } from '../carriers/box-net.js';
 
 function renderAll() { renderLibrary(); renderObjects(); renderModel(); renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); renderStickers(); renderFonts(); refreshFields($('#sceneSec'), state.scene); $('#lightPreset').value = state.scene.preset; ui.editor = ui.net = true; }
 /* a new object from a preset: at a point of the floor (mm), or to the right of the scene */
@@ -67,7 +68,7 @@ function initWiring() {
       else toast('Макет развёртки наложен на все грани');
     } catch { toast('Не удалось прочитать файл макета'); }
   };
-  $('#dielineOffBtn').onclick = () => { const o = activeObj(); if (!o) return; o.dieline = null; o.netV = 2; markObj(o); ui.net = true; renderFacePanel(); commit(); };
+  $('#dielineOffBtn').onclick = () => { const o = activeObj(); if (!o) return; o.dieline = null; o.netV = NET_V; markObj(o); ui.net = true; renderFacePanel(); commit(); };
   $('#tplBtn').onclick = $('#tplBtn2').onclick = () => { closeMenu(); exportTemplate(); };
   $('#flatBtn').onclick = () => { closeMenu(); exportFlat(); };
   $('#pngBtn').onclick = () => { closeMenu(); exportPNG(); };
