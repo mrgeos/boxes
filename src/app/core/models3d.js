@@ -118,7 +118,7 @@ async function importModel(files, quality = 'normal') {
   const r = await L.importFiles(files, { maxTris: Q.tris, maxTex: Q.tex });
   const b64 = bufToB64(r.glb), id = addAsset('data:model/gltf-binary;base64,' + b64);
   const longest = Math.max(...r.size), mm = longest * 1000;
-  return { ref: { asset: id }, name: r.name, tris: r.tris, before: r.before, kb: Math.round(r.glb.byteLength / 1024), size: mm >= 5 && mm <= 3000 ? Math.round(mm) : 120 };
+  return { ref: { asset: id }, name: r.name, tris: r.tris, before: r.before, kb: Math.round(r.glb.byteLength / 1024), size: mm >= 20 && mm <= 600 ? Math.round(mm) : 200 };   // a size that does not look like a thing on a table: a guess
 }
 function bufToB64(buf) { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
 const isModelFile = f => /\.(glb|gltf|obj|fbx|usdz|mtl|bin)$/i.test(f.name || '');
