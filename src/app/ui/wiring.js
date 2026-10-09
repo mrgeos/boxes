@@ -21,6 +21,8 @@ import { renderLibrary } from './library-panel.js';
 import { exportPNG, exportVideo, setPngScale } from '../export/image.js';
 import { exportFlat, exportTemplate } from '../net/template.js';
 import { sampleProject } from '../core/sample.js';
+import { newModelObject } from '../carriers/model-object.js';
+import { QUALITY, importModel } from '../core/models3d.js';
 
 function renderAll() { renderLibrary(); renderObjects(); renderModel(); renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); renderStickers(); renderFonts(); refreshFields($('#sceneSec'), state.scene); $('#lightPreset').value = state.scene.preset; paintHdr(); ui.editor = ui.net = true; }
 /* a new object from a preset: at a point of the floor (mm), or to the right of the scene */
@@ -29,6 +31,30 @@ function addObject(presetId, at = null) {
   if (at) o.pos = { x: Math.round(at.x), z: Math.round(at.z) };
   else { const b = sceneBounds(); o.pos.x = state.objects.length ? Math.round(b.max.x / S + o.dims.w / 2 + 40) : 0; }
   state.objects.push(o); buildObject(o); select(o.id, faceKeys(o)[0], null); renderObjects(); commit(); setTimeout(() => setView('fit'), 60);
+}
+/* a 3D model as an object of its own, beside the scene (or at a point of the floor, mm) */
+function addModelObject(ref, opts = {}, at = null) {
+  const o = newModelObject(ref, opts);
+  if (at) o.pos = { x: Math.round(at.x), z: Math.round(at.z) };
+  else { const b = sceneBounds(); o.pos.x = state.objects.length ? Math.round(b.max.x / S + o.size / 2 + 40) : 0; }
+  state.objects.push(o); buildObject(o); select(o.id, undefined, null); renderObjects(); commit(); setTimeout(() => setView('fit'), 400);
+  return o;
+}
+/* model files picked or dropped: made light and added as an object (the quality chosen in the gallery) */
+async function importModelFiles(files, at = null) {
+  const q = modelQuality();
+  toast('Загружаю и облегчаю модель…', 2500);
+  try {
+    const r = await importModel(files, q);
+    addModelObject({ ...r.ref, name: r.name }, { name: r.name, size: r.size }, at);
+    toast(r.before > r.tris ? `Модель «${r.name}»: ${r.before.toLocaleString('ru-RU')} → ${r.tris.toLocaleString('ru-RU')} треугольников, ${r.kb} КБ` : `Модель «${r.name}»: ${r.tris.toLocaleString('ru-RU')} треугольников, ${r.kb} КБ`, 4200);
+  } catch (e) { console.warn('model import', e); toast(e.message || 'Не удалось прочитать модель', 5000); }
+}
+let quality = null;
+function modelQuality(v) {
+  if (v) { quality = v; try { localStorage.setItem('bs3d-model-q', v); } catch { /* private mode */ } }
+  if (!quality) { try { quality = localStorage.getItem('bs3d-model-q'); } catch { /* private mode */ } }
+  return QUALITY[quality] ? quality : 'normal';
 }
 /* copies a face's background and layers onto other faces of the object */
 function copyFaceDesign(o, from, targets) {
@@ -110,4 +136,4 @@ function initWiring() {
   try { if (localStorage.getItem('box-studio-3d/hint')) $('#stageHint').hidden = true; } catch {}
 }
 
-export { addObject, copyFaceDesign, initWiring, renderAll };
+export { addModelObject, addObject, copyFaceDesign, importModelFiles, initWiring, modelQuality, renderAll };

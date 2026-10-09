@@ -11,6 +11,9 @@ import { BAG_MATS, BAG_TOPS, applyBagPreset, bagFilm } from '../carriers/bag.js'
 import { applyDomePreset } from '../carriers/dome.js';
 import { TORTE_COLORS, TORTE_FIN, applyTortePreset } from '../carriers/torte.js';
 import { TISSUE_LAYOUT, fitTissue } from '../carriers/tissue.js';
+import { FOOD, foodById, importModel, modelName } from '../core/models3d.js';
+import { modelQuality } from './wiring.js';
+import { modelOptions, pickModel } from './fill-panel.js';
 import { setLink } from '../core/brand.js';
 import { newImage } from '../core/model.js';
 import { BOARD_BOTTOM, BOARD_COVER, BOARD_SHAPE, COLLAR_OVERLAP, applyBoardPreset, fitCake, setBoardCover } from '../carriers/board.js';
@@ -71,6 +74,7 @@ function modelInput(k) {
   if (k.startsWith('pb.')) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'pb.handles') renderModel(); return; }
   if (k === 'sleeve.slide') { applySleeve(o); return; }
   if (k === 'carry.slide') { applyCarry(o); return; }
+  if (k === 'size' && o.type === 'model') { rebuildQueue.add(o.id); renderObjects(); return; }
   if (k.startsWith('tissue.')) {
     if (k === 'tissue.layout' || k === 'tissue.over') fitTissue(o);
     if (k === 'tissue.sheer') { markFace(o, 'tissue'); return; }
@@ -162,6 +166,29 @@ function renderPartModel(sec, o) {
   $('#partDel').onclick = () => extraAction(o, k, 'del');
   if (k === 'tissue') bindTissue(sec, o);
 }
+/* a 3D model standing in the scene: which model, its size, its place */
+function renderModelObject(sec, o, group) {
+  const lib = o.model?.lib, f = lib && foodById(lib);
+  sec.innerHTML = `<div class="sec-h"><h2>3D-модель</h2></div>
+    <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="name" aria-label="Название"></div>
+    <div class="field wide"><span class="fl">Модель</span><select id="modelPick">${FOOD.map(x => `<option value="${x.id}" ${x.id === lib ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}${lib ? '' : `<option value="" selected>${esc(modelName(o.model))} (свой файл)</option>`}</select></div>
+    <div class="row"><button class="btn sm" id="modelReplace">Заменить своим файлом…</button></div>
+    ${rangeField('Размер по длинной стороне, мм', 'size', 5, 1500, 1)}
+    <p class="hint">${o.dims.w}×${o.dims.d}×${o.dims.h} мм${f ? ` · ${f.tris?.toLocaleString('ru-RU')} треуг. · Poly Haven, CC0` : ''}. Модель стоит на полу, двигается и поворачивается как объект; в упаковку её кладут во вкладке «Допы» упаковки (начинка).</p>
+    <div class="sec-h" style="margin-top:4px"><h2>Положение в сцене</h2></div>
+    ${group ? `<p class="hint">Место в ряду задаёт группа «${esc(group.name)}».</p>` : rangeField('Смещение X, мм', 'pos.x', -1000, 1000, 1) + rangeField('Смещение Z, мм', 'pos.z', -1000, 1000, 1)}
+    ${rangeField(group ? 'Поворот в группе, °' : 'Поворот, °', 'rotY', -180, 180, 1)}`;
+  bindFields(sec, activeObj, modelInput, modelCommit);
+  $('#modelPick').onchange = e => { const x = foodById(e.target.value); if (!x) return; o.model = { lib: x.id }; o.name = x.name; o.size = x.size; rebuildQueue.add(o.id); renderModel(); renderObjects(); commit(); };
+  $('#modelReplace').onclick = () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = '.glb,.gltf,.bin,.obj,.mtl,.fbx,.usdz,.jpg,.jpeg,.png,.webp';
+    inp.onchange = async () => {
+      try { const r = await importModel(inp.files, modelQuality()); o.model = { ...r.ref, name: r.name }; o.name = r.name; o.size = r.size; rebuildQueue.add(o.id); renderModel(); renderObjects(); commit(); }
+      catch (e) { toast(e.message || 'Не удалось прочитать модель', 5000); }
+    };
+    inp.click();
+  };
+}
 /* tissue paper in the box: how it is laid, its sheet, paper and a quick pattern (a tiled picture on its face) */
 const patLayer = o => o.faces.tissue?.layers.find(L => L.pattern) || null;
 function tissueFields(o) {
@@ -201,6 +228,7 @@ function renderModel() {
   const group = o && parentOf(o.id);
   if (!o) { sec.innerHTML = '<div class="sec-h"><h2>Форма</h2></div><div class="empty">Нет выбранного объекта</div>'; return; }
   if (sel.part) return renderPartModel(sec, o);
+  if (o.type === 'model') return renderModelObject(sec, o, group);
   const box = o.type === 'box', cboard = o.type === 'board', foilCover = cboard && isFoil(o.cbCover), pbag = o.type === 'paperbag', cup = o.type === 'cup', bag = o.type === 'bag', dome = o.type === 'dome', torte = o.type === 'torte', film = bagFilm(o);
   sec.innerHTML = `
     <div class="sec-h"><h2>Форма и размеры</h2></div>
@@ -239,9 +267,10 @@ function renderModel() {
           + `<label class="check"><input type="checkbox" data-k="cake.on"> Торт на подложке</label>`
           + `<label class="check"><input type="checkbox" data-k="collar.on"> Ацетатная лента (тубус) вокруг торта</label>`
           + (o.collar?.on ? rangeField('Высота ленты, мм', 'collar.h', 10, 300, 1) + `<p class="hint">Прозрачная ПЭТ-лента обнимает торт по его форме. На ней можно печатать — грань «Ацетатная лента»: незапечатанное остаётся прозрачным. На развёртке — полоса с нахлёстом ${COLLAR_OVERLAP} мм под клей.</p>` : '')
-          + (o.cake?.on !== false ? `<div class="field wide"><span class="fl">Форма торта</span><select data-k="cake.shape"><option value="round">Круглый</option><option value="rect">Прямоугольный</option></select></div>`
+          + (o.cake?.on !== false ? `<div class="field wide"><span class="fl">Торт</span><select id="cakeModel">${modelOptions(o.cake.model, `<option value="" ${o.cake.model ? '' : 'selected'}>Заглушка (простой торт)</option>`)}</select></div>
+            <div class="field wide"><span class="fl">Форма торта</span><select data-k="cake.shape"><option value="round">Круглый</option><option value="rect">Прямоугольный</option></select></div>`
             + (o.cake.shape === 'rect' ? rangeField('Торт: ширина, мм', 'cake.w', 20, 800, 1) + rangeField('Торт: глубина, мм', 'cake.l', 20, 800, 1) : rangeField('Диаметр торта, мм', 'cake.d', 20, 600, 1))
-            + rangeField('Высота торта, мм', 'cake.h', 10, 250, 1) + `<div class="row"><button class="btn sm" id="cakeFit">По размеру подложки</button></div>` : '')
+            + (o.cake.model ? '' : rangeField('Высота торта, мм', 'cake.h', 10, 250, 1)) + `<div class="row"><button class="btn sm" id="cakeFit">По размеру подложки</button></div>` : '')
           + `<p class="hint">Подложка — толстый картон, обтянутый фольгой или ламинированной бумагой с печатью. Дизайн — на гранях «Верх подложки» и «Низ подложки» по форме подложки (с язычком и волнистым краем). Торт стоит сверху: круглый или прямоугольный на любой подложке, размеры задаются; «По размеру подложки» подгоняет его заново.</p>`
       : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
     ${box ? `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(LID_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>` : ''}
@@ -251,7 +280,8 @@ function renderModel() {
       + rangeField('Выдвинуть подложку, мм', 'tray.out', 0, o.dims.w, 1)
       + `<div class="field wide"><span class="fl">Подложка</span><select data-k="tray.fin">${Object.entries(TRAY_FIN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + `<div class="field wide"><span class="fl">Торт</span><div class="row"><button class="btn sm" id="prodBtn">${o.product?.src ? 'Заменить фото…' : 'Фото торта (PNG)…'}</button>${o.product?.src ? '<button class="btn sm" id="prodOff">Убрать</button>' : ''}</div></div>`
-      + (o.product?.src ? rangeField('Торт: ширина, мм', 'product.w', 5, 800, 1) : `<label class="check"><input type="checkbox" data-k="product.cake"> Торт-заглушка, пока нет фото</label>`)
+      + (o.product?.src ? rangeField('Торт: ширина, мм', 'product.w', 5, 800, 1) : `<label class="check"><input type="checkbox" data-k="product.cake"> Торт, пока нет фото</label>`
+        + (o.product?.cake !== false ? `<div class="field wide"><span class="fl">Какой</span><select id="prodModel">${modelOptions(o.product?.model, `<option value="" ${o.product?.model ? '' : 'selected'}>Заглушка (простой торт)</option>`)}</select></div>` : ''))
       + `<label class="check"><input type="checkbox" data-k="handle.on"> Ручка</label>` : ''}
     ${box && o.lidType === 'handle' && o.handle?.on ? `<div class="field wide"><span class="fl">Заготовка ручки</span><select data-k="handle.shape">${Object.entries(HANDLE_SHAPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + rangeField('Ручка: ширина, мм', 'handle.w', 20, 400, 1) + rangeField('Ручка: высота, мм', 'handle.h', 15, 200, 1)
@@ -316,6 +346,9 @@ function renderModel() {
     o.product.src = r.id; o.product.aspect = r.aspect;
     rebuildQueue.add(o.id); renderModel(); commit();
   });
+  // the cake: the plain one, or a 3D model (the library, a file)
+  if ($('#cakeModel')) $('#cakeModel').onchange = e => { if (!e.target.value) { delete o.cake.model; rebuildQueue.add(o.id); renderModel(); commit(); return; } pickModel(e.target.value, ref => { o.cake.model = ref; rebuildQueue.add(o.id); renderModel(); commit(); }); };
+  if ($('#prodModel')) $('#prodModel').onchange = e => { if (!e.target.value) { delete o.product.model; rebuildQueue.add(o.id); renderModel(); commit(); return; } pickModel(e.target.value, ref => { o.product.model = ref; rebuildQueue.add(o.id); renderModel(); commit(); }); };
   if ($('#cakeFit')) $('#cakeFit').onclick = () => { fitCake(o, o.cake.shape); rebuildQueue.add(o.id); renderModel(); commit(); };
   if ($('#prodOff')) $('#prodOff').onclick = () => { o.product.src = null; rebuildQueue.add(o.id); renderModel(); commit(); };
   $('#presetSel').onchange = e => {
@@ -388,6 +421,8 @@ function windowFields(o) {
 /* the HDR row shows with «Свой HDR» picked */
 function paintHdr() { const s = state.scene; $('#envHdrRow').hidden = s.envMap !== 'hdr'; $('#envHdrName').textContent = s.envMap === 'hdr' ? (s.envHdr && assets[s.envHdr] ? 'панорама загружена' : 'выберите файл .hdr') : ''; }
 function bindScene() {
+  // a model's size is known once it is loaded
+  addEventListener('bs-model-ready', () => { const o = activeObj(); if (o && (o.type === 'model' || o.fill?.on)) renderModel(); });
   const sec = $('#sceneSec');
   $('#sceneFields').innerHTML = rangeField('Свет', 'light', 0, 6, .05) + rangeField('Направление, °', 'az', -180, 180, 1) + rangeField('Высота света, °', 'el', 5, 89, 1) + rangeField('Тень', 'shadow', 0, 100, 1, 100) + rangeField('Экспозиция', 'exposure', .4, 1.8, .01);
   // what metal and gloss reflect: a studio or a HDR of one's own, turned round the model, how strong

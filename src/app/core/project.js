@@ -11,7 +11,8 @@ import { emptyKit } from './brand.js';
 import { cloudChanged, detachProject } from './cloud.js';
 import { RT, buildObject, disposeObject, ui } from '../scene/renderer.js';
 import { activeSticker } from '../stickers/placement.js';
-import { activeRibbon } from './extras.js';
+import { activeFill, activeRibbon } from './extras.js';
+import { modelRefs } from './models3d.js';
 import { applyScene, setLastView, setView } from '../scene/camera.js';
 import { layoutAll, normalizeTree } from './groups.js';
 import { renderFonts, renderLayerProps } from '../ui/face-panel.js';
@@ -40,7 +41,7 @@ function restore(s) {
   sel.multi = sel.multi.filter(id => state.groups.some(g => g.id === id) || state.objects.some(o => o.id === id));
   const f = activeFaceData(); if (!f || !f.layers.some(l => l.id === sel.layer)) sel.layer = null;
   if (!activeSticker()) sel.sticker = null;
-  if (!activeRibbon()) sel.ribbon = null;
+  if (!activeRibbon() && !activeFill()) sel.ribbon = null;
   applyScene(); renderAll(); updateUndo(); scheduleSave();
 }
 function undo() { if (hist.i > 0) { hist.i--; restore(hist.stack[hist.i]); } }
@@ -54,6 +55,8 @@ function usedAssets() {
     for (const st of o.stickers || []) for (const id of [st.src, st.bgSrc]) if (id) used.add(id);
     if (o.product?.src) used.add(o.product.src);
     for (const r of o.ribbons || []) if (r.src) used.add(r.src);
+    // 3D models brought in as files (the library's are referred to by name)
+    for (const m of modelRefs(o)) if (m.asset) used.add(m.asset);
   }
   for (const f of state.fonts) used.add(f.asset);
   if (state.scene.envMap === 'hdr' && state.scene.envHdr) used.add(state.scene.envHdr);

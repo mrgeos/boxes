@@ -16,7 +16,7 @@ import { refreshFields } from '../ui/fields.js';
 import { addImageToFace, addLayer, deleteLayer, duplicateLayer, layerCmd, moveLayer, renderFaceTabs, renderLayerProps, renderLayers } from '../ui/face-panel.js';
 import { deleteSticker, editStickerText, extraAction, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
 import { setTab } from '../ui/tabs.js';
-import { activeRibbon, isPart } from '../core/extras.js';
+import { activeFill, activeRibbon, isPart } from '../core/extras.js';
 import { handleAt } from './sel-box.js';
 import { startTextEdit } from '../ui/text-edit.js';
 import { rotateItem, scaleItem, sizeOf } from '../core/transform.js';
@@ -25,6 +25,7 @@ import { layerBox } from '../faces/render.js';
 import { tool } from '../ui/action-bar.js';
 import { placeLibImage } from '../ui/library-panel.js';
 import { ed, edPoint, edState, hitLayer } from '../ui/face-editor.js';
+import { importModelFiles } from '../ui/wiring.js';
 
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function pick(clientX, clientY, only = null) {
@@ -343,6 +344,8 @@ function initInteraction() {
   window.addEventListener('drop', e => {
     if (!isFileDrag(e)) return; e.preventDefault(); dragDepth = 0; $('#dropHint').hidden = true;
     const file = [...e.dataTransfer.files][0]; if (!file) return;
+    // a 3D model (with its companion files): an object where it was dropped
+    if ([...e.dataTransfer.files].some(f => /\.(glb|gltf|obj|fbx|usdz)$/i.test(f.name))) return importModelFiles(e.dataTransfer.files);
     if (/\.(ttf|otf|woff2?)$/i.test(file.name)) return addFontFile(file);
     if (file.name.endsWith('.json')) return openProjectFile(file);
     if (e.target === cvs) {
@@ -432,7 +435,7 @@ function initInteraction() {
       // the face's background picked: Esc lets it go; Delete does nothing (it is not the object)
       if (sel.bg) { if (e.key === 'Escape') selectLayer(null); return; }
       // a sleeve, a carrier or a ribbon picked: the keys act on it, Esc goes back to the object
-      const part = sel.part || (activeRibbon() && sel.ribbon);
+      const part = sel.part || ((activeRibbon() || activeFill()) && sel.ribbon);
       if (part) {
         if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); extraAction(activeObj(), part, 'del'); }
         else if (e.key === 'Escape') selectObjectItself();

@@ -17,6 +17,8 @@ import { buildPaperBag, paperBagColors } from '../carriers/paperbag.js';
 import { buildRibbons, disposeRibbons } from '../carriers/ribbon.js';
 import { boardColors, buildBoard } from '../carriers/board.js';
 import { applyTissue, buildTissue } from '../carriers/tissue.js';
+import { buildModelObject } from '../carriers/model-object.js';
+import { buildFill } from '../carriers/fill.js';
 import { computeFrames } from '../stickers/placement.js';
 import { buildStickerFilms } from '../stickers/film.js';
 import { camTween, invalidate, orbitLock, updateShadowCam } from './camera.js';
@@ -141,12 +143,12 @@ function buildObject(o) {
     RT.set(o.id, rt); world.add(rt.group);
   }
   disposeRibbons(rt);
-  rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null;
+  rt.group.traverse(m => { if ((m.isMesh || m.isLine) && !m.userData.shared) m.geometry.dispose(); });
+  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null;
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
-  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else if (o.type === 'board') buildBoard(o, rt); else buildTube(o, rt);
-  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); buildTissue(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); applyObjMaterials(o); markObj(o);
+  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else if (o.type === 'board') buildBoard(o, rt); else if (o.type === 'model') buildModelObject(o, rt); else buildTube(o, rt);
+  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); buildTissue(o, rt); buildFill(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); applyObjMaterials(o); markObj(o);
   rt.stickerMeshes = []; buildStickerFilms(o);
   if (parentOf(o.id) && JSON.stringify(foot) !== JSON.stringify(rt.foot)) layoutSoon();   // the row makes room for its new size
 }
@@ -165,7 +167,7 @@ function disposeObject(id) {
   invalidate();
   const rt = RT.get(id); if (!rt) return;
   disposeRibbons(rt);
-  rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
+  rt.group.traverse(m => { if ((m.isMesh || m.isLine) && !m.userData.shared) m.geometry.dispose(); });
   world.remove(rt.group);
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.coatTex?.dispose(); f.iriTex?.dispose(); f.grain?.dispose(); }
   for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }

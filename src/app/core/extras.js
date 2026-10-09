@@ -7,6 +7,8 @@ import { invalidate } from '../scene/camera.js';
 import { applySleeve, sleeveOn } from '../carriers/sleeve.js';
 import { applyCarry, carryOn } from '../carriers/carry.js';
 import { applyTissue, fitTissue, tissueOn } from '../carriers/tissue.js';
+import { defaultFill, fillFits, fillOn } from '../carriers/fill.js';
+import { modelName } from './models3d.js';
 import { STICKER_KIND, touchSticker } from '../stickers/placement.js';
 import { buildRibbons, newRibbon, ribbonFits, ribbonName, ribbonsOf, showRibbons } from '../carriers/ribbon.js';
 
@@ -15,7 +17,7 @@ import { buildRibbons, newRibbon, ribbonFits, ribbonName, ribbonsOf, showRibbons
    (not drawn) and locked (not picked on the model). */
 const PART_KEYS = ['sleeve', 'carry', 'tissue'];
 const isPart = k => PART_KEYS.includes(k);
-const EXTRA_LABEL = { sticker: 'Наклейка', sleeve: 'Рукав', carry: 'Рукав-переноска', ribbon: 'Лента', tissue: 'Бумага тишью' };
+const EXTRA_LABEL = { sticker: 'Наклейка', sleeve: 'Рукав', carry: 'Рукав-переноска', ribbon: 'Лента', tissue: 'Бумага тишью', fill: 'Начинка' };
 
 /* the object's extras, in list order: { kind, id, T: its own data } */
 function extrasOf(o) {
@@ -25,6 +27,7 @@ function extrasOf(o) {
     ...(carryOn(o) ? [{ kind: 'carry', id: 'carry', T: o.carry }] : []),
     ...(tissueOn(o) ? [{ kind: 'tissue', id: 'tissue', T: o.tissue }] : []),
     ...ribbonsOf(o).map(r => ({ kind: 'ribbon', id: r.id, T: r })),
+    ...(fillOn(o) ? [{ kind: 'fill', id: 'fill', T: o.fill }] : []),
     ...(o.stickers || []).map(st => ({ kind: 'sticker', id: st.id, T: st })),
   ];
 }
@@ -35,12 +38,15 @@ function extraName(o, e) {
   if (e.kind === 'carry') return 'Рукав-переноска';
   if (e.kind === 'tissue') return o.tissue.layout === 'cross' ? 'Тишью, два листа' : 'Бумага тишью';
   if (e.kind === 'ribbon') return ribbonName(e.T);
+  if (e.kind === 'fill') return `Начинка: ${modelName(o.fill.model).toLowerCase()} ×${o.fill.count}`;
   const st = e.T;
   return st.text?.trim() ? `Наклейка «${st.text.trim().slice(0, 20)}»` : st.bgSrc ? 'Фото-наклейка' : st.kind === 'custom' ? 'Наклейка своей формы' : STICKER_KIND[st.kind].split(' ')[0];
 }
 const extraHidden = e => e.kind === 'sticker' ? !e.T.visible : !!e.T.hidden;
 /* the ribbon picked (shown as an object of its own) */
 const activeRibbon = () => ribbonsOf(activeObj()).find(r => r.id === sel.ribbon) || null;
+/* the filling picked (sel.ribbon holds the extra without a face that is picked: a ribbon or 'fill') */
+const activeFill = () => sel.ribbon === 'fill' && fillOn(activeObj()) ? activeObj().fill : null;
 
 /* ---------- actions ---------- */
 /* a part shown or hidden on the model (a sticker keeps its own `visible`) */
@@ -49,6 +55,7 @@ function setExtraHidden(o, id, on) {
   if (e.kind === 'sticker') { e.T.visible = !on; touchSticker(o, e.T); return; }
   if (on) e.T.hidden = true; else delete e.T.hidden;
   if (e.kind === 'ribbon') return showRibbons(o);
+  if (e.kind === 'fill') { rebuildQueue.add(o.id); return; }
   e.kind === 'sleeve' ? applySleeve(o) : e.kind === 'tissue' ? applyTissue(o) : applyCarry(o); invalidate();
 }
 function setExtraLocked(o, id, on) { const e = extraById(o, id); if (!e) return; if (on) e.T.locked = true; else delete e.T.locked; }
@@ -69,8 +76,16 @@ function addRibbon(o, over = {}) {
   (o.ribbons ??= []).push(r); buildRibbons(o);
   return r;
 }
+/* lays a 3D model in the packaging (several of it, over its floor) */
+function addFill(o, ref = null) {
+  if (!fillFits(o)) return null;
+  o.fill = { ...defaultFill(), ...(o.fill || {}), on: true, ...(ref ? { model: ref } : {}) }; delete o.fill.hidden;
+  rebuildQueue.add(o.id);
+  return o.fill;
+}
 function deleteExtra(o, id) {
   const e = extraById(o, id); if (!e) return;
+  if (e.kind === 'fill') { o.fill.on = false; rebuildQueue.add(o.id); return; }
   if (e.kind === 'ribbon') { o.ribbons = o.ribbons.filter(r => r !== e.T); if (!o.ribbons.length) delete o.ribbons; buildRibbons(o); return; }
   if (e.kind === 'sticker') { o.stickers = o.stickers.filter(t => t !== e.T); touchSticker(o, { ...e.T, visible: false }); return; }
   e.T.on = false; rebuildQueue.add(o.id);
@@ -84,4 +99,4 @@ function duplicateExtra(o, id) {
   return c;
 }
 
-export { EXTRA_LABEL, PART_KEYS, activeRibbon, addPart, addRibbon, deleteExtra, duplicateExtra, extraById, extraHidden, extraName, extrasOf, isPart, renameExtra, setExtraHidden, setExtraLocked };
+export { EXTRA_LABEL, PART_KEYS, activeFill, activeRibbon, addFill, addPart, addRibbon, deleteExtra, duplicateExtra, extraById, extraHidden, extraName, extrasOf, isPart, renameExtra, setExtraHidden, setExtraLocked };

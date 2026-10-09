@@ -15,9 +15,9 @@ import { sleeveDims } from '../carriers/sleeve.js';
 import { carryDims } from '../carriers/carry.js';
 import { deleteLayer, duplicateLayer, renderLayerProps } from './face-panel.js';
 import { deleteSticker, duplicateSticker, editStickerText, extraAction, renderStickers } from './stickers-panel.js';
-import { deleteIds, duplicateIds } from './object-list.js';
+import { deleteIds, duplicateIds, renderObjects } from './object-list.js';
 import { lidAction, toggleLid, turn } from './context-menus.js';
-import { activeRibbon } from '../core/extras.js';
+import { activeFill, activeRibbon } from '../core/extras.js';
 import { buildRibbons } from '../carriers/ribbon.js';
 import { modelInput, renderModel } from './model-panel.js';
 import { startTextEdit, textEditing } from './text-edit.js';
@@ -36,6 +36,7 @@ const sep = '<span class="ab-sep"></span>';
 /* the sizes an object shows, by its kind: [key of o.dims, label] */
 function dimKeys(o) {
   if (o.type === 'tube' || o.type === 'torte') return [['w', 'Ø'], ['h', 'В']];
+  if (o.type === 'model') return [];
   if (o.type === 'board') return o.cbShape === 'round' ? [['w', 'Ø']] : [['w', 'Ш'], ['d', 'Г']];   // its thickness is set in the panel (it can be under 5 mm)
   if (o.type === 'cup') return [['w', 'Ø верх'], ['d', 'Ø низ'], ['h', 'В']];
   return [['w', 'Ш'], ['d', 'Г'], ['h', 'В']];
@@ -50,6 +51,7 @@ function kindNow() {
   if (!o || sel.group || recording || textEditing()) return null;
   if (activeSticker()) return 'sticker';
   if (activeRibbon()) return 'ribbon';
+  if (activeFill()) return 'fill';
   if (activeLayer()) return selectedLayers().length > 1 ? 'layers' : 'layer';
   if (sel.part) return 'part';
   if (sel.bg) return null;
@@ -62,7 +64,7 @@ function build(kind) {
     return (lid ? `<button class="ab wide ${open ? 'on' : ''}" id="cbLid" title="${esc(open ? lid[1] : lid[0])}">${ICON.lidOpen}<span>${esc(open ? lid[1] : lid[0])}</span></button>
         <input type="range" id="cbLidR" min="0" max="${lid[2]}" step="1" value="${o.lid || 0}" aria-label="Насколько открыть">${sep}` : '')
       + ib('cbRotL', ICON.rotL, 'Повернуть на 90° влево') + ib('cbRotR', ICON.rotR, 'Повернуть на 90° вправо') + sep
-      + `<span class="cb-dims">${dimKeys(o).map(([k, t]) => `<label title="${t}, мм"><span>${t}</span><input class="num" type="number" min="5" max="2000" step="1" data-dim="${k}" value="${fmt(o.dims[k])}"></label>`).join('')}<span class="hint">мм</span></span>${sep}`
+      + (dimKeys(o).length ? `<span class="cb-dims">${dimKeys(o).map(([k, t]) => `<label title="${t}, мм"><span>${t}</span><input class="num" type="number" min="5" max="2000" step="1" data-dim="${k}" value="${fmt(o.dims[k])}"></label>`).join('')}<span class="hint">мм</span></span>${sep}` : '')
       + ib('cbFocus', ICON.focus, 'Приблизить (F)') + ib('cbDup', ICON.copy, 'Дублировать (Ctrl+D)') + ib('cbDel', ICON.trash, 'Удалить (Delete)');
   }
   if (kind === 'part' && sel.part === 'tissue') return `<span class="hint cb-l">Тишью</span>${[['flat', '1 лист'], ['cross', '2 листа']].map(([v, t]) => `<button class="ab wide ${o.tissue.layout === v ? 'on' : ''}" data-lay="${v}"><span>${t}</span></button>`).join('')}${sep}` + ib('cbDel', ICON.trash, 'Удалить (Delete)');
@@ -80,6 +82,7 @@ function build(kind) {
     const r = activeRibbon();
     return `<span class="hint cb-l">Завязка</span>${[['classic', 'Бант'], ['puffy', 'Пышный'], ['knot', 'Узел']].map(([v, t]) => `<button class="ab wide ${r.bow === v ? 'on' : ''}" data-bow="${v}"><span>${t}</span></button>`).join('')}${sep}` + ib('cbDel', ICON.trash, 'Удалить ленту (Delete)');
   }
+  if (kind === 'fill') return `<span class="hint cb-l">Начинка ×${o.fill.count}</span><button class="ab" id="cbLess" title="Меньше">−</button><button class="ab" id="cbMore" title="Больше">+</button>${sep}` + ib('cbDel', ICON.trash, 'Убрать начинку (Delete)');
   if (kind === 'sticker') return `<button class="ab wide" id="cbType">${ICON.textT}<span>Текст</span></button>${sep}` + ib('cbDup', ICON.copy, 'Дублировать наклейку') + ib('cbDel', ICON.trash, 'Удалить наклейку (Delete)');
   return '';
 }
@@ -106,6 +109,10 @@ function bind(kind) {
     const r = activeRibbon();
     bar().querySelectorAll('[data-bow]').forEach(b => b.addEventListener('click', () => { r.bow = b.dataset.bow; buildRibbons(o); renderStickers(); commit(); refresh(); }));
     on('cbDel', 'click', () => extraAction(o, r.id, 'del'));
+  } else if (kind === 'fill') {
+    const step = d => { o.fill.count = Math.max(1, Math.min(30, o.fill.count + d)); rebuildQueue.add(o.id); renderStickers(); renderObjects(); commit(); refresh(); };
+    on('cbLess', 'click', () => step(-1)); on('cbMore', 'click', () => step(1));
+    on('cbDel', 'click', () => extraAction(o, 'fill', 'del'));
   } else if (kind === 'sticker') {
     const st = activeSticker();
     on('cbType', 'click', () => editStickerText(o, st.id));
@@ -120,13 +127,13 @@ function bind(kind) {
 /* the selection's box on the screen (client px): a layer or sticker by its frame, an object by its 3D box */
 const box3 = new THREE.Box3(), v3 = new THREE.Vector3();
 function screenBox(kind) {
-  if (kind !== 'object' && kind !== 'part' && kind !== 'ribbon') {
+  if (kind !== 'object' && kind !== 'part' && kind !== 'ribbon' && kind !== 'fill') {
     const q = boxOnScreen(); if (!q) return null;
     const xs = q.map(p => p[0]), ys = q.map(p => p[1]);
     return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
   }
   const rt = RT.get(activeObj().id); if (!rt) return null;
-  const g = kind === 'part' ? rt[sel.part] || rt.group : kind === 'ribbon' ? rt.ribbonGroups?.get(sel.ribbon) || rt.group : rt.group;
+  const g = kind === 'part' ? rt[sel.part] || rt.group : kind === 'ribbon' ? rt.ribbonGroups?.get(sel.ribbon) || rt.group : kind === 'fill' ? rt.fill || rt.group : rt.group;
   box3.setFromObject(g); if (box3.isEmpty()) return null;
   const r = cvs.getBoundingClientRect(); let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let i = 0; i < 8; i++) {
@@ -140,7 +147,7 @@ function screenBox(kind) {
 function syncCtxBar(moved = true) {
   const el = bar(); if (!el) return;
   const kind = busy ? null : kindNow(), o = activeObj();
-  const k = kind && [kind, o.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, o.tissue?.layout, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
+  const k = kind && [kind, o.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, o.tissue?.layout, o.fill?.count, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
   if (!kind) { el.hidden = true; key = ''; return; }
   // nothing new and the view still: it stays where it is
   if (k === key && !moved) return;

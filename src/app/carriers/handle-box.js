@@ -7,6 +7,7 @@ import { getImg } from '../core/assets.js';
 import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
 import { netWindows, winMM } from './box.js';
 import { addCake } from './cake.js';
+import { placeModel } from '../core/models3d.js';
 
 const HANDLE_KEYS = ['handleFront', 'handleBack'];
 const HANDLE_SHAPES = { arch: 'Арка', rect: 'Прямоугольная с прорезью', photo: 'Рамка с широкой проймой' };
@@ -370,6 +371,9 @@ function buildHandleBox(o, rt, { addG, add, film }) {
     rt.productMat.map = rt.productTex; rt.productMat.needsUpdate = true;
     const pw = clamp(pr.w ?? B.trW * .8, 5, 1000) * S, ph = pw * im.naturalHeight / im.naturalWidth;
     const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), rt.productMat); m.position.set((pr.x || 0) * S, TT + ph / 2, 0); m.raycast = () => {}; m.userData = { objId: o.id, face: null }; tr.add(m);
+  } else if (pr.cake !== false && pr.model) {
+    // a 3D model of the cake: as large as fits the tray and under the lid
+    placeModel(tr, o, pr.model, { fit: [B.trW * .85, B.trD * .85, (H - TT) / S * .9], at: [pr.x || 0, TT / S, 0], pick: false });
   } else if (pr.cake !== false) {
     // a plain cake while there is no photo: sponge, cream top, a ring of cream dollops and berries
     const R = Math.min(TW, TD) * .38, hc = Math.min(H * .42, 70 * S, R * 1.1);

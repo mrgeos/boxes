@@ -23,6 +23,18 @@ const out = await build({
   bundle: true, format: 'esm', minify: true, write: false, target: 'es2022', legalComments: 'inline', metafile: true,
 });
 const js = out.outputFiles[0].text;
+
+// the 3D-model loader is a file of its own (box-studio-models.js beside the page), loaded when a model is first
+// added: it is large and not every project needs it. It uses the editor's three.js (window.__BS_THREE), not a copy.
+const shareThree = { name: 'share-three', setup(b) {
+  b.onResolve({ filter: /^three$/ }, () => ({ path: 'three', namespace: 'shared' }));
+  b.onLoad({ filter: /.*/, namespace: 'shared' }, () => ({ contents: 'module.exports = window.__BS_THREE;', loader: 'js' }));
+} };
+const models = await build({
+  entryPoints: [new URL('src/models/main.js', import.meta.url).pathname], plugins: [shareThree],
+  bundle: true, format: 'iife', minify: true, write: false, target: 'es2022', legalComments: 'inline',
+});
+const modelsJs = '// Box Studio 3D: загрузчик 3D-моделей (собран из src/models командой npm run build; three.js — из редактора; meshoptimizer — MIT, © Arseny Kapoulkine)\n' + models.outputFiles[0].text;
 const packed = gzipSync(Buffer.from(js, 'utf8'), { level: 9 }).toString('base64');
 
 // the loader: unpack and run the editor as an inline module (the same rules as a plain inline script)
@@ -47,8 +59,11 @@ const unpack = h => { const m = h.match(/const z = "([^"]*)";/); return m ? [h.r
 if (process.argv.includes('--check')) {
   const [a, b] = [unpack(read('box-studio-3d.html')), unpack(html)];
   if (a[0] !== b[0] || a[1] !== b[1]) { console.error('box-studio-3d.html не совпадает со сборкой из src/: выполните npm run build и закоммитьте его'); process.exit(1); }
+  if (read('box-studio-models.js') !== modelsJs) { console.error('box-studio-models.js не совпадает со сборкой из src/models: выполните npm run build и закоммитьте его'); process.exit(1); }
   console.log('box-studio-3d.html совпадает со сборкой из src/');
   process.exit(0);
 }
 writeFileSync(new URL('box-studio-3d.html', import.meta.url), html);
+writeFileSync(new URL('box-studio-models.js', import.meta.url), modelsJs);
+console.log(`box-studio-models.js: ${(Buffer.byteLength(modelsJs) / 1024).toFixed(0)} КБ (по требованию)`);
 console.log(`box-studio-3d.html: ${(Buffer.byteLength(html) / 1024).toFixed(0)} КБ (скрипт без сжатия ${(Buffer.byteLength(js) / 1024).toFixed(0)} КБ, ${Object.keys(out.metafile.inputs).filter(f => f.startsWith('src/app/')).length} модулей)`);

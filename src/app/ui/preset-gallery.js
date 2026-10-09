@@ -6,12 +6,13 @@ import { faceKeys, newObject } from '../core/model.js';
 import { RT, buildObject, disposeObject, renderer, scene } from '../scene/renderer.js';
 import { invalidate } from '../scene/camera.js';
 import { renderFace } from '../faces/render.js';
-import { addObject } from './wiring.js';
+import { addModelObject, addObject, importModelFiles, modelQuality } from './wiring.js';
+import { FOOD, QUALITY, foodById } from '../core/models3d.js';
 
 /* Presets by kind of packaging. A tile's picture is the preset itself, built off-screen and drawn once by the
    scene's own renderer (in a corner of its canvas, in the same task, so it never shows), then kept in the
    browser. Pictures are made one at a time in the background while the gallery is open. */
-const CATS = [['all', 'Все'], ['box', 'Коробки'], ['cake', 'Для тортов'], ['bag', 'Пакеты'], ['cup', 'Стаканы и тубусы']];
+const CATS = [['all', 'Все'], ['box', 'Коробки'], ['cake', 'Для тортов'], ['bag', 'Пакеты'], ['cup', 'Стаканы и тубусы'], ['model', '3D-модели']];
 const catOf = p => p.type === 'torte' || p.type === 'dome' || p.type === 'board' || p.id.startsWith('cake') ? 'cake'
   : p.type === 'bag' || p.type === 'paperbag' ? 'bag' : p.type === 'cup' || p.type === 'tube' ? 'cup' : 'box';
 const THUMB_V = 1, SIZE = 160, STORE = 'bs3d-thumbs';
@@ -28,7 +29,26 @@ function saveThumbs() {
   try { localStorage.setItem(STORE, JSON.stringify(keep)); } catch {}
 }
 
+/* 3D models: the food library and the user's own files (GLB, glTF, OBJ, FBX, USDZ), made light on import */
+function renderModels(sec) {
+  sec.innerHTML = `<div class="sec-h"><h2>3D-модели</h2><span class="hint">${FOOD.length}</span></div>
+    <div class="gal-cats" role="tablist">${CATS.map(([k, n]) => `<button role="tab" data-cat="${k}" class="${k === cat ? 'on' : ''}" aria-selected="${k === cat}">${n}</button>`).join('')}</div>
+    <div class="row"><button class="btn sm" id="modelFile">Загрузить свою модель…</button></div>
+    <div class="field wide"><span class="fl">Качество</span><select id="modelQ">${Object.entries(QUALITY).map(([k, v]) => `<option value="${k}">${v.label} — до ${(v.tris / 1000)} тыс. треуг., текстуры ${v.tex} px</option>`).join('')}</select></div>
+    <p class="hint">GLB или glTF (с файлами .bin и картинками — выберите их вместе), OBJ (с .mtl и картинками), FBX, USDZ. Тяжёлая модель облегчается: меньше треугольников, картинки меньше, рельеф остаётся в карте нормалей. Можно перетащить файлы в окно.</p>
+    <div class="gal">${FOOD.map(f => `<button class="gal-it" data-food="${f.id}" title="${esc(f.name)} · ${f.tris?.toLocaleString('ru-RU') || '?'} треуг. · ${f.kb} КБ"><span class="th" style="background-image:url('${f.thumb}')"></span><span class="nm">${esc(f.name)}</span></button>`).join('')}</div>
+    <p class="hint">Модели еды — Poly Haven, CC0 (свободно для любых целей). Загружаются по клику.</p>`;
+  $$('#galSec .gal-cats button').forEach(b => { b.onclick = () => { cat = b.dataset.cat; renderGallery(); }; });
+  $$('#galSec [data-food]').forEach(b => { b.onclick = () => { const f = foodById(b.dataset.food); addModelObject({ lib: f.id }, { name: f.name, size: f.size }); }; });
+  $('#modelQ').value = modelQuality(); $('#modelQ').onchange = e => modelQuality(e.target.value);
+  $('#modelFile').onclick = () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = '.glb,.gltf,.bin,.obj,.mtl,.fbx,.usdz,.jpg,.jpeg,.png,.webp';
+    inp.onchange = () => { if (inp.files.length) importModelFiles(inp.files); };
+    inp.click();
+  };
+}
 function renderGallery() {
+  if (cat === 'model') return renderModels($('#galSec'));
   const sec = $('#galSec'), T = loadThumbs(), list = PRESETS.filter(p => cat === 'all' || catOf(p) === cat);
   sec.innerHTML = `<div class="sec-h"><h2>Браузер заготовок</h2><span class="hint">${list.length}</span></div>
     <div class="gal-cats" role="tablist">${CATS.map(([k, n]) => `<button role="tab" data-cat="${k}" class="${k === cat ? 'on' : ''}" aria-selected="${k === cat}">${n}</button>`).join('')}</div>

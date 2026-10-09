@@ -84,4 +84,4 @@ function applyTissue(o) {
   invalidate();
 }
 
-export { TISSUE_LAYOUT, applyTissue, buildTissue, defaultTissue, fitTissue, tissueOn };
+export { TISSUE_LAYOUT, applyTissue, boxInside, buildTissue, defaultTissue, fitTissue, tissueOn };

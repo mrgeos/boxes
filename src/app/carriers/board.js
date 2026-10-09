@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { S, clamp } from '../core/util.js';
 import { FINISHES, FOIL_METAL, isFoil } from '../core/constants.js';
 import { addCake } from './cake.js';
+import { placeModel } from '../core/models3d.js';
 
 /* A cake board is a sheet of thick board (dims.h, 1.5–12 mm; a thick one is a drum) of a round or rectangular
    outline (dims.w × dims.d, a circle: dims.w), its edge plain or scalloped, with a tab to take it by (a pastry
@@ -147,7 +148,9 @@ function buildBoard(o, rt) {
   const C = o.cake;
   if (C && C.on !== false) {
     const ch = clamp(C.h ?? 50, 10, 300);
-    if (C.shape === 'rect') { const cw = clamp(C.w ?? 100, 20, 2000), cl = clamp(C.l ?? 100, 20, 2000); addCake(rt.group, o, rt, { rect: [cw, cl, Math.min(cw, cl) * .06 + (o.cbShape === 'rect' ? (o.cbR || 0) * .5 : 0)], y0: h, h: ch }); }
+    // a 3D model of the cake: within the cake's size (round: its diameter; a slab: its width and depth)
+    if (C.model) { const fw = C.shape === 'rect' ? clamp(C.w ?? 100, 20, 2000) : clamp(C.d ?? 100, 20, 2000), fd = C.shape === 'rect' ? clamp(C.l ?? 100, 20, 2000) : fw; placeModel(rt.group, o, C.model, { fit: [fw, fd, 2000], at: [0, h, 0], pick: false }); }
+    else if (C.shape === 'rect') { const cw = clamp(C.w ?? 100, 20, 2000), cl = clamp(C.l ?? 100, 20, 2000); addCake(rt.group, o, rt, { rect: [cw, cl, Math.min(cw, cl) * .06 + (o.cbShape === 'rect' ? (o.cbR || 0) * .5 : 0)], y0: h, h: ch }); }
     else { const cd = clamp(C.d ?? 100, 20, 2000); addCake(rt.group, o, rt, { R: cd / 2, y0: h, h: Math.min(ch, cd * .7) }); }
   }
   buildCollar(o, rt);

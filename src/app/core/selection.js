@@ -56,7 +56,7 @@ function selectExtra(objId, id) {
   if (isPart(id)) { select(objId, id, null); return; }
   select(objId, undefined, null);
   // a sticker or a ribbon
-  const rb = extraById(activeObj(), id)?.kind === 'ribbon';
+  const kd = extraById(activeObj(), id)?.kind, rb = kd === 'ribbon' || kd === 'fill';
   sel.sticker = rb ? null : id; sel.ribbon = rb ? id : null; sel.part = null; setLayerSelection([]);
   renderObjects(); renderStickers(); renderLayers(); renderLayerProps(); refreshTabs(); invalidate();
 }

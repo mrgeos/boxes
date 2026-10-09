@@ -25,6 +25,7 @@ function loopAxis(o, k) {
 function faceKeys(o) {
   if (o.type === 'tube') return ['wrap', 'top', 'bottom'];
   if (o.type === 'board') return ['top', 'bottom', ...(collarOn(o) ? ['collar'] : [])];
+  if (o.type === 'model') return [];
   if (o.type === 'cup') return ['wrap'];
   if (o.type === 'paperbag') return PB_KEYS;
   if (o.type === 'torte') return ['lidWrap', 'top', ...(carryOn(o) ? ['carry'] : [])];
@@ -102,7 +103,7 @@ function ensureFaces(o) {
   if (o.whiteInside === undefined) o.whiteInside = true;
   for (const st of o.stickers) if (!faceKeys(o).includes(st.face)) st.face = faceKeys(o)[0];
   for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) || k === 'sleeve' || k === 'carry' || k === 'tissue' ? '#ffffff' : k.startsWith('inside') || HANDLE_KEYS.includes(k) ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
-  if (!o.board) o.board = (o.faces.front || o.faces.wrap).bg;
+  if (!o.board) o.board = (o.faces.front || o.faces.wrap)?.bg || '#ffffff';
 }
 function newObject(presetId = 'mailer') {
   const p = PRESETS.find(x => x.id === presetId) || PRESETS[0];
@@ -205,6 +206,7 @@ function netLayout(o) {
   }
   if (o.type === 'bag') return bagNet(o);
   if (o.type === 'board') return boardNet(o);
+  if (o.type === 'model') return { W: 1, H: 1, panels: [] };
   if (o.type === 'paperbag') return pbNet(o);
   if (o.type === 'dome') return domeNet(o);
   if (o.type === 'torte') {
