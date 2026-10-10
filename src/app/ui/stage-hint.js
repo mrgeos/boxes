@@ -7,7 +7,7 @@ const KEY = 'box-studio-3d/hint';
 let off = false, shown = '';
 /* the hint for what is picked now */
 function hintNow() {
-  if (!activeObj()) return 'Выберите объект: кликом по модели или в списке слева';
+  if (!activeObj()) return 'Выберите объект на сцене или в списке';
   if (activeLayer()) return 'Тащите слой прямо по модели, стрелки сдвигают его. Esc — снять выбор';
   if (activeSticker()) return 'Тащите наклейку прямо по модели, стрелки сдвигают её. Esc — к объекту';
   if (sel.part || sel.ribbon) return 'Доп настраивается справа, как отдельный объект. Esc — к объекту';

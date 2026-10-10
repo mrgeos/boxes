@@ -1,4 +1,4 @@
-// Разделы: слева общее (добавить, модели, загрузки, сцена), справа — выбранный объект (форма, дизайн, допы, развёртка)
+// Разделы: слева общее (добавить, объекты, бренд, загрузки), справа — выбранный объект (форма, дизайн, допы, развёртка) или сцена
 import { $, $$, esc } from '../core/util.js';
 import { activeObj, sel } from '../core/state.js';
 import { activeFill, activeRibbon, extraById, extraName } from '../core/extras.js';
@@ -7,11 +7,11 @@ import { selectObjectItself } from '../core/selection.js';
 import { ui } from '../scene/renderer.js';
 import { renderGallery } from './preset-gallery.js';
 
-/* As in Figma: the left panel holds what belongs to the whole project (its rail picks a section: add from presets, the objects, uploads, the scene), the right one
-   works on the selection (its tabs pick a section; with nothing selected it says so). A section is a .sec with
+/* As in Figma: the left panel holds what belongs to the whole project (its rail picks a section: add from presets, the objects, the brand kit, uploads), the right one
+   works on the selection (its tabs pick a section; with nothing selected it holds the scene: light, reflections, background). A section is a .sec with
    data-tab. Both choices are kept for the next visit. Canvases in a section (the face editor, the net) are
    drawn again when it is shown, as they take their size from the panel. */
-const LEFT = ['add', 'models', 'brand', 'library', 'scene'], RIGHT = ['shape', 'design', 'extras', 'net'];
+const LEFT = ['add', 'models', 'brand', 'library'], RIGHT = ['shape', 'design', 'extras', 'net'];
 let left = 'models', right = 'design', hasSel = true;
 const curTab = () => shownTab();
 function show(panel, t) {

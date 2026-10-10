@@ -355,7 +355,7 @@ function renderModel() {
     ${box && o.window.on && windowPlace(o) ? windowFields(o) : ''}
     <div class="sec-h" style="margin-top:4px"><h2>Материал</h2></div>
     ${cboard ? `<div class="field wide"><span class="fl">Покрытие</span><select data-k="cbCover">${Object.entries(BOARD_COVER).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
-      + (foilCover ? `<p class="hint">Фольга — металл: блики даёт то, что она отражает (вкладка «Сцена», «Отражения»). Печать поверх фольги — краска, она не блестит.</p>`
+      + (foilCover ? `<p class="hint">Фольга — металл: блики даёт то, что она отражает («Отражения» в настройках сцены: снимите выделение, кликнув мимо моделей). Печать поверх фольги — краска, она не блестит.</p>`
         : `<div class="field wide"><span class="fl">Цвет бумаги</span><div class="row">
       <div class="swatches" id="boardSw">${BOARD.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.board === c}"></button>`).join('')}</div>
       <input type="color" id="boardColor" value="${o.board || '#ffffff'}" aria-label="Свой цвет бумаги"></div></div>
