@@ -1,4 +1,4 @@
-// Разделы: слева общее (добавить, модели, загрузки, сцена), справа — выбранный объект (форма, дизайн, допы, развёртка)
+// Разделы: слева общее (добавить, объекты, бренд, загрузки), справа — выбранный объект (форма, дизайн, допы, развёртка) или сцена
 import { $, $$, esc } from '../core/util.js';
 import { activeObj, sel } from '../core/state.js';
 import { activeFill, activeRibbon, extraById, extraName } from '../core/extras.js';
@@ -7,11 +7,11 @@ import { selectObjectItself } from '../core/selection.js';
 import { ui } from '../scene/renderer.js';
 import { renderGallery } from './preset-gallery.js';
 
-/* As in Figma: the left panel holds what belongs to the whole project (its rail picks a section: add from presets, the objects, uploads, the scene), the right one
-   works on the selection (its tabs pick a section; with nothing selected it says so). A section is a .sec with
+/* As in Figma: the left panel holds what belongs to the whole project (its rail picks a section: add from presets, the objects, the brand kit, uploads), the right one
+   works on the selection (its tabs pick a section; with nothing selected it holds the scene: light, reflections, background). A section is a .sec with
    data-tab. Both choices are kept for the next visit. Canvases in a section (the face editor, the net) are
    drawn again when it is shown, as they take their size from the panel. */
-const LEFT = ['add', 'models', 'brand', 'library', 'scene'], RIGHT = ['shape', 'design', 'extras', 'net'];
+const LEFT = ['add', 'models', 'brand', 'library'], RIGHT = ['shape', 'design', 'extras', 'net'];
 let left = 'models', right = 'design', hasSel = true;
 const curTab = () => shownTab();
 function show(panel, t) {
@@ -23,19 +23,23 @@ function show(panel, t) {
    it has, and the chosen tab comes back with the next object. */
 function tabsNow() {
   if (sel.group || !activeObj()) return RIGHT;
-  if (activeSticker() || activeRibbon() || activeFill()) return ['extras'];
+  // an extra without a face of its own: its settings split into the same tabs as a part's (in the extras' section)
+  if (activeSticker() || activeRibbon()) return ['shape', 'design'];
+  if (activeFill()) return ['shape'];   // a 3D model: no print
   if (activeObj().type === 'model') return ['shape'];   // a 3D model: no print, no extras
   if (sel.part) return ['shape', 'design', 'net'];
   return RIGHT;
 }
-const shownTab = () => { const t = tabsNow(); return t.includes(right) ? right : t.includes('design') ? 'design' : t[0]; };
+const shownTab = () => { const t = tabsNow(); return t.includes(right) ? right : t.includes('design') && !paneExtra() ? 'design' : t[0]; };
+/* a sticker, a ribbon or a filling: drawn in the extras' section, its panes (data-pane) follow the tabs */
+const paneExtra = () => !sel.group && !!activeObj() && !!(activeSticker() || activeRibbon() || activeFill());
 function paintRight() {
-  const tabs = tabsNow(), cur = shownTab(), st = activeSticker(), rb = !st && activeRibbon(), fl = !st && activeFill();
-  show('propPanel', hasSel ? cur : 'none');
+  const tabs = tabsNow(), cur = shownTab(), pane = paneExtra() ? cur : '';
+  show('propPanel', hasSel ? (pane ? 'extras' : cur) : 'none');
+  $('#stickerSec').dataset.pane = pane;
   $('#propTabs').hidden = !hasSel || tabs.length < 2;
   $$('#propTabs button').forEach(b => {
     const on = b.dataset.tab === cur; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); b.hidden = !tabs.includes(b.dataset.tab);
-    if (b.dataset.tab === 'extras') b.textContent = st ? 'Наклейка' : rb ? 'Лента' : fl ? 'Начинка' : 'Допы';
   });
   paintCrumb();
   ui.editor = ui.net = true;

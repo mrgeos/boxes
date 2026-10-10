@@ -2,6 +2,7 @@
 import { initTabs } from './ui/tabs.js';
 import { initActionBar } from './ui/action-bar.js';
 import { initCtxBar } from './ui/context-bar.js';
+import { initStageHint } from './ui/stage-hint.js';
 import { initProjects } from './ui/projects.js';
 import { initTextEdit } from './ui/text-edit.js';
 import * as THREE from 'three';
@@ -42,7 +43,7 @@ initObjectList(); initObjectThumbs();
 initWiring();
 initColorPicker();
 initTabs();
-initActionBar(); initCtxBar();
+initActionBar(); initCtxBar(); initStageHint();
 initTextEdit();
 resize();
 bindScene();

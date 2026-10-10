@@ -1,14 +1,13 @@
 // Правая панель: начинка упаковки — какая 3D-модель, сколько штук, как лежат
 import { $, esc, toast } from '../core/util.js';
-import { activeFill, deleteExtra } from '../core/extras.js';
+import { activeFill } from '../core/extras.js';
 import { FILL_LAYOUT } from '../carriers/fill.js';
 import { FOOD, importModel, modelName } from '../core/models3d.js';
 import { myModels, useMyModel } from '../core/model-library.js';
 import { rebuildQueue } from '../scene/renderer.js';
 import { commit } from '../core/project.js';
-import { selectObjectItself } from '../core/selection.js';
 import { bindFields, rangeField } from './fields.js';
-import { renderStickers } from './stickers-panel.js';
+import { bindExtraFoot, extraFoot, renderStickers } from './stickers-panel.js';
 import { renderObjects } from './object-list.js';
 import { refreshTabs } from './tabs.js';
 import { modelQuality } from './wiring.js';
@@ -43,12 +42,12 @@ function renderFillPanel(sec, o) {
     ${auto ? '' : rangeField('Размер (длинная сторона), мм', 'size', 5, 600, 1)}
     ${rangeField('Промежуток, мм', 'gap', 0, 60, 1)}${rangeField('Поворот, °', 'rot', -180, 180, 1)}
     <p class="hint">Модели лежат на дне${o.type === 'box' ? ' коробки (поверх тишью, если она есть)' : o.type === 'dome' ? ' лотка' : ' тортницы'}, равномерно по нему. Сколько бы их ни было, каждая часть модели рисуется один раз — это быстро и на слабом компьютере.</p>
-    <div class="grid2"><span></span><button class="btn sm danger" id="fillDel">Убрать начинку</button></div>`;
+    ${extraFoot(!!F.hidden)}`;
   const again = () => { rebuildQueue.add(o.id); renderObjects(); refreshTabs(); };
   bindFields(sec, activeFill, () => again());
   $('#fillModel').onchange = e => pickModel(e.target.value, ref => { F.model = ref; again(); renderStickers(); commit(); });
   $('#fillAuto').onchange = e => { F.size = e.target.checked ? 0 : 80; again(); renderStickers(); commit(); };
-  $('#fillDel').onclick = () => { deleteExtra(o, 'fill'); selectObjectItself(); renderStickers(); renderObjects(); refreshTabs(); commit(); };
+  bindExtraFoot(sec, o, 'fill');
 }
 
 export { modelOptions, pickModel, renderFillPanel };

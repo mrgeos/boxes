@@ -132,8 +132,6 @@ function initWiring() {
       { label: 'Вращать вокруг выбранного', checked: orbitLock, run: () => setOrbitLock(!orbitLock) }];
     openMenu(r.left, r.bottom + 6, items, 'Вид');   // under the button, in the top bar
   };
-  $('#hideHint').onclick = () => { $('#stageHint').hidden = true; try { localStorage.setItem('box-studio-3d/hint', '1'); } catch {} };
-  try { if (localStorage.getItem('box-studio-3d/hint')) $('#stageHint').hidden = true; } catch {}
 }
 
 export { addModelObject, addObject, copyFaceDesign, importModelFiles, initWiring, modelQuality, renderAll };

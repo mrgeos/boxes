@@ -1,12 +1,10 @@
 // Плавающая панель над выделенным на сцене: быстрые действия с объектом, слоем, наклейкой или рукавом
-import * as THREE from 'three';
 import { $, esc, fmt } from '../core/util.js';
 import { ICON } from '../core/constants.js';
 import { activeLayer, activeObj, sel } from '../core/state.js';
-import { RT, applyLid, camera, cvs, markFace, rebuildQueue, ui } from '../scene/renderer.js';
+import { applyLid, cvs, markFace, rebuildQueue, ui } from '../scene/renderer.js';
 import { fitTissue } from '../carriers/tissue.js';
 import { recording, setView } from '../scene/camera.js';
-import { boxOnScreen } from '../scene/sel-box.js';
 import { selectedLayers } from '../core/layers.js';
 import { editMode, setEditMode } from '../core/mask.js';
 import { commit } from '../core/project.js';
@@ -127,25 +125,8 @@ function bind(kind) {
   }
 }
 /* the selection's box on the screen (client px): a layer or sticker by its frame, an object by its 3D box */
-const box3 = new THREE.Box3(), v3 = new THREE.Vector3();
-function screenBox(kind) {
-  if (kind !== 'object' && kind !== 'part' && kind !== 'ribbon' && kind !== 'fill') {
-    const q = boxOnScreen(); if (!q) return null;
-    const xs = q.map(p => p[0]), ys = q.map(p => p[1]);
-    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
-  }
-  const rt = RT.get(activeObj().id); if (!rt) return null;
-  const g = kind === 'part' ? rt[sel.part] || rt.group : kind === 'ribbon' ? rt.ribbonGroups?.get(sel.ribbon) || rt.group : kind === 'fill' ? rt.fill || rt.group : rt.group;
-  box3.setFromObject(g); if (box3.isEmpty()) return null;
-  const r = cvs.getBoundingClientRect(); let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (let i = 0; i < 8; i++) {
-    v3.set(i & 1 ? box3.max.x : box3.min.x, i & 2 ? box3.max.y : box3.min.y, i & 4 ? box3.max.z : box3.min.z).project(camera);
-    const x = r.left + (v3.x + 1) / 2 * r.width, y = r.top + (1 - v3.y) / 2 * r.height;
-    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
-  }
-  return [x0, y0, x1, y1];
-}
-/* builds the bar again when the selection changed, and puts it over the selection; called after each drawn frame */
+/* builds the bar again when the selection changed; called after each drawn frame. The bar is docked over the
+   action bar at the bottom of the stage: following the selection, it covered the model and its neighbours */
 function syncCtxBar(moved = true) {
   const el = bar(); if (!el) return;
   const kind = busy ? null : kindNow(), o = activeObj();
@@ -154,13 +135,10 @@ function syncCtxBar(moved = true) {
   // nothing new and the view still: it stays where it is
   if (k === key && !moved) return;
   if (k !== key) { key = k; el.innerHTML = build(kind); bind(kind); }
-  const b = screenBox(kind); if (!b) { el.hidden = true; return; }
   el.hidden = false;
-  const st = el.parentElement.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
-  let x = (b[0] + b[2]) / 2 - st.left - w / 2, y = b[1] - st.top - h - 12;
-  if (y < 8) y = Math.min(b[3] - st.top + 12, st.height - h - 60);   // no room above: under it (clear of the action bar)
-  el.style.left = Math.round(Math.max(8, Math.min(st.width - w - 8, x))) + 'px';
-  el.style.top = Math.round(Math.max(8, y)) + 'px';
+  const ab = $('#actionBar'), w = el.offsetWidth, sw = el.parentElement.clientWidth;
+  el.style.left = Math.round(Math.max(8, (sw - w) / 2)) + 'px';
+  el.style.top = Math.round(ab.offsetTop - el.offsetHeight - 8) + 'px';
 }
 /* the bar is built again on the next frame */
 function refresh() { key = ''; }

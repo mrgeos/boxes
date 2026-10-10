@@ -20,7 +20,7 @@ const ids = await (async () => { const { ctx, page } = await openEditor(browser)
 for (const id of ids) {
   // a fresh page per preset, so earlier ones cannot change later pictures
   const { ctx, page, errors } = await openEditor(browser);
-  await addPreset(page, id); await page.click('#propTabs [data-tab="extras"]'); await page.click('#stSeal'); await page.waitForTimeout(200); await page.click('#propCrumb .up');
+  await addPreset(page, id); await page.click('#propTabs [data-tab="extras"]'); await page.click('#addSticker'); await page.click('.ctx-it:has-text("Пломба")'); await page.waitForTimeout(200); await page.click('#propCrumb .up');
   await page.evaluate(() => window.__boxStudio.setView('q', true)); await page.waitForTimeout(900);
   await (await page.$('#stage')).screenshot({ path: `${out}/${id}-3d.png` });
   await page.click('#propTabs [data-tab="net"]'); await page.waitForTimeout(300); await (await page.$('#net')).screenshot({ path: `${out}/${id}-net.png` });
