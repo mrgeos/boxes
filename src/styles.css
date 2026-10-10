@@ -348,7 +348,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .ab.caret{width:16px;margin-left:-3px}
 .ab.caret svg{width:12px;height:12px}
 /* the floating bar over the selection on the scene */
-.cbar{position:absolute;z-index:5;display:flex;align-items:center;gap:2px;padding:3px;background:color-mix(in srgb,var(--panel) 96%,transparent);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);white-space:nowrap}
+.cbar{position:absolute;z-index:5;display:flex;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 16px);box-sizing:border-box;align-items:center;gap:2px;padding:3px;background:color-mix(in srgb,var(--panel) 96%,transparent);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);white-space:nowrap}
 .cbar .ab{width:30px;height:30px}
 .cbar .ab svg{width:17px;height:17px}
 .cbar .ab.wide{width:auto;padding:0 9px;gap:6px;display:flex;font-size:12.5px}
