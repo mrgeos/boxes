@@ -130,14 +130,7 @@ function extrasHTML(o) {
   const list = extrasOf(o), sleeveFree = o.type === 'box' && o.lidType !== 'handle' && !isShape(o) && !sleeveOn(o), carryFree = o.type === 'torte' && !carryOn(o), ribbon = ribbonFits(o), tissueFree = o.type === 'box' && !['handle', 'drawer'].includes(o.lidType) && !isShape(o) && !tissueOn(o), insertFree = o.type === 'box' && !['handle', 'drawer'].includes(o.lidType) && !isShape(o) && !insertOn(o), fillFree = fillFits(o) && !fillOn(o);
   return `<div class="sec-h"><h2>Допы</h2><span class="hint">${list.length || ''}</span></div>
     <p class="hint">Наклейки, рукава, ленты и другое, что надевается на ${o.type === 'torte' ? 'тортницу' : 'объект'} или клеится на него. Выбранный доп настраивается как отдельный объект.</p>
-    <div class="addrow five">
-      <button class="btn" id="stCircle">${ICON.ell}Круг</button>
-      <button class="btn" id="stRect">${ICON.rect}Прямоуг.</button>
-      <button class="btn" id="stPhoto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>Фото</button>
-      <button class="btn" id="stCustom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7Z"/></svg>Своя</button>
-      <button class="btn" id="stSeal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="20" rx="1"/><path d="M3 12h18" stroke-dasharray="2 2"/></svg>Пломба</button>
-    </div>
-    ${sleeveFree || carryFree || ribbon || tissueFree || insertFree || fillFree ? `<div class="grid2">${fillFree ? `<button class="btn sm" id="addFill">${ICON.model}Начинка (3D)</button>` : ''}${ribbon ? `<button class="btn sm" id="addRibbon">${ICON.ribbonX}Лента с бантом</button>` : ''}${tissueFree ? `<button class="btn sm" id="addTissue">${ICON.tissueX}Бумага тишью</button>` : ''}${insertFree ? `<button class="btn sm" id="addInsert">${ICON.insertX}Ложемент</button>` : ''}${sleeveFree ? `<button class="btn sm" id="addSleeve">${ICON.sleeveX}Рукав</button>` : ''}${carryFree ? `<button class="btn sm" id="addCarry">${ICON.carryX}Рукав-переноска</button>` : ''}</div>` : ''}
+    <div class="grid2"><button class="btn sm" id="addSticker" aria-haspopup="menu">${ICON.sticker}Наклейка</button>${fillFree ? `<button class="btn sm" id="addFill">${ICON.model}Начинка (3D)</button>` : ''}${ribbon ? `<button class="btn sm" id="addRibbon">${ICON.ribbonX}Лента с бантом</button>` : ''}${tissueFree ? `<button class="btn sm" id="addTissue">${ICON.tissueX}Бумага тишью</button>` : ''}${insertFree ? `<button class="btn sm" id="addInsert">${ICON.insertX}Ложемент</button>` : ''}${sleeveFree ? `<button class="btn sm" id="addSleeve">${ICON.sleeveX}Рукав</button>` : ''}${carryFree ? `<button class="btn sm" id="addCarry">${ICON.carryX}Рукав-переноска</button>` : ''}</div>
     ${list.length ? `<div class="layers" id="extraList">${list.map(e => `<div class="layer ${extraHidden(e) ? 'hidden' : ''} ${e.T.locked ? 'locked' : ''}" data-id="${e.id}">
       <span class="th">${extraIcon(e)}</span><span class="ln">${esc(extraName(o, e))}</span>${e.kind === 'sticker' ? `<span class="dm mono">${fmt(e.T.w)}×${fmt(stickerSize(e.T)[1])}</span>` : ''}
       <span class="acts">${extraActs(e)}</span></div>`).join('')}</div>`
@@ -145,17 +138,22 @@ function extrasHTML(o) {
 }
 function bindExtras(sec, o) {
   const face = () => sel.face && faceKeys(o).includes(sel.face) && !isPart(sel.face) ? sel.face : faceKeys(o)[0];
-  $('#stCircle').onclick = () => addSticker(newSticker('circle', face()));
-  $('#stRect').onclick = () => addSticker(newSticker('rect', face()));
-  $('#stSeal').onclick = () => addSticker(newSticker('rect', 'front', { ...sealSpot(o), w: 22, h: o.type === 'dome' || o.type === 'torte' ? 80 : 50, radius: 2, text: '', fill: '#f3ead6', stroke: '#b8461b', strokeW: .8, finish: 'gloss' }));
-  // a photo sticker: the picture fills a rectangle of its own proportions
-  $('#stPhoto').onclick = e => pickAsset(e.currentTarget, 'Фото на наклейку', r => {
-    const w = 50;
-    addSticker(newSticker('rect', face(), { bgSrc: r.id, w, h: Math.round(w / r.aspect * 2) / 2, radius: 2, text: '' }));
-  });
-  $('#stCustom').onclick = e => pickAsset(e.currentTarget, 'Своя форма: PNG или SVG с прозрачным фоном', r => {
-    addSticker(newSticker('custom', face(), { src: r.id, aspect: r.aspect, w: 50, outline: 1.5 }));
-  });
+  // one button for stickers, like the other extras; the kind is picked from its menu
+  $('#addSticker').onclick = e => {
+    const btn = e.currentTarget, r = btn.getBoundingClientRect();
+    openMenu(r.left, r.bottom + 4, [
+      { label: 'Круг', run: () => addSticker(newSticker('circle', face())) },
+      { label: 'Прямоугольник', run: () => addSticker(newSticker('rect', face())) },
+      // a photo sticker: the picture fills a rectangle of its own proportions
+      { label: 'Фото…', run: () => pickAsset(btn, 'Фото на наклейку', a => {
+        const w = 50;
+        addSticker(newSticker('rect', face(), { bgSrc: a.id, w, h: Math.round(w / a.aspect * 2) / 2, radius: 2, text: '' }));
+      }) },
+      { label: 'Своя форма (PNG, SVG)…', run: () => pickAsset(btn, 'Своя форма: PNG или SVG с прозрачным фоном', a => addSticker(newSticker('custom', face(), { src: a.id, aspect: a.aspect, w: 50, outline: 1.5 }))) },
+      'sep',
+      { label: 'Пломба на линию открытия', run: () => addSticker(newSticker('rect', 'front', { ...sealSpot(o), w: 22, h: o.type === 'dome' || o.type === 'torte' ? 80 : 50, radius: 2, text: '', fill: '#f3ead6', stroke: '#b8461b', strokeW: .8, finish: 'gloss' })) },
+    ], 'Наклейка');
+  };
   const flBtn = $('#addFill');
   if (flBtn) flBtn.onclick = () => { if (addFill(o)) { selectExtra(o.id, 'fill'); renderObjects(); commit(); } };
   const rbBtn = $('#addRibbon');
