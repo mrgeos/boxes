@@ -51,7 +51,7 @@ function drawSticker(c, st, ppm, withShadow = true) {
     stickerMask(c, st, '#ffffff'); c.restore();
   }
   if (st.kind === 'custom') {
-    const ol = st.outline || 0, im = artImg(st.src, st.recolor);
+    const ol = st.outline || 0, im = artImg(st.src, st.recolor, st.keyout);
     if (ol > 0) { const t = tinted(st.src, '#ffffff'); if (t) for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.drawImage(t, -w / 2 + Math.cos(a) * ol, -h / 2 + Math.sin(a) * ol, w, h); } }
     if (im && foil) { const t = tinted(st.src, '#000000'); c.save(); c.drawImage(t, -w / 2, -h / 2, w, h); c.globalCompositeOperation = 'source-atop'; c.fillStyle = stickerFoil(c, st.finish, w, h); c.fillRect(-w / 2, -h / 2, w, h); c.restore(); }
     else if (im) c.drawImage(im, -w / 2, -h / 2, w, h);
@@ -67,7 +67,7 @@ function drawSticker(c, st, ppm, withShadow = true) {
       const ox = clamp(st.bgX || 0, -.5, .5) * (bw - w), oy = clamp(st.bgY || 0, -.5, .5) * (bh - h);
       c.drawImage(bg, -bw / 2 + ox, -bh / 2 + oy, bw, bh);
     }
-    const im = st.src && artImg(st.src, st.recolor);
+    const im = st.src && artImg(st.src, st.recolor, st.keyout);
     if (im) {
       const a = im.naturalWidth / im.naturalHeight, k = st.imgScale || .7;
       let iw = w * k, ih = iw / a; if (ih > h * k) { ih = h * k; iw = ih * a; }

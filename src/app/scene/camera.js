@@ -1,6 +1,6 @@
 // Камера, виды, свет сцены, цикл отрисовки
 import * as THREE from 'three';
-import { $, $$, DEG, clamp } from '../core/util.js';
+import { $, DEG, clamp } from '../core/util.js';
 import { activeObj, sel, state } from '../core/state.js';
 import { RT, buildObject, camera, controls, dirtyFaces, fillLight, floor, keyLight, rebuildQueue, renderer, scene, ui, viewport } from './renderer.js';
 import { renderFace } from '../faces/render.js';
@@ -12,11 +12,15 @@ import { renderLibrary } from '../ui/library-panel.js';
 import { drawEditor } from '../ui/face-editor.js';
 import { drawNet } from '../net/net-view.js';
 import { syncRings } from './move.js';
+import { syncSelBox } from './sel-box.js';
+import { syncCtxBar } from '../ui/context-bar.js';
+import { renderBrand } from '../ui/brand-panel.js';
 import { layoutPending } from '../core/groups.js';
+import { applyEnv, spinEnv } from './environments.js';
 
 function sceneBounds(onlyActive = false) {
   const b = new THREE.Box3();
-  for (const o of state.objects) { if (onlyActive && o.id !== sel.obj) continue; const rt = RT.get(o.id); if (rt) b.expandByObject(rt.group); }
+  for (const o of state.objects) { if ((onlyActive && o.id !== sel.obj) || o.hidden) continue; const rt = RT.get(o.id); if (rt) b.expandByObject(rt.group); }
   if (b.isEmpty()) b.set(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 1, 1));
   return b;
 }
@@ -66,7 +70,6 @@ function focusSelected({ frame = false } = {}) {
   if (frame) dist = fit; else dist = clamp(dist, fit * .45, fit * 3.2);
   off.setLength(dist);
   tweenCamera(c.clone().add(off), c);
-  $$('#views .btn[data-view]').forEach(b => b.classList.toggle('on', frame && b.dataset.view === 'focus'));
 }
 function setView(name, instant = false) {
   if (VIEW_DIRS[name]) lastView = name;
@@ -77,13 +80,16 @@ function setView(name, instant = false) {
   const b = onObj ? (objBounds(o.id) || sceneBounds()) : sceneBounds();
   const c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
   tweenCamera(c.clone().add(dir.multiplyScalar(fitDistance(r))), c, instant);
-  $$('#views .btn[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === name));
+  if (VIEW_DIRS[name]) setViewName(name);
 }
+/* which side the camera looks from, shown on the view button: one of VIEW_DIRS, or 'custom' once the user turns it */
+const VIEW_LABEL = { front: 'Спереди', q: '3/4', side: 'Сбоку', top: 'Сверху', back: 'Сзади', bottom: 'Снизу', custom: 'Свой' };
+let viewName = 'q';
+function setViewName(n) { viewName = n; const el = $('#viewName'); if (el) el.textContent = VIEW_LABEL[n] || n; }
 function setOrbitLock(on) {
   orbitLock = on;
   try { localStorage.setItem('box-studio-3d/orbit', on ? 'object' : 'free'); } catch {}
   controls.enablePan = !on;
-  const b = $('#orbitLockBtn'); b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on);
   if (on) focusSelected(); else if (view.x || view.y) tweenCamera(camera.position.clone(), controls.target.clone());
 }
 function updateShadowCam() {
@@ -99,7 +105,7 @@ function applyScene() {
   invalidate();
   const s = state.scene;
   keyLight.intensity = s.light; fillLight.intensity = s.light * .18;
-  scene.environmentIntensity = s.env; floor.material.opacity = s.shadow;
+  scene.environmentIntensity = s.env; floor.material.opacity = s.shadow; applyEnv();
   renderer.toneMappingExposure = s.exposure; controls.autoRotate = !!s.autoRotate;
   const st = $('#stage');
   st.classList.toggle('checker', s.bg === 'transparent');
@@ -120,6 +126,11 @@ function setRecording(v) { recording = v; }
 /* resizes the view with its box and starts the render loop */
 function initCamera() {
   new ResizeObserver(resize).observe(viewport);
+  // only the user's own dragging starts the controls; a click that does not move the camera keeps the view's name
+  let userDrag = false;
+  controls.addEventListener('start', () => { userDrag = true; });
+  controls.addEventListener('end', () => { userDrag = false; });
+  controls.addEventListener('change', () => { if (userDrag) setViewName('custom'); });
   // a handler may change materials or the scene directly: draw after any input
   for (const t of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'click', 'drop', 'paste']) addEventListener(t, () => invalidate(), { capture: true, passive: true });
   renderer.domElement.addEventListener('pointermove', () => invalidate(), { passive: true });
@@ -142,6 +153,8 @@ function initCamera() {
     }
     controls.enablePan = !lockActive();
     if (syncRings()) changed = true;
+    if (syncSelBox()) changed = true;
+    if (spinEnv(now)) changed = true;
     if (recording) recording.step(now);
     else if (controls.update()) changed = true;
     for (const rt of RT.values()) for (const k in rt.faces) {
@@ -149,12 +162,14 @@ function initCamera() {
       if (f.flash > 0) { changed = true; f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
     }
     if (changed) renderer.render(scene, camera);
+    syncCtxBar(changed);
     if (ui.editor) { ui.editor = false; drawEditor(); }
     if (ui.net) { ui.net = false; drawNet(); }
     if (ui.layers) { ui.layers = false; renderLayers(); }
     if (ui.stickers) { ui.stickers = false; renderStickers(); }
     if (ui.lib) { ui.lib = false; renderLibrary(); }
+    if (ui.brand) { ui.brand = false; renderBrand(); }
   });
 }
 
-export { accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view };
+export { VIEW_LABEL, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };

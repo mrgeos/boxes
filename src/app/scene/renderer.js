@@ -1,7 +1,6 @@
 // Three.js: рендерер, сцена, свет, пол, фактура бумаги; объекты сцены и их материалы
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { $, DEG, S, clamp } from '../core/util.js';
 import { FINISHES, LID_COLORS, WHITE_INSIDE } from '../core/constants.js';
 import { sel } from '../core/state.js';
@@ -12,15 +11,24 @@ import { buildTube } from '../carriers/tube.js';
 import { buildDome, domeGeom } from '../carriers/dome.js';
 import { TORTE_COLORS, buildTorte } from '../carriers/torte.js';
 import { buildBox } from '../carriers/box.js';
+import { applyRsc } from '../carriers/rsc.js';
 import { buildSleeve, sleeveColors } from '../carriers/sleeve.js';
 import { buildCarry, carryColors } from '../carriers/carry.js';
 import { buildPaperBag, paperBagColors } from '../carriers/paperbag.js';
+import { buildRibbons, disposeRibbons } from '../carriers/ribbon.js';
+import { boardColors, buildBoard } from '../carriers/board.js';
+import { applyTissue, buildTissue } from '../carriers/tissue.js';
+import { buildModelObject } from '../carriers/model-object.js';
+import { buildFill } from '../carriers/fill.js';
 import { computeFrames } from '../stickers/placement.js';
 import { buildStickerFilms } from '../stickers/film.js';
 import { camTween, invalidate, orbitLock, updateShadowCam } from './camera.js';
 import { layoutSoon, parentOf, placeOf } from '../core/groups.js';
 import { moving } from './move.js';
 import { wrapTouch } from '../faces/wrap.js';
+import { corrugateEdges } from '../carriers/corrugated.js';
+import { applyInsert, buildInsert } from '../carriers/insert.js';
+import { drawerOut } from '../carriers/rigid.js';
 
 const viewport = $('#viewport');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -35,7 +43,6 @@ const cvs = renderer.domElement;
 const maxAniso = renderer.capabilities.getMaxAnisotropy();
 const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 const world = new THREE.Group();
  scene.add(world);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 400);
@@ -85,7 +92,7 @@ grainTex.wrapS = grainTex.wrapT = THREE.RepeatWrapping;
 const RT = new Map();
 const dirtyFaces = new Set();
 const rebuildQueue = new Set();
-const ui = { editor: true, net: true, layers: false, stickers: false, lib: true };
+const ui = { editor: true, net: true, layers: false, stickers: false, lib: true, brand: true };
 function markFace(o, k) {
   for (const t of wrapTouch(o, k)) dirtyFaces.add(o.id + '|' + t);   // faces its layers run onto, now and before
   dirtyFaces.add(o.id + '|' + k);
@@ -105,7 +112,7 @@ function ensureFaceRT(o, k) {
     f.tex = new THREE.CanvasTexture(f.canvas);
     f.tex.colorSpace = THREE.SRGBColorSpace; f.tex.anisotropy = maxAniso;
     f.mat.map = f.tex;
-    for (const n of ['fx', 'bump']) if (f[n]) { f[n + 'Tex'].dispose(); f[n] = null; }
+    for (const n of ['fx', 'bump', 'coat', 'iri']) if (f[n]) { f[n + 'Tex'].dispose(); f[n] = null; }
     f.mat.needsUpdate = true;
   }
   const [mw, mh] = faceMM(o, k);
@@ -139,12 +146,13 @@ function buildObject(o) {
       holeMat: new THREE.MeshBasicMaterial({ color: 0x141414, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), lidPivot: null };
     RT.set(o.id, rt); world.add(rt.group);
   }
-  rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null;
+  disposeRibbons(rt);
+  rt.group.traverse(m => { if ((m.isMesh || m.isLine) && !m.userData.shared) m.geometry.dispose(); });
+  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.insert = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null; rt.rsc = null; rt.rscTape = null; rt.drawer = null;
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
-  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else buildTube(o, rt);
-  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); applyObjMaterials(o); markObj(o);
+  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else if (o.type === 'board') buildBoard(o, rt); else if (o.type === 'model') buildModelObject(o, rt); else buildTube(o, rt);
+  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); buildTissue(o, rt); buildInsert(o, rt); buildFill(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); corrugateEdges(o, rt); applyObjMaterials(o); markObj(o);
   rt.stickerMeshes = []; buildStickerFilms(o);
   if (parentOf(o.id) && JSON.stringify(foot) !== JSON.stringify(rt.foot)) layoutSoon();   // the row makes room for its new size
 }
@@ -162,12 +170,13 @@ function measureFoot(rt) {
 function disposeObject(id) {
   invalidate();
   const rt = RT.get(id); if (!rt) return;
-  rt.group.traverse(m => { if (m.isMesh || m.isLine) m.geometry.dispose(); });
+  disposeRibbons(rt);
+  rt.group.traverse(m => { if ((m.isMesh || m.isLine) && !m.userData.shared) m.geometry.dispose(); });
   world.remove(rt.group);
-  for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.grain?.dispose(); }
+  for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.coatTex?.dispose(); f.iriTex?.dispose(); f.grain?.dispose(); }
   for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
   rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); rt.cupLidMat.dispose(); rt.holeMat.dispose();
-  rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); rt.baseMat?.dispose(); rt.trayMat?.dispose(); rt.cakeMats?.forEach(m => m.dispose()); rt.sleeveIn?.dispose(); rt.sleeveEdge?.dispose(); RT.delete(id);
+  rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); rt.baseMat?.dispose(); rt.trayMat?.dispose(); rt.cakeMats?.forEach(m => m.dispose()); rt.cbSideMat?.dispose(); rt.sleeveIn?.dispose(); rt.sleeveEdge?.dispose(); RT.delete(id);
 }
 /* clear PET: black diffuse, so only reflections remain (stronger at grazing angles). The shader turns
    their brightness into coverage, so plain plastic stays see-through even over the page background
@@ -197,6 +206,7 @@ function applyTransform(o, shadow = true) {
   const rt = RT.get(o.id); if (!rt) return;
   const before = rt.group.position.clone(), p = placeOf(o);
   rt.group.position.set(p.x * S, 0, p.z * S); rt.group.rotation.y = p.rot * DEG;
+  rt.group.visible = !o.hidden;
   // keep orbiting the selected object while it is being moved
   if (rt.placed && orbitLock && o.id === sel.obj && !camTween && !moving()) { const d = rt.group.position.clone().sub(before); camera.position.add(d); controls.target.add(d); }
   rt.placed = true;
@@ -232,8 +242,14 @@ function applyLid(o) {
     for (const { m, sx, y } of rt.hb.tongues) { m.position.set(a > .02 ? 0 : -sx * 1.6 * T, y, 0); }
     if (rt.hb.tray) rt.hb.tray.position.x = rt.hb.dir * clamp(o.tray?.out ?? 0, 0, o.dims.w) * S;
   }
+  if (rt.rsc) applyRsc(o);
+  if (rt.drawer) rt.drawer.position.z = drawerOut(o) * S;
   if (rt.lidPivot) rt.lidPivot.rotation.x = -o.lid * DEG;
   for (const m of rt.contact || []) m.visible = o.lid < 1.5;
+  // a ribbon is off while the lid is open
+  if (rt.ribbons) rt.ribbons.visible = !(o.lid > .5);
+  if (rt.tissue) applyTissue(o);
+  if (rt.insert) applyInsert(o);
   if (rt.lidGroup) {
     // the separate lid lifts, slides back a little and tilts
     const f = clamp(o.lid / 125, 0, 1), H = o.dims.h * S, LH = clamp(o.lidH, 3, clearLid(o) ? 1000 : o.dims.h) * S;
@@ -255,16 +271,18 @@ function applyObjMaterials(o) {
   if (rt.sleeve) sleeveColors(o, rt);
   if (rt.carry) carryColors(o, rt);
   if (o.type === 'paperbag') paperBagColors(o, rt);
+  if (o.type === 'board') boardColors(o, rt);
   if (rt.trayMat) { const gold = o.tray?.fin === 'gold'; rt.trayMat.color.set(gold ? '#d6b25e' : '#c9cdd3'); rt.trayMat.metalness = .9; rt.trayMat.roughness = .3; }
   if (rt.baseMat) {
     const metal = o.baseFin === 'metal';
     Object.assign(rt.baseMat, { metalness: metal ? .85 : 0, roughness: metal ? .32 : .22, clearcoat: metal ? .3 : .8, clearcoatRoughness: .08 });
     rt.baseMat.color.set(o.baseColor || TORTE_COLORS[0][0]);
   }
+  if (rt.cellMat) rt.cellMat.color.set(o.insert?.mat === 'foam' ? o.faces.insert?.bg || '#222222' : '#' + rt.innerMat.color.getHexString());
   rt.cardMat.color.set(o.faces.extFront?.bg || '#ffffff');
   rt.foldMat.bumpMap = o.grain > 0 ? rt.faces.front?.grain ?? null : null; rt.foldMat.bumpScale = o.grain * 1.2; rt.foldMat.needsUpdate = true;
   rt.innerMat.bumpMap = o.grain > 0 ? rt.faces.inside?.grain ?? null : null;
   rt.innerMat.bumpScale = o.grain * 1.2; rt.innerMat.needsUpdate = true;
 }
 
-export { RT, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, rebuildQueue, renderer, scene, ui, viewport, world };
+export { RT, pmrem, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, rebuildQueue, renderer, scene, ui, viewport, world };

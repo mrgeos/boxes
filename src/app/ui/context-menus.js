@@ -13,16 +13,17 @@ import { select, selectGroup, selectLayer } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
 import { renderModel } from './model-panel.js';
-import { addImageToFace, deleteLayer, duplicateLayer, moveLayer, renderLayerProps, renderLayers } from './face-panel.js';
-import { deleteSticker, duplicateSticker, renderStickers } from './stickers-panel.js';
+import { addImageToFace, deleteLayer, duplicateLayer, moveLayer, renderFaceTabs, renderLayerProps, renderLayers } from './face-panel.js';
+import { bgToAllFaces, clearFace } from '../core/layers.js';
+import { deleteSticker, duplicateSticker, extraMenu, renderStickers } from './stickers-panel.js';
 import { swapImage } from './library-panel.js';
 import { ed, edPoint, edState, hitLayer } from './face-editor.js';
 import { addObject, copyFaceDesign } from './wiring.js';
-import { deleteIds, duplicateIds, groupIds, leaveGroup, renderObjects, ungroupIds } from './object-list.js';
+import { deleteIds, duplicateIds, groupIds, leaveGroup, renameRow, renderObjects, ungroupIds } from './object-list.js';
 import { openMenu } from './menu.js';
 
 const MOD = /Mac|iP(hone|ad)/.test(navigator.platform) ? '⌘' : 'Ctrl+';
-const TYPES = { box: 'Коробки', dome: 'Лотки с крышкой-призмой', torte: 'Тортницы', cup: 'Бумажные стаканы', bag: 'Пакеты', tube: 'Тубусы и банки' };
+const TYPES = { box: 'Коробки', dome: 'Лотки с крышкой-призмой', torte: 'Тортницы', board: 'Подложки под торт', cup: 'Бумажные стаканы', bag: 'Пакеты', tube: 'Тубусы и банки' };
 const norm = a => ((a + 180) % 360 + 360) % 360 - 180;
 const objById = id => state.objects.find(o => o.id === id) || null;
 const layerTitle = L => L.type === 'text' ? `Текст «${(L.text || '').split('\n')[0].slice(0, 24)}»` : L.type === 'image' ? 'Картинка' : L.kind === 'ellipse' ? 'Круг' : 'Плашка';
@@ -40,6 +41,19 @@ function lidAction(o) {
   if (o.type === 'bag') return o.bagTop === 'flap' ? ['Открыть клапан', 'Закрыть клапан', 150] : o.bagTop === 'fold' && !(o.rollTurns > 1) ? ['Развернуть отворот', 'Свернуть отворот', 150] : null;
   return null;
 }
+/* opens or closes the lid (flap, end) in a short movement; resolves when it is there */
+function toggleLid(o) {
+  const lid = lidAction(o); if (!lid) return Promise.resolve();
+  const from = o.lid || 0, to = from > 0 ? 0 : lid[2], t0 = performance.now(), T = 450;
+  return new Promise(done => {
+    const step = now => {
+      const t = Math.min(1, (now - t0) / T), e = t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+      o.lid = Math.round(from + (to - from) * e); applyLid(o);
+      if (t < 1) requestAnimationFrame(step); else { refreshObject(o); commit(); done(); }
+    };
+    requestAnimationFrame(step);
+  });
+}
 function turn(o, deg) { o.rotY = norm(o.rotY + deg); layoutAll(); refreshObject(o); commit(); }
 
 function layerItems(o, face, L) {
@@ -56,7 +70,7 @@ function layerItems(o, face, L) {
 /* the latest pictures of the library; `before` selects what gets the picture */
 function libraryItems(before) { return library.slice(-14).reverse().map(it => ({ label: it.name || 'Картинка', run: () => { before(); swapImage(it); } })); }
 function stickerItems(o, st) {
-  const on = fn => () => { if (sel.obj !== o.id) select(o.id); sel.sticker = st.id; sel.layer = null; fn(); };
+  const on = fn => () => { if (sel.obj !== o.id) select(o.id); sel.sticker = st.id; sel.ribbon = null; sel.layer = null; fn(); };
   return [
     { label: 'Дублировать', run: on(() => duplicateSticker(st.id)) },
     { label: 'Удалить', key: 'Delete', run: on(() => deleteSticker(st.id)) },
@@ -74,11 +88,11 @@ function objectItems(o, face = null, layer = null) {
     layer && 'sep',
     { label: 'Дублировать', run: () => duplicateIds([o.id]) },
     { label: 'Удалить', run: () => deleteIds([o.id]) },
-    { label: 'Переименовать', run: () => { select(o.id); rename(); } },
+    { label: 'Переименовать', run: () => { select(o.id); renameRow(o.id) || rename(); } },
     'sep',
     { label: 'Повернуть на 90° влево', run: () => turn(o, 90) },
     { label: 'Повернуть на 90° вправо', run: () => turn(o, -90) },
-    lid && { label: o.lid > 0 ? lid[1] : lid[0], run: () => { o.lid = o.lid > 0 ? 0 : lid[2]; applyLid(o); refreshObject(o); commit(); } },
+    lid && { label: o.lid > 0 ? lid[1] : lid[0], run: () => toggleLid(o) },
     'sep',
     { label: 'Сгруппировать', key: MOD + 'G', run: () => groupIds([o.id]) },
     g && { label: `Убрать из группы «${g.name}»`, run: () => leaveGroup(o.id) },
@@ -96,7 +110,7 @@ function groupMenu(g) {
     'sep',
     { label: 'Дублировать', run: () => duplicateIds([g.id]) },
     { label: 'Удалить', run: () => deleteIds([g.id]) },
-    { label: 'Переименовать', run: () => { selectGroup(g.id); rename(); } },
+    { label: 'Переименовать', run: () => { selectGroup(g.id); renameRow(g.id) || rename(); } },
   ];
 }
 function multiItems(ids) {
@@ -146,7 +160,7 @@ function sceneMenu(x, y) {
   const st = stickerHit(h);
   if (st) {
     if (sel.obj !== o.id) select(o.id, h.face || undefined, null);
-    sel.sticker = st.id; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers();
+    sel.sticker = st.id; sel.ribbon = null; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers();
     return openMenu(x, y, stickerItems(o, st), 'Наклейка');
   }
   let L = null;
@@ -164,9 +178,9 @@ function editorMenu(e) {
     { label: 'Добавить текст', run: click('#addTextBtn') }, { label: 'Добавить картинку', run: click('#addImgBtn') },
     { label: 'Добавить плашку', run: click('#addRectBtn') }, { label: 'Добавить круг', run: click('#addEllBtn') },
     'sep',
-    { label: 'Фон на все грани', run: click('#bgAllBtn') },
+    { label: 'Фон на все грани', run: () => { bgToAllFaces(o, sel.face); commit(); toast('Фон применён ко всем внешним граням'); } },
     others.length && { label: 'Копировать дизайн на', sub: [{ label: 'Все внешние грани', run: () => copyFaceDesign(o, sel.face, others) }, 'sep', ...others.map(k => ({ label: faceLabel(o, k), run: () => copyFaceDesign(o, sel.face, [k]) }))] },
-    { label: 'Очистить грань', disabled: !f.layers.length, run: click('#clearFaceBtn') },
+    { label: 'Очистить грань', disabled: !f.layers.length, run: () => { clearFace(o, sel.face); renderLayers(); renderLayerProps(); renderFaceTabs(); commit(); } },
   ], `Грань «${faceLabel(o, sel.face)}»`);
 }
 
@@ -186,7 +200,12 @@ function initContextMenus() {
     if (!(sel.multi.length > 1 && sel.multi.includes(id))) isGroup(id) ? selectGroup(id) : select(id);
     openMenu(x, y, ...itemMenu(id));
   };
-  list.addEventListener('contextmenu', e => { const el = e.target.closest('.obj'); if (!el) return; e.preventDefault(); rowMenu(el, e.clientX, e.clientY); });
+  list.addEventListener('contextmenu', e => {
+    const el = e.target.closest('.obj'); if (!el) return; e.preventDefault();
+    // an extra of an object (a sticker, a sleeve)
+    if (el.dataset.x) return extraMenu(objById(el.dataset.obj), el.dataset.x, e.clientX, e.clientY);
+    rowMenu(el, e.clientX, e.clientY);
+  });
   list.addEventListener('keydown', e => {
     const el = e.target.closest('.obj'); if (!el || !(e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) return;
     e.preventDefault(); const r = el.getBoundingClientRect(); rowMenu(el, r.left + 24, r.bottom);
@@ -194,4 +213,4 @@ function initContextMenus() {
   ed.addEventListener('contextmenu', e => { e.preventDefault(); editorMenu(e); });
 }
 
-export { initContextMenus };
+export { initContextMenus, lidAction, toggleLid, turn };

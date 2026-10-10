@@ -22,6 +22,12 @@ const topOf = id => ancestors(id).at(-1) || null;
 const inside = (id, gid) => ancestors(id).some(g => g.id === gid);
 /* object ids inside an item, in list order */
 function objectsIn(id) { const g = groupById(id); return g ? g.items.flatMap(objectsIn) : objById(id) ? [id] : []; }
+/* hidden objects are not drawn (nor in pictures and videos); locked ones are not picked or dragged in the scene.
+   ids: objects or groups (all the objects in them) */
+function setHidden(ids, on) { for (const id of ids.flatMap(objectsIn)) { const o = objById(id); if (on) o.hidden = true; else delete o.hidden; applyTransform(o, false); } updateShadowCam(); }
+/* names an object or a group (an empty name keeps the old one) */
+function renameById(id, name) { const t = own(id); if (t && name.trim()) t.name = name.trim().slice(0, 80); }
+function setLocked(ids, on) { for (const id of ids.flatMap(objectsIn)) { const o = objById(id); if (on) o.locked = true; else delete o.locked; } }
 /* every item in list order, depth first */
 function flatTree() { const out = []; const go = (list, depth) => { for (const id of list) { out.push({ id, depth }); const g = groupById(id); if (g) go(g.items, depth + 1); } }; go(state.tree, 0); return out; }
 
@@ -57,7 +63,7 @@ function rotBox(b, deg) {
   return r;
 }
 /* an object's footprint in its own frame (mm): measured from its geometry when built, else from its size */
-function objFoot(o) { const f = RT.get(o.id)?.foot; if (f) return f; const { w, d } = o.dims, dd = o.type === 'cup' || o.type === 'tube' || o.type === 'torte' ? w : d; return { x0: -w / 2, x1: w / 2, z0: -dd / 2, z1: dd / 2 }; }
+function objFoot(o) { const f = RT.get(o.id)?.foot; if (f) return f; const { w, d } = o.dims, dd = o.type === 'cup' || o.type === 'tube' || o.type === 'torte' || (o.type === 'board' && o.cbShape === 'round') ? w : d; return { x0: -w / 2, x1: w / 2, z0: -dd / 2, z1: dd / 2 }; }
 /* the item's footprint in its parent's frame when it stands at the parent's origin, own rotation applied */
 function itemBox(id) { const g = groupById(id); return g ? rotBox(layoutGroup(g), g.rotY) : rotBox(objFoot(objById(id)), objById(id).rotY); }
 /* places a group's items in a row (into slots); returns the row's footprint, centred on the group's origin */
@@ -174,4 +180,4 @@ function duplicateItem(id) {
   return c;
 }
 
-export { GROUP_DEFAULTS, ancestors, itemFrame, layoutPending, layoutSoon, slotsOf, deleteItems, duplicateItem, flatTree, groupById, groupItems, inside, isGroup, itemBox, layoutAll, moveItem, normalizeTree, objectsIn, own, parentOf, placeOf, rotXZ, siblingsOf, topOf, ungroup };
+export { GROUP_DEFAULTS, renameById, setHidden, setLocked, ancestors, itemFrame, layoutPending, layoutSoon, slotsOf, deleteItems, duplicateItem, flatTree, groupById, groupItems, inside, isGroup, itemBox, layoutAll, moveItem, normalizeTree, objectsIn, own, parentOf, placeOf, rotXZ, siblingsOf, topOf, ungroup };

@@ -6,7 +6,12 @@ import { contactMat } from '../scene/renderer.js';
 import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
 import { bridgeMM, buildHandleBox, frontWinMM, joinWinMM, lidLeaves, lidOpenings } from './handle-box.js';
 import { netPoint } from './box-net.js';
+import { buildMailer } from './mailer.js';
+import { buildRsc } from './rsc.js';
 import { outlineOutside, unionPolys } from '../core/polygon.js';
+import { buildBook } from './book.js';
+import { buildCasket, buildDrawerBox } from './rigid.js';
+import { buildGable, buildHexagon, buildPillow, buildPyramid } from './shapes.js';
 
 /* lid outline in mm: an outer-flap lid overhangs the base by the board thickness on the sides and front */
 function lidDimsMM(o) {
@@ -22,8 +27,8 @@ function lidDimsMM(o) {
    or as a closed opening inside the lid */
 function windowPlace(o) {
   const lt = o.lidType || 'flat';
-  if (lt === 'none' || clearLid(o)) return null;
-  if (lt === 'telescope' || lt === 'handle') return 'lid';
+  if (['none', 'f0201', 'book', 'casket', 'drawer', 'pillow', 'gable', 'pyramid', 'hexagon'].includes(lt) || clearLid(o)) return null;
+  if (lt === 'telescope' || lt === 'handle' || lt === 'f0427') return 'lid';
   const pl = o.window.place;
   if (pl === 'lid' || pl === 'back') return pl;
   return lt === 'flat' || lt === 'flap' ? 'edge' : 'lid';
@@ -197,6 +202,14 @@ function buildBox(o, rt) {
     m.position.set(...p); m.rotation.set(...r); m.renderOrder = 2; m.raycast = () => {}; parent.add(m);
   };
   if (o.lidType === 'handle') return buildHandleBox(o, rt, { addG, add, film });
+  if (o.lidType === 'f0201') return buildRsc(o, rt, { addG, add });
+  if (o.lidType === 'book') return buildBook(o, rt, { addG, add });
+  if (o.lidType === 'casket') return buildCasket(o, rt, { addG, add });
+  if (o.lidType === 'pillow') return buildPillow(o, rt);
+  if (o.lidType === 'gable') return buildGable(o, rt, { addG, add });
+  if (o.lidType === 'pyramid') return buildPyramid(o, rt, { addG, add });
+  if (o.lidType === 'hexagon') return buildHexagon(o, rt, { addG, add });
+  if (o.lidType === 'drawer') return buildDrawerBox(o, rt, { addG, add });
   const win = winMM(o), edgeWin = win?.place === 'edge' ? win : null, lidWin = win?.place === 'lid' ? win : null, backWin = win?.place === 'back' ? win : null;
   const ww = win ? win.ww * S : 0, wd = win ? win.wd * S : 0, wr = win ? win.r * S : 0;
   const wfH = edgeWin ? edgeWin.whFront * S : 0, wfR = Math.min(wr, wfH * .999);
@@ -211,6 +224,7 @@ function buildBox(o, rt) {
   add(g, D + 2 * seam, H, F('right'), [W / 2, H / 2, 0], [0, P / 2, 0], { face: 'right' });
   add(g, D + 2 * seam, H, F('left'), [-W / 2, H / 2, 0], [0, -P / 2, 0], { face: 'left' });
   add(g, W, D, F('bottom'), [0, 0, 0], [P / 2, 0, 0], { face: 'bottom' });
+  if (o.lidType === 'f0427') return buildMailer(o, rt, { addG, add });
   // inner walls & floor
   // inner walls & floor; a wall thicker than the board is a double wall folded in at the top,
   // so its inner face and the fold show the board's outer colour

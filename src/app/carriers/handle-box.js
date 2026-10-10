@@ -6,6 +6,8 @@ import { faceKeys, faceMM } from '../core/model.js';
 import { getImg } from '../core/assets.js';
 import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
 import { netWindows, winMM } from './box.js';
+import { addCake } from './cake.js';
+import { placeModel } from '../core/models3d.js';
 
 const HANDLE_KEYS = ['handleFront', 'handleBack'];
 const HANDLE_SHAPES = { arch: 'Арка', rect: 'Прямоугольная с прорезью', photo: 'Рамка с широкой проймой' };
@@ -369,16 +371,13 @@ function buildHandleBox(o, rt, { addG, add, film }) {
     rt.productMat.map = rt.productTex; rt.productMat.needsUpdate = true;
     const pw = clamp(pr.w ?? B.trW * .8, 5, 1000) * S, ph = pw * im.naturalHeight / im.naturalWidth;
     const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), rt.productMat); m.position.set((pr.x || 0) * S, TT + ph / 2, 0); m.raycast = () => {}; m.userData = { objId: o.id, face: null }; tr.add(m);
+  } else if (pr.cake !== false && pr.model) {
+    // a 3D model of the cake: as large as fits the tray and under the lid
+    placeModel(tr, o, pr.model, { fit: [B.trW * .85, B.trD * .85, (H - TT) / S * .9], at: [pr.x || 0, TT / S, 0], pick: false });
   } else if (pr.cake !== false) {
     // a plain cake while there is no photo: sponge, cream top, a ring of cream dollops and berries
-    rt.cakeMats ??= ['#efdcbc', '#fbf6ee', '#ffffff', '#a51d36'].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: .7 }));
-    const R = Math.min(TW, TD) * .38, hc = Math.min(H * .42, 70 * S, R * 1.1), [sponge, cream, dollop, berry] = rt.cakeMats;
-    const cyl = (r, h, y, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 72), mat); m.position.y = y; m.castShadow = m.receiveShadow = true; m.userData = { objId: o.id, face: null }; tr.add(m); };
-    cyl(R, hc * .82, TT + hc * .41, sponge); cyl(R * 1.01, hc * .18, TT + hc * .91, cream);
-    for (let i = 0; i < 12; i++) {
-      const a = i / 12 * P * 2, s = new THREE.Mesh(new THREE.SphereGeometry(R * .09, 16, 12), i % 3 ? dollop : berry);
-      s.position.set(Math.cos(a) * R * .8, TT + hc + R * .05, Math.sin(a) * R * .8); s.castShadow = true; s.userData = { objId: o.id, face: null }; tr.add(s);
-    }
+    const R = Math.min(TW, TD) * .38, hc = Math.min(H * .42, 70 * S, R * 1.1);
+    addCake(tr, o, rt, { R: R / S, y0: TT / S, h: hc / S });
   }
 }
 

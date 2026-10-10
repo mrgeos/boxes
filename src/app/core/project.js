@@ -7,15 +7,20 @@ import { addAsset } from './assets.js';
 import { libAdopt, libStore, library } from './library.js';
 import { vecOf } from './vector.js';
 import { registerFont } from './fonts.js';
+import { emptyKit } from './brand.js';
+import { cloudChanged, detachProject } from './cloud.js';
 import { RT, buildObject, disposeObject, ui } from '../scene/renderer.js';
 import { activeSticker } from '../stickers/placement.js';
+import { activeFill, activeRibbon } from './extras.js';
+import { modelRefs } from './models3d.js';
+import { adoptModels, loadMyModelsDone } from './model-library.js';
 import { applyScene, setLastView, setView } from '../scene/camera.js';
 import { layoutAll, normalizeTree } from './groups.js';
 import { renderFonts, renderLayerProps } from '../ui/face-panel.js';
 import { renderAll } from '../ui/wiring.js';
 
 const hist = { stack: [], i: -1 };
-const snapshot = () => JSON.stringify({ objects: state.objects, scene: state.scene, fonts: state.fonts, groups: state.groups, tree: state.tree });
+const snapshot = () => JSON.stringify({ name: state.name, brand: state.brand, objects: state.objects, scene: state.scene, fonts: state.fonts, groups: state.groups, tree: state.tree });
 function commit() {
   normalizeTree();
   const s = snapshot(); if (hist.stack[hist.i] === s) return;
@@ -28,6 +33,8 @@ function restore(s) {
   const ids = new Set(d.objects.map(o => o.id));
   for (const id of [...RT.keys()]) if (!ids.has(id)) disposeObject(id);
   state.objects = d.objects; state.scene = d.scene; state.fonts = d.fonts || []; state.groups = d.groups || []; state.tree = d.tree || [];
+  if (d.name) { state.name = d.name; paintProjectName(); }
+  state.brand = d.brand || emptyKit(); ui.brand = true;
   for (const o of state.objects) buildObject(o);
   layoutAll();
   if (!activeObj()) sel.obj = state.objects[0]?.id ?? null;
@@ -35,6 +42,7 @@ function restore(s) {
   sel.multi = sel.multi.filter(id => state.groups.some(g => g.id === id) || state.objects.some(o => o.id === id));
   const f = activeFaceData(); if (!f || !f.layers.some(l => l.id === sel.layer)) sel.layer = null;
   if (!activeSticker()) sel.sticker = null;
+  if (!activeRibbon() && !activeFill()) sel.ribbon = null;
   applyScene(); renderAll(); updateUndo(); scheduleSave();
 }
 function undo() { if (hist.i > 0) { hist.i--; restore(hist.stack[hist.i]); } }
@@ -47,29 +55,44 @@ function usedAssets() {
     for (const k in o.faces) for (const l of o.faces[k].layers) if (l.src) used.add(l.src);
     for (const st of o.stickers || []) for (const id of [st.src, st.bgSrc]) if (id) used.add(id);
     if (o.product?.src) used.add(o.product.src);
+    for (const r of o.ribbons || []) if (r.src) used.add(r.src);
+    // 3D models brought in as files (the library's are referred to by name)
+    for (const m of modelRefs(o)) if (m.asset) used.add(m.asset);
   }
   for (const f of state.fonts) used.add(f.asset);
+  if (state.scene.envMap === 'hdr' && state.scene.envHdr) used.add(state.scene.envHdr);
+  // the kit's logos and patterns go with the project even when no face shows them
+  for (const l of [...(state.brand?.logos || []), ...(state.brand?.patterns || [])]) used.add(l.src);
   return used;
 }
 const assetsOf = ids => { const out = {}; for (const id of ids) { if (assets[id]) out[id] = assets[id]; if (vecOf[id] && assets[vecOf[id]]) out[vecOf[id]] = assets[vecOf[id]]; } return out; };
 /* a project file carries its whole library; the autosave only what the design uses (the library is in the browser) */
 function projectJSON(withLibrary = true) {
   const ids = usedAssets(); if (withLibrary) for (const it of library) ids.add(it.id);
-  return JSON.stringify({ app: 'box-studio-3d', version: 1, objects: state.objects, groups: state.groups, tree: state.tree, scene: state.scene, fonts: state.fonts,
+  return JSON.stringify({ app: 'box-studio-3d', version: 1, name: state.name, brand: state.brand, objects: state.objects, groups: state.groups, tree: state.tree, scene: state.scene, fonts: state.fonts,
     library: library.filter(it => withLibrary || ids.has(it.id) || !it.browser).map(({ id, hash, name, aspect, added }) => ({ id, hash, name, aspect, added })), assets: assetsOf(ids),
     vectors: Object.fromEntries([...ids].filter(id => vecOf[id]).map(id => [id, vecOf[id]])) });
 }
 const LS_KEY = 'box-studio-3d/project';
 let saveTimer, saveWarned = false;
+let opening = false;
 function scheduleSave() {
+  // the project in the account too (a project being opened is not a change)
+  if (!opening) cloudChanged();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try { localStorage.setItem(LS_KEY, projectJSON(false)); }
     catch (e) { if (!saveWarned) { saveWarned = true; toast('Проект слишком большой для автосохранения в браузере. Используйте «Сохранить проект».', 4200); } }
   }, 900);
 }
-function loadProject(d, { resetHistory = true } = {}) {
+function loadProject(d, opts = {}) {
+  opening = true;
+  try { loadProjectNow(d, opts); } finally { opening = false; }
+}
+function loadProjectNow(d, { resetHistory = true, name = null } = {}) {
   if (!d || !Array.isArray(d.objects)) throw new Error('bad project');
+  state.name = String(d.name || name || 'Без названия').slice(0, 120); paintProjectName();
+  state.brand = d.brand || emptyKit(); ui.brand = true;
   for (const id of [...RT.keys()]) disposeObject(id);
   Object.assign(assets, d.assets || {});
   for (const [id, v] of Object.entries(d.vectors || {})) if (assets[v]) vecOf[id] = v;
@@ -79,6 +102,8 @@ function loadProject(d, { resetHistory = true } = {}) {
   state.objects = d.objects; state.groups = d.groups || []; state.tree = d.tree || []; state.scene = { ...state.scene, ...(d.scene || {}) }; state.fonts = d.fonts || [];
   if ((d.scene?.v || 1) < 2) Object.assign(state.scene, LIGHTS[state.scene.preset] || LIGHTS.studio, { v: 2 });
   state.fonts.forEach(registerFont);
+  // models the project brought join «Мои модели» of this browser
+  loadMyModelsDone().then(() => adoptModels(state.objects.flatMap(modelRefs)));
   for (const o of state.objects) { ensureFaces(o); buildObject(o); }
   layoutAll();
   sel.obj = state.objects[0]?.id ?? null; sel.face = null; sel.layer = null; sel.group = null; sel.multi = sel.obj ? [sel.obj] : [];
@@ -87,6 +112,15 @@ function loadProject(d, { resetHistory = true } = {}) {
   if (resetHistory) { hist.stack = []; hist.i = -1; }
   commit();
   requestAnimationFrame(() => { setLastView('q'); setView('fit', true); });
+}
+/* the project's name: in the top bar, the tab's title and the name of the saved file */
+function paintProjectName() {
+  const el = $('#projName'); if (el && !el.querySelector('input')) el.textContent = state.name;
+  document.title = `${state.name} — Box Studio 3D`;
+}
+function renameProject(name) {
+  const n = String(name || '').trim().slice(0, 120); if (!n || n === state.name) return false;
+  state.name = n; paintProjectName(); commit(); return true;
 }
 /* ---------- file saving (viewer download capability, with a plain fallback) ---------- */
 let dlNS;
@@ -114,7 +148,8 @@ async function openProjectFile(file) {
   try { d = JSON.parse(await file.text()); } catch { return toast('Файл не читается как проект (.json)'); }
   try {
     if (d.format === 'box-studio') { loadProject(await convertLegacy(d), { resetHistory: false }); toast(`Проект «Студии коробки» открыт: ${file.name}`); }
-    else { loadProject(d); toast(`Открыт проект: ${file.name}`); }
+    // a file opened is a project of its own in the account (saved with its first change)
+    else { detachProject(); loadProject(d, { name: file.name.replace(/(\.boxstudio)?\.json$/i, '') }); toast(`Открыт проект: ${file.name}`); }
   } catch { toast('Это не файл проекта Box Studio 3D или «Студии коробки»'); }
 }
 /* projects saved by the first version («Студия коробки», 200×150×50 box with a window) */
@@ -137,4 +172,4 @@ async function convertLegacy(p) {
   return { objects: [o], scene: state.scene, fonts: state.fonts, assets: {} };
 }
 
-export { LS_KEY, addFontFile, commit, loadProject, openProjectFile, projectJSON, redo, saveFile, scheduleSave, undo, usedAssets };
+export { assetsOf, LS_KEY, addFontFile, commit, loadProject, openProjectFile, paintProjectName, projectJSON, redo, renameProject, saveFile, scheduleSave, undo, usedAssets };

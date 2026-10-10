@@ -16,21 +16,22 @@ async function contentHash(url) {
   catch { let h = 0; for (let i = 0; i < url.length; i += 7) h = (h * 31 + url.charCodeAt(i)) | 0; return 'h' + (h >>> 0).toString(16) + url.length; }
 }
 const LIB_DB = { name: 'box-studio-3d', store: 'library' };
+/* the browser's store: pictures (library) and 3D models (models), each by its content hash */
 function libDB() {
   return new Promise((res, rej) => {
     try {
-      const r = indexedDB.open(LIB_DB.name, 1);
-      r.onupgradeneeded = () => r.result.createObjectStore(LIB_DB.store, { keyPath: 'hash' });
+      const r = indexedDB.open(LIB_DB.name, 2);
+      r.onupgradeneeded = () => { for (const s of ['library', 'models']) if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'hash' }); };
       r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
     } catch (e) { rej(e); }
   });
 }
-async function libStore(op, val) {
+async function libStore(op, val, store = LIB_DB.store) {
   try {
     const db = await libDB();
     return await new Promise((res, rej) => {
-      const tx = db.transaction(LIB_DB.store, op === 'all' ? 'readonly' : 'readwrite'), st = tx.objectStore(LIB_DB.store);
-      const r = op === 'all' ? st.getAll() : op === 'put' ? st.put(val) : st.delete(val);
+      const tx = db.transaction(store, op === 'all' || op === 'get' ? 'readonly' : 'readwrite'), st = tx.objectStore(store);
+      const r = op === 'all' ? st.getAll() : op === 'get' ? st.get(val) : op === 'put' ? st.put(val) : st.delete(val);
       r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
     });
   } catch { return op === 'all' ? [] : null; }
@@ -72,4 +73,4 @@ async function libLoadBrowser() {
   ui.lib = true;
 }
 
-export { libAdd, libAdopt, libLoadBrowser, libRemove, libStore, library };
+export { libAdd, libAdopt, libDB, libLoadBrowser, libRemove, libStore, library };

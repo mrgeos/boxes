@@ -3,17 +3,26 @@ import { $, $$, esc, fmt, toast } from '../core/util.js';
 import { ICON } from '../core/constants.js';
 import { sel, state } from '../core/state.js';
 import { faceKeys } from '../core/model.js';
-import { deleteItems, duplicateItem, flatTree, groupById, groupItems, isGroup, moveItem, normalizeTree, objectsIn, own, parentOf, siblingsOf, ungroup } from '../core/groups.js';
-import { select, selectGroup } from '../core/selection.js';
+import { deleteItems, duplicateItem, flatTree, groupById, groupItems, isGroup, moveItem, normalizeTree, objectsIn, own, parentOf, renameById, setHidden, setLocked, siblingsOf, ungroup } from '../core/groups.js';
+import { thumbOf } from './object-thumbs.js';
+import { lidAction, toggleLid } from './context-menus.js';
+import { setTab } from './tabs.js';
+import { renderModel } from './model-panel.js';
+import { extraById, extraHidden, extraName, extrasOf, renameExtra } from '../core/extras.js';
+import { extraAction, extraActs, extraIcon, renderStickers } from './stickers-panel.js';
+import { refreshTabs } from './tabs.js';
+import { select, selectExtra, selectGroup } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { setView } from '../scene/camera.js';
 
 const GROUP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l2 2h9A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>';
-const dimsText = o => o.type === 'torte' || o.type === 'tube' ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'cup' ? `⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)}` : o.type === 'bag' && o.bagStyle !== 'block' ? `${fmt(o.dims.w)}×${fmt(o.dims.h)}` : `${fmt(o.dims.w)}×${fmt(o.dims.d)}×${fmt(o.dims.h)}`;
+const objById = id => state.objects.find(o => o.id === id);
+const dimsText = o => o.type === 'model' ? `${fmt(o.size)} мм` : o.type === 'torte' || o.type === 'tube' || (o.type === 'board' && o.cbShape === 'round') ? `⌀${fmt(o.dims.w)}×${fmt(o.dims.h)}` : o.type === 'cup' ? `⌀${fmt(o.dims.w)}/${fmt(o.dims.d)}×${fmt(o.dims.h)}` : o.type === 'bag' && o.bagStyle !== 'block' ? `${fmt(o.dims.w)}×${fmt(o.dims.h)}` : `${fmt(o.dims.w)}×${fmt(o.dims.d)}×${fmt(o.dims.h)}`;
 const count = n => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'объект' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'объекта' : 'объектов'}`;
 /* what the buttons act on: the items picked in the list, or the selected object */
 const picked = () => { const ids = sel.multi.filter(id => own(id)); return ids.length ? ids : sel.obj ? [sel.obj] : []; };
-let anchor = null;   // the row a Shift-click range starts from
+let anchor = null;
+const foldedObj = new Set();   // objects whose extras are folded in the list   // the row a Shift-click range starts from
 
 /* rows of the tree, without the insides of closed groups */
 function visibleRows() {
@@ -25,17 +34,41 @@ function renderObjects() {
   normalizeTree();
   const on = new Set(sel.multi.length ? sel.multi : sel.obj ? [sel.obj] : []);
   $('#objList').innerHTML = visibleRows().map(({ id, depth }) => {
-    const g = groupById(id);
-    if (g) return `<div class="obj grp ${on.has(id) ? 'on' : ''}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true">
-      <button class="caret" data-open aria-label="${g.open ? 'Свернуть' : 'Развернуть'}" aria-expanded="${g.open}">${g.open ? '▾' : '▸'}</button>${GROUP_ICON}<span class="nm">${esc(g.name)}</span><span class="dm">${count(objectsIn(id).length)}</span></div>`;
-    const o = own(id);
-    return `<div class="obj ${on.has(id) ? 'on' : ''}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true">
-      ${ICON[o.type] || ICON.box}<span class="nm">${esc(o.name)}</span><span class="dm mono">${dimsText(o)}</span></div>`;
+    const g = groupById(id), os = objectsIn(id).map(objById), hid = os.length && os.every(o => o.hidden), lck = os.length && os.every(o => o.locked);
+    const cls = `obj ${g ? 'grp' : ''} ${on.has(id) ? 'on' : ''} ${hid ? 'hidden' : ''} ${lck ? 'locked' : ''}`;
+    const acts = `<span class="acts">${rowActs(hid, lck)}</span>`;
+    if (g) return `<div class="${cls}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true">
+      <button class="caret" data-open aria-label="${g.open ? 'Свернуть' : 'Развернуть'}" aria-expanded="${g.open}">${g.open ? '▾' : '▸'}</button><span class="th">${GROUP_ICON}</span><span class="nm">${esc(g.name)}</span><span class="dm">${count(os.length)}</span>${acts}</div>`;
+    const o = own(id), url = thumbOf(id), xs = extrasOf(o), open = !foldedObj.has(id), xOn = id === sel.obj && (sel.sticker || sel.ribbon || sel.part);
+    const th = url ? `<img class="th" src="${url}" alt="">` : `<span class="th">${ICON[o.type] || ICON.box}</span>`;
+    // the object's extras (stickers, a sleeve) under it, one level in; the object row folds them
+    const kids = open ? xs.map(e => `<div class="obj xtra ${xOn === e.id ? 'on' : ''} ${extraHidden(e) ? 'hidden' : ''} ${e.T.locked ? 'locked' : ''}" data-obj="${id}" data-x="${e.id}" style="--d:${depth + 1}" tabindex="0" role="button">
+      <span class="caret"></span><span class="th">${extraIcon(e)}</span><span class="nm">${esc(extraName(o, e))}</span><span class="acts">${extraActs(e)}</span></div>`).join('') : '';
+    return `<div class="${xOn ? cls.replace(' on ', ' kid-on ') : cls}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true" title="${esc(o.name)} · ${dimsText(o)} мм">
+      ${xs.length ? `<button class="caret" data-fold aria-label="${open ? 'Свернуть допы' : 'Развернуть допы'}" aria-expanded="${open}">${open ? '▾' : '▸'}</button>` : '<span class="caret"></span>'}${th}<span class="nm">${esc(o.name)}</span><span class="mods">${objMods(o).map(m => `<button class="mod" data-mod="${m.k}" title="${esc(m.t)}" aria-label="${esc(m.t)}">${ICON[m.i]}</button>`).join('')}</span><span class="dm mono">${dimsText(o)}</span>${acts}</div>${kids}`;
   }).join('') || '<div class="empty">Добавьте коробку, стакан или тубус</div>';
-  $$('#objList .obj').forEach(el => {
+  // an extra's row: picks it (as an object of its own); its lock and eye, a double click renames it
+  $$('#objList .obj.xtra').forEach(el => {
+    const o = objById(el.dataset.obj), x = el.dataset.x;
+    el.onclick = e => {
+      const a = e.target.closest('[data-a]')?.dataset.a;
+      if (a) return extraAction(o, x, a);
+      if (e.detail === 2) return renameExtraTree(o.id, x);
+      selectExtra(o.id, x);
+    };
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } };
+  });
+  $$('#objList .obj:not(.xtra)').forEach(el => {
     const id = el.dataset.id;
     el.onclick = e => {
       if (e.target.closest('[data-open]')) { const g = groupById(id); g.open = !g.open; renderObjects(); return; }
+      if (e.target.closest('[data-fold]')) { foldedObj.has(id) ? foldedObj.delete(id) : foldedObj.add(id); renderObjects(); return; }
+      const a = e.target.closest('[data-a]')?.dataset.a, mod = e.target.closest('[data-mod]')?.dataset.mod;
+      if (a) { const ids = on.has(id) ? [...on] : [id], os = ids.flatMap(objectsIn).map(objById); a === 'vis' ? setHidden(ids, !os.every(o => o.hidden)) : setLocked(ids, !os.every(o => o.locked)); renderObjects(); commit(); return; }
+      if (mod) return modAction(id, mod);
+      // a double click renames: the first click may have redrawn the list (a group row does), so no dblclick
+      // comes; the second click's count tells it
+      if (e.detail === 2 && !e.shiftKey && !e.ctrlKey && !e.metaKey) { renameRow(id); return; }
       if (e.ctrlKey || e.metaKey) { sel.multi = on.has(id) ? [...on].filter(x => x !== id) : [...on, id]; anchor = id; renderObjects(); return; }
       if (e.shiftKey && anchor) {
         const ids = visibleRows().map(r => r.id), a = ids.indexOf(anchor), b = ids.indexOf(id);
@@ -50,9 +83,22 @@ function renderObjects() {
       e.dataTransfer.setData('application/x-bs-item', JSON.stringify(ids)); e.dataTransfer.effectAllowed = 'move';
     };
   });
-  const ids = picked();
-  $('#dupObjBtn').disabled = $('#delObjBtn').disabled = $('#groupBtn').disabled = !ids.length;
-  $('#ungroupBtn').disabled = !ids.some(isGroup);
+}
+/* lock and eye show on hover, as in the layer list, and stay while the object is locked or hidden */
+const rowActs = (hid, lck) => `<button data-a="lock" class="${lck ? 'pin' : ''}" title="${lck ? 'Разблокировать' : 'Заблокировать: не выбирается и не двигается в сцене'}" aria-label="Блокировка">${lck ? ICON.lock : ICON.unlock}</button>
+  <button data-a="vis" class="${hid ? 'pin' : ''}" title="${hid ? 'Показать' : 'Скрыть: не видно в сцене, в картинке и видео'}" aria-label="Видимость">${hid ? ICON.eyeOff : ICON.eye}</button>`;
+/* what is going on with an object, as small marks in its row: { k: what a click does, i: icon, t: title } */
+function objMods(o) {
+  const m = [], lid = lidAction(o);
+  if (lid && o.lid > 0) m.push({ k: 'lid', i: 'lidOpen', t: `Открыто. Клик: ${lid[1].toLowerCase()}` });
+  if (o.dieline) m.push({ k: 'net', i: 'dieline', t: 'Свой макет развёртки' });
+  return m;
+}
+function modAction(id, k) {
+  const o = objById(id);
+  if (k === 'lid') { toggleLid(o).then(() => { renderObjects(); commit(); }); return; }
+  if (k === 'group') { selectGroup(parentOf(id).id); return; }
+  select(id, undefined, null); setTab(k);
 }
 
 /* ---------- drag rows to reorder or to move them into a group ---------- */
@@ -96,7 +142,7 @@ function duplicateIds(ids) {
 function deleteIds(ids) {
   if (!ids.length) return;
   const names = deleteItems(ids);
-  sel.obj = null; sel.group = null; sel.multi = [];
+  sel.group = null; sel.multi = [];   // sel.obj still names the deleted one, so select() sees the change
   const next = state.objects[0];
   select(next?.id ?? null, next ? faceKeys(next)[0] : undefined, null); renderObjects(); commit();
   toast(`Удалено: ${names.join(', ')}. Вернуть — Ctrl+Z`);
@@ -107,6 +153,41 @@ function leaveGroup(id) {
   const list = siblingsOf(g.id);
   moveItem(id, parentOf(g.id)?.id ?? null, list[list.indexOf(g.id) + 1] ?? null);
   renderObjects(); commit();
+}
+
+/* types a new name for an extra right in its row of the tree */
+function renameExtraTree(objId, x) {
+  const o = objById(objId), row = $(`#objList .obj.xtra[data-obj="${objId}"][data-x="${x}"]`), nm = row && $('.nm', row), e = o && extraById(o, x);
+  if (!nm || !e) return false;
+  const inp = document.createElement('input'); inp.className = 'ren'; inp.value = extraName(o, e); inp.setAttribute('aria-label', 'Название');
+  nm.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const end = save => { if (done) return; done = true; if (save) { renameExtra(o, x, inp.value); commit(); } renderObjects(); renderStickers(); refreshTabs(); renderModel(); };
+  inp.onkeydown = ev => { ev.stopPropagation(); if (ev.key === 'Enter') end(true); if (ev.key === 'Escape') end(false); };
+  inp.onblur = () => end(true);
+  for (const t of ['click', 'dblclick', 'pointerdown']) inp.addEventListener(t, ev => ev.stopPropagation());
+  return true;
+}
+/* types a new name for an object or a group right in its row; Enter or a click away keeps it, Esc does not */
+function renameRow(id) {
+  const row = $(`#objList .obj[data-id="${id}"]`), nm = row && $('.nm', row); if (!nm || !row.offsetParent) return false;
+  const inp = document.createElement('input'); inp.className = 'ren'; inp.value = own(id).name; inp.setAttribute('aria-label', 'Название');
+  row.draggable = false; nm.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const end = save => {
+    if (done) return; done = true;
+    if (save && inp.value.trim() && inp.value.trim() !== own(id).name) {
+      renameById(id, inp.value);
+      renderModel();   // the panel of the selected object or group (it has the name too)
+      if (id === sel.obj) $('#objBadge').textContent = own(id).name;
+      commit();
+    }
+    renderObjects();
+  };
+  inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') end(true); if (e.key === 'Escape') end(false); };
+  inp.onblur = () => end(true);
+  for (const t of ['click', 'dblclick', 'pointerdown']) inp.addEventListener(t, e => e.stopPropagation());
+  return true;
 }
 
 /* hooks up the object list and its buttons */
@@ -125,15 +206,12 @@ function initObjectList() {
     const el = e.target.closest('.obj'), ids = JSON.parse(e.dataTransfer.getData('application/x-bs-item') || '[]');
     if (dropItems(ids, el, el && dropZone(el, e))) { renderObjects(); commit(); }
   });
-  $('#groupBtn').onclick = () => groupIds(picked());
-  $('#ungroupBtn').onclick = () => ungroupIds(picked());
-  $('#dupObjBtn').onclick = () => duplicateIds(picked());
-  $('#delObjBtn').onclick = () => deleteIds(picked());
-  // Ctrl+G groups, Ctrl+Shift+G ungroups (by key position, so it works in any keyboard layout)
+  // Ctrl+G groups, Ctrl+Shift+G ungroups (by key position, so it works in any keyboard layout); with layers
+  // picked on a face the keys group those instead (scene/interaction.js)
   document.addEventListener('keydown', e => {
-    if (!(e.ctrlKey || e.metaKey) || e.code !== 'KeyG' || e.target.closest?.('input,textarea,select')) return;
+    if (!(e.ctrlKey || e.metaKey) || e.code !== 'KeyG' || sel.layer || e.target.closest?.('input,textarea,select')) return;
     e.preventDefault(); e.shiftKey ? ungroupIds(picked()) : groupIds(picked());
   });
 }
 
-export { deleteIds, duplicateIds, groupIds, initObjectList, leaveGroup, picked, renderObjects, ungroupIds };
+export { renameExtraTree, renameRow, deleteIds, duplicateIds, groupIds, initObjectList, leaveGroup, picked, renderObjects, ungroupIds };

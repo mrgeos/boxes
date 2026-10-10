@@ -2,8 +2,10 @@
 import * as THREE from 'three';
 import { S, V2, arcPts, clamp, rrPoly } from '../core/util.js';
 import { FINISHES } from '../core/constants.js';
+import { boardGrain } from './board.js';
 import { RT } from '../scene/renderer.js';
 import { quadGeo } from '../scene/geometry.js';
+import { isShape } from './shapes.js';
 
 /* ---------- sleeve ----------
    A paper band glued into a tube around a closed box (or round an open tray: a matchbox-style box).
@@ -14,14 +16,14 @@ const SLEEVE_AXES = { x: 'Поперёк ширины: верх, перед, д�
 const SLEEVE_FIN = { matte: 'Матовая бумага', gloss: 'Глянцевая ламинация', soft: 'Soft-touch', kraft: 'Крафт' };
 const SLEEVE_GLUE = 15;
    // mm of glue flap on the die
-const sleeveOn = o => o.type === 'box' && o.lidType !== 'handle' && !!o.sleeve?.on;
+const sleeveOn = o => o.type === 'box' && o.lidType !== 'handle' && !isShape(o) && !!o.sleeve?.on;
 const defaultSleeveHandle = () => ({ on: false, join: 'ends', h: 75, r: 18, rf: 10, hole: { w: 70, h: 22, y: 38, r: 11 } });
 const defaultSleeve = dims => ({ on: false, axis: 'x', w: Math.round(dims.w * .5), x: 0, slide: 0, fin: 'matte', handle: defaultSleeveHandle() });
 /* the closed box's outline the sleeve wraps (mm): x half width, z front/back, y top */
 function boxEnvelope(o) {
   const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4), lt = o.lidType || 'flat';
   let hx = w / 2, zf = d / 2, zb = -d / 2, top = h;
-  if (lt === 'flat' || lt === 'tuck') top = h + t;
+  if (lt === 'flat' || lt === 'tuck' || lt === 'f0427') top = h + t;
   if (lt === 'flap') { hx = w / 2 + t + .3; zf = d / 2 + t + .3; top = h + t; }
   if (lt === 'telescope') {
     if (o.lidMat === 'clear') {
@@ -191,6 +193,7 @@ function applySleeve(o) {
   const rt = RT.get(o.id); if (!rt?.sleeve) return;
   const D = sleeveDims(o), s = clamp(o.sleeve.slide || 0, 0, D.len + D.bw) * S;
   rt.sleeve.position.set(D.ax === 'x' ? s : 0, 0, D.ax === 'z' ? s : 0);
+  rt.sleeve.visible = !o.sleeve.hidden;
 }
 function sleeveColors(o, rt) {
   rt.sleeveIn ??= new THREE.MeshStandardMaterial({ roughness: .9, side: THREE.FrontSide });
@@ -200,6 +203,6 @@ function sleeveColors(o, rt) {
   // the inside of the band is unprinted paper; the cut edges show the paper's colour
   rt.sleeveIn.color.copy(o.sleeve?.fin === 'kraft' ? paper : new THREE.Color('#f6f3ec')); rt.sleeveEdge.color.copy(paper).multiplyScalar(.92);
 }
-const faceGrain = (o, k) => k === 'sleeve' ? (o.sleeve?.fin === 'kraft' ? .45 : .06) : k === 'carry' ? (o.carry?.fin === 'kraft' ? .45 : .06) : o.grain;
+const faceGrain = (o, k) => o.type === 'board' ? boardGrain(o, k) : k === 'tissue' ? .3 : k === 'sleeve' ? (o.sleeve?.fin === 'kraft' ? .45 : .06) : k === 'carry' ? (o.carry?.fin === 'kraft' ? .45 : .06) : o.grain;
 
 export { sleeveAt, sleeveLeaf, upgradeSleeve, SLEEVE_AXES, SLEEVE_FIN, SLEEVE_GLUE, SLEEVE_PANEL, applySleeve, buildSleeve, defaultSleeve, defaultSleeveHandle, faceGrain, sleeveColors, sleeveDims, sleeveOn, sleevePanelLabel, sleeveSheet };

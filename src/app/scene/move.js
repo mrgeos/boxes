@@ -7,9 +7,13 @@ import { RT, camera, controls, cvs, scene } from './renderer.js';
 import { invalidate, recording } from './camera.js';
 import { commit } from '../core/project.js';
 import { refreshFields } from '../ui/fields.js';
+import { tool } from '../ui/action-bar.js';
+import { pick } from './interaction.js';
+import { select } from '../core/selection.js';
 import { renderObjects } from '../ui/object-list.js';
 
-/* Two rings at most: one under the selected item (an object, or a group picked in the list) and, when that
+/* With the move or rotate tool (ui/action-bar.js) an object is dragged by itself or by its ring; with the others
+   the rings stay hidden and a drag on the model works on its graphics. Two rings at most: one under the selected item (an object, or a group picked in the list) and, when that
    item sits in a group, a fainter one under the whole top-level group. Dragging a ring moves a free item
    over the floor; an item inside a group follows the cursor and takes the place in the row it is dragged to
    (the ring shows that place), and lands there on release. The rings show only while the pointer is over the
@@ -46,7 +50,7 @@ function ringItems() {
 }
 /* keeps the rings in step with the selection and the layout; true when they changed and need drawing */
 function syncRings() {
-  const ids = (hover || drag) && !recording ? ringItems() : [];
+  const ids = (hover || drag) && !recording && (tool() === 'move' || tool() === 'rotate') ? ringItems() : [];
   const frames = ids.map(itemFrame);
   const s = JSON.stringify([ids, frames.map(f => f && [f.x, f.z, f.rot, f.box])]);
   if (s === sig) return false;
@@ -68,16 +72,36 @@ function ringAt(e) { aim(e); return rings.find(m => m.visible && ray.intersectOb
 /* the point on the floor under the cursor, mm */
 function floorAt(e) { aim(e); return ray.ray.intersectPlane(floorPlane, pt) ? { x: pt.x / S, z: pt.z / S } : null; }
 
+/* the item a press on the model takes: the selected group when the object is in it, else the object */
+function itemAt(e) {
+  const h = pick(e.clientX, e.clientY); if (!h?.objId) return null;
+  if (sel.group && objectsIn(sel.group).includes(h.objId)) return sel.group;
+  if (sel.obj !== h.objId) select(h.objId, h.face || undefined, null);
+  return h.objId;
+}
 function startDrag(e, id) {
   const p = floorAt(e), f = itemFrame(id); if (!p || !f) return false;
   const parent = parentOf(id), t = own(id);
-  drag = { id, parent, grab: { x: p.x - f.x, z: p.z - f.z }, start: parent ? null : { ...t.pos } };
+  // rotate: the angle round the item's centre on the floor; move: where it was grabbed
+  drag = { id, parent, grab: { x: p.x - f.x, z: p.z - f.z }, start: parent ? null : { ...t.pos },
+    rot: tool() === 'rotate' ? { a0: Math.atan2(p.z - f.z, p.x - f.x), r0: t.rotY || 0, c: { x: f.x, z: f.z } } : null };
   controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'grabbing';
   return true;
 }
 function dragTo(e) {
   const p = floorAt(e); if (!p) return;
-  const x = p.x - drag.grab.x, z = p.z - drag.grab.z, t = own(drag.id);
+  const t = own(drag.id);
+  if (drag.rot) {
+    // turning: three.js turns +y counter-clockwise seen from above, which is the floor angle's way back
+    const { a0, r0, c } = drag.rot; let r = r0 - (Math.atan2(p.z - c.z, p.x - c.x) - a0) / DEG;
+    r = e.shiftKey ? Math.round(r / 15) * 15 : Math.round(r);
+    t.rotY = ((r + 180) % 360 + 360) % 360 - 180; layoutAll();
+    if (sel.group === drag.id || sel.obj === drag.id) refreshFields($('#modelSec'), t);
+    return;
+  }
+  let x = p.x - drag.grab.x, z = p.z - drag.grab.z;
+  // Shift: along the axis it has moved most on
+  if (e.shiftKey && drag.start) { if (Math.abs(x - drag.start.x) > Math.abs(z - drag.start.z)) z = drag.start.z; else x = drag.start.x; }
   if (!drag.parent) {
     t.pos = { x: Math.round(x), z: Math.round(z) }; layoutAll();
     if (sel.group === drag.id || sel.obj === drag.id) refreshFields($('#modelSec'), t);
@@ -104,15 +128,15 @@ function initMove() {
   cvs.addEventListener('pointerleave', () => { hover = false; invalidate(); });
   // before the other handlers (and the orbit controls) on the canvas, so grabbing a ring does not turn the camera
   cvs.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || e.pointerType === 'touch' || e.shiftKey || e.ctrlKey || e.metaKey || recording) return;
-    const id = ringAt(e);
+    if (e.button !== 0 || e.pointerType === 'touch' || e.ctrlKey || e.metaKey || recording || (tool() !== 'move' && tool() !== 'rotate')) return;
+    const id = ringAt(e) || itemAt(e);
     if (id && startDrag(e, id)) { e.stopImmediatePropagation(); e.preventDefault(); }
   }, true);
   cvs.addEventListener('pointermove', e => {
     if (drag) { dragTo(e); return; }
-    if (!e.buttons && ringAt(e)) cvs.style.cursor = 'move';
+    if (!e.buttons && (tool() === 'move' || tool() === 'rotate')) cvs.style.cursor = ringAt(e) || pick(e.clientX, e.clientY)?.objId ? (tool() === 'move' ? 'move' : 'ew-resize') : '';
   });
-  cvs.addEventListener('pointerup', e => { if (drag) { e.stopImmediatePropagation(); endDrag(); cvs.style.cursor = 'move'; } }, true);
+  cvs.addEventListener('pointerup', e => { if (drag) { e.stopImmediatePropagation(); endDrag(); } }, true);
   cvs.addEventListener('pointercancel', () => { if (drag) endDrag(); });
 }
 /* hides the rings for a picture of the scene; returns a function that brings them back */

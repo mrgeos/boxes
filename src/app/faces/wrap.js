@@ -13,7 +13,7 @@ import { layerBox } from './render.js';
 const mul = (A, B) => [A[0] * B[0] + A[2] * B[1], A[1] * B[0] + A[3] * B[1], A[0] * B[2] + A[2] * B[3], A[1] * B[2] + A[3] * B[3], A[0] * B[4] + A[2] * B[5] + A[4], A[1] * B[4] + A[3] * B[5] + A[5]];
 function inv(M) { const [a, b, c, d, e, f] = M, k = a * d - b * c; return [d / k, -b / k, -c / k, a / k, (c * f - d * e) / k, (b * e - a * f) / k]; }
 const apply = (M, [x, y]) => [M[0] * x + M[2] * y + M[4], M[1] * x + M[3] * y + M[5]];
-const canWrap = L => !!L.wrap && L.visible && !(L.type === 'image' && L.tile);
+const canWrap = L => !!L.wrap && !L.clipTo && L.visible && !(L.type === 'image' && L.tile);
 
 /* the layer on its face, mm: centre and size */
 function layerMM(o, k, L) {
@@ -126,4 +126,4 @@ function moveLayerOnto(o, A, T, L, G) {
   o.faces[A].layers = o.faces[A].layers.filter(l => l !== L); o.faces[T].layers.push(L);
 }
 
-export { apply, canWrap, drawWrapped, faceMaps, inv, layerReach, moveLayerOnto, wrapTouch, wrapsOnto };
+export { apply, canWrap, drawWrapped, faceMaps, inv, layerMM, layerReach, moveLayerOnto, wrapTouch, wrapsOnto };

@@ -6,6 +6,7 @@ import { RT, camera, controls, cvs, renderer, scene, viewport } from '../scene/r
 import { resize, setRecording } from '../scene/camera.js';
 import { saveFile } from '../core/project.js';
 import { hideRings } from '../scene/move.js';
+import { hideSelBox } from '../scene/sel-box.js';
 
 function paintBackground(c, w, h) {
   const s = state.scene;
@@ -23,7 +24,7 @@ async function exportPNG() {
   const pr = renderer.getPixelRatio();
   renderer.setPixelRatio(1); renderer.setSize(W, H, false);
   for (const rt of RT.values()) for (const f of Object.values(rt.faces)) { f.flash = 0; f.mat.emissive.setRGB(0, 0, 0); }
-  const showRings = hideRings(); renderer.render(scene, camera); showRings();
+  const showRings = hideRings(), showSel = hideSelBox(); renderer.render(scene, camera); showRings(); showSel();
   const out = document.createElement('canvas'); out.width = W; out.height = H; const c = out.getContext('2d');
   if (!transparent) paintBackground(c, W, H);
   c.drawImage(renderer.domElement, 0, 0);

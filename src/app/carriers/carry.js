@@ -122,6 +122,7 @@ function buildCarry(o, rt) {
 function applyCarry(o) {
   const rt = RT.get(o.id); if (!rt?.carry) return;
   rt.carry.position.y = clamp(o.carry.slide || 0, 0, 1000) * S;
+  rt.carry.visible = !o.carry.hidden;
 }
 function carryColors(o, rt) {
   rt.sleeveIn ??= new THREE.MeshStandardMaterial({ roughness: .9, side: THREE.FrontSide });

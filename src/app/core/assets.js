@@ -6,6 +6,7 @@ import { normSvg, svgURL } from './vector.js';
 import { RT, markFace, markObj, rebuildQueue, ui } from '../scene/renderer.js';
 import { stickerDirty, touchSticker } from '../stickers/placement.js';
 import { tintCache } from '../stickers/film.js';
+import { ribbonAssetLoaded } from '../carriers/ribbon.js';
 
 function addAsset(url) { const id = 'a' + uid(); assets[id] = url; return id; }
 function getImg(id) {
@@ -29,6 +30,7 @@ function onAssetLoaded(id) {
       touchSticker(o, st);
     }
     if ((o.stickers || []).some(st => st.text)) stickerDirty.add(o.id);
+    ribbonAssetLoaded(o, id);
   }
   ui.layers = true; ui.stickers = true;
 }

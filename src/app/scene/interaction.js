@@ -1,38 +1,57 @@
 // Мышь, касания, перетаскивание файлов, клавиатура
 import * as THREE from 'three';
-import { $ } from '../core/util.js';
-import { activeLayer, activeObj, sel, state } from '../core/state.js';
-import { faceKeys, faceMM, facePx, loopAxis } from '../core/model.js';
+import { $, DEG, S, toast } from '../core/util.js';
+import { activeFaceData, activeLayer, activeObj, sel, state } from '../core/state.js';
+import { deleteIds, duplicateIds, picked } from '../ui/object-list.js';
+import { faceKeys, faceMM, facePx, loopAxis, newText } from '../core/model.js';
 import { apply, faceMaps, inv, layerReach, moveLayerOnto } from '../faces/wrap.js';
 import { library } from '../core/library.js';
 import { RT, camera, controls, cvs, markFace, renderer, ui, world } from './renderer.js';
 import { activeSticker, stickerAt, stickerDirty, touchSticker } from '../stickers/placement.js';
 import { applyViewOffset, focusSelected, lockActive, recording, setCamTween, setView, view } from './camera.js';
-import { select, selectLayer } from '../core/selection.js';
+import { pickLayers, select, selectExtra, selectLayer, selectObjectItself } from '../core/selection.js';
+import { boundsOf, clickPick, copyData, moveLayers, pasteData, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
 import { addFontFile, commit, openProjectFile, redo, undo } from '../core/project.js';
 import { refreshFields } from '../ui/fields.js';
-import { addImageToFace, deleteLayer, duplicateLayer, renderLayerProps, renderLayers } from '../ui/face-panel.js';
-import { deleteSticker, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
+import { addImageToFace, addLayer, deleteLayer, duplicateLayer, layerCmd, moveLayer, renderFaceTabs, renderLayerProps, renderLayers } from '../ui/face-panel.js';
+import { deleteSticker, editStickerText, extraAction, renderStickers, setStickerImage } from '../ui/stickers-panel.js';
+import { setTab } from '../ui/tabs.js';
+import { activeFill, activeRibbon, isPart } from '../core/extras.js';
+import { handleAt } from './sel-box.js';
+import { startTextEdit } from '../ui/text-edit.js';
+import { rotateItem, scaleItem, sizeOf } from '../core/transform.js';
+import { editCursor, editDrag, editFrom, editMode, editRects, setEditMode } from '../core/mask.js';
+import { layerBox } from '../faces/render.js';
+import { tool } from '../ui/action-bar.js';
 import { placeLibImage } from '../ui/library-panel.js';
 import { ed, edPoint, edState, hitLayer } from '../ui/face-editor.js';
+import { importModelFiles } from '../ui/wiring.js';
 
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function pick(clientX, clientY, only = null) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
+  // hidden and locked objects are passed through (three.js casts rays at hidden meshes too)
   const hits = ray.intersectObjects(only ? [only] : world.children, true);
-  const h = hits[0]; if (!h) return null;
-  const ud = h.object.userData; const face = ud.faces ? ud.faces[h.face.materialIndex] : ud.face;
-  return { objId: ud.objId, face, wall: !!ud.wall, uv: h.uv, mesh: h.object, mi: h.face.materialIndex };
+  const faceOf = x => { const ud = x.object.userData; return ud.faces ? ud.faces[x.face.materialIndex] : ud.face; };
+  // a locked sleeve or carrier is passed through too, and a ribbon off the model (hidden, locked, the lid open);
+  // over one object only (a layer dragged on it) ribbons are passed through
+  const ribbonOff = (o, id) => { const r = o.ribbons?.find(q => q.id === id); return only || !r || r.hidden || r.locked || o.lid > .5; };
+  // what is not shown (a part hidden, tissue under a closed lid) is passed through as well
+  const shown = m => { for (let n = m; n; n = n.parent) if (!n.visible) return false; return true; };
+  const h = hits.find(x => { const o = state.objects.find(q => q.id === x.object.userData.objId), f = faceOf(x); return !o || (shown(x.object) && !o.hidden && !o.locked && !(isPart(f) && o[f]?.locked) && !(x.object.userData.ribbon && ribbonOff(o, x.object.userData.ribbon))); }); if (!h) return null;
+  const ud = h.object.userData, face = faceOf(h);
+  return { objId: ud.objId, face, ribbon: ud.ribbon || null, wall: !!ud.wall, uv: h.uv, mesh: h.object, mi: h.face.materialIndex };
 }
-let down = null, drag3 = null, dragSt = null, hoverT = 0;
+let down = null, drag3 = null, dragSt = null, xform = null, hoverT = 0;
 /* the sticker under a 3D hit, if any */
 function stickerHit(h) {
   const o = state.objects.find(x => x.id === h?.objId);
   if (!o || !h.face || !h.uv || h.wall || !o.stickers?.length) return null;
   const [mw, mh] = faceMM(o, h.face);
-  return stickerAt(o, h.face, h.uv.x * mw, (1 - h.uv.y) * mh);
+  const st = stickerAt(o, h.face, h.uv.x * mw, (1 - h.uv.y) * mh);
+  return st && !st.locked ? st : null;
 }
 /* screen-space pan in orbit-lock mode: right button, Shift/Ctrl/Cmd + left button, or two fingers */
 const touches = new Map();
@@ -88,6 +107,90 @@ function dragLayer(e) {
   markFace(o, drag3.face); refreshFields($('#layerSec'), L);
 }
 
+/* a handle of the selection frame on the model: corners scale the layer or sticker, the dot on the stalk turns it.
+   Both go by the pointer round the item's centre on screen; Shift turns in steps of 15°. */
+/* where the pointer is on face k of object o, in the face's px: on the face's plane where it has one (so also
+   past its edge), else on the surface under the pointer */
+const plane = new THREE.Plane(), hitP = new THREE.Vector3(), MW = new THREE.Matrix4();
+function facePoint(e, o, k) {
+  const [W, H] = facePx(o, k), [mw, mh] = faceMM(o, k), F = RT.get(o.id)?.frames?.[k];
+  if (F) {
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, camera);
+    F.parent.updateMatrixWorld(); MW.multiplyMatrices(F.parent.matrixWorld, F.pinv);
+    const c = F.c.clone().multiplyScalar(S).applyMatrix4(MW), n = F.n.clone().transformDirection(MW);
+    if (!ray.ray.intersectPlane(plane.setFromNormalAndCoplanarPoint(n, c), hitP)) return null;
+    const p = hitP.applyMatrix4(MW.clone().invert()).divideScalar(S).sub(F.c);
+    return [(p.dot(F.u) + F.w / 2) * W / mw, (F.h / 2 - p.dot(F.v)) * H / mh];
+  }
+  const h = pick(e.clientX, e.clientY, RT.get(o.id).group);
+  return h?.face === k && h.uv ? [h.uv.x * W, (1 - h.uv.y) * H] : null;
+}
+/* the pointer in the layer's own px (from its centre then, unturned) */
+function layerLocal(e, o, k, from, rot) {
+  const p = facePoint(e, o, k); if (!p) return null;
+  const [W, H] = facePx(o, k), a = -rot * DEG, ex = p[0] - from.x * W, ey = p[1] - from.y * H;
+  return [ex * Math.cos(a) - ey * Math.sin(a), ex * Math.sin(a) + ey * Math.cos(a)];
+}
+/* crop or mask mode on the model: a corner handle resizes the frame, a drag inside it moves */
+function startEdit(e, handle) {
+  const o = activeObj(), L = activeLayer(), k = sel.face, from = editFrom(L), at = layerLocal(e, o, k, from, L.rot);
+  if (!at) return false;
+  const [W, H] = facePx(o, k);
+  xform = { edit: editMode(), handle, it: L, o, face: k, from, at, box: layerBox(L, W, H) };
+  controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = handle === 'move' ? 'grabbing' : editCursor(handle);
+  return true;
+}
+/* is the pointer inside the frame being edited? */
+function inEditFrame(e) {
+  const o = activeObj(), L = activeLayer(), mode = editMode(); if (!o || !L || !mode) return false;
+  const [W, H] = facePx(o, sel.face), box = layerBox(L, W, H), er = editRects(mode, L, W, H, box), p = layerLocal(e, o, sel.face, L, L.rot);
+  if (!er || !p) return false;
+  const [x, y] = [p[0] * er.flip[0], p[1] * er.flip[1]], [x0, y0, x1, y1] = er.inner;
+  return x >= x0 && x <= x1 && y >= y0 && y <= y1;
+}
+function startXform(e, g) {
+  const it = activeLayer() || activeSticker(), dx = e.clientX - g.c[0], dy = e.clientY - g.c[1], many = !activeSticker() || activeLayer() ? selectedLayers() : [];
+  xform = { ...g, it, o: activeObj(), face: sel.face, from: sizeOf(it), r0: it.rot || 0, a0: Math.atan2(dy, dx), d0: Math.max(4, Math.hypot(dx, dy)) };
+  // several layers: scaled and turned together round the middle of their frame
+  if (many.length > 1) {
+    const [W, H] = facePx(xform.o, sel.face), b = boundsOf(many, W, H);
+    Object.assign(xform, { snap: snapshot(many), px: (b[0] + b[2]) / 2, py: (b[1] + b[3]) / 2 });
+  }
+  controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = g.mode === 'rot' ? 'grabbing' : 'nwse-resize';
+}
+function dragXform(e) {
+  if (xform.edit) {
+    const { o, face, it, from, at, box } = xform, p = layerLocal(e, o, face, from, from.rot ?? it.rot); if (!p) return;
+    const [W, H] = facePx(o, face);
+    editDrag(o, face, it, xform.edit, xform.handle, from, p[0] - at[0], p[1] - at[1], W, H, box);
+    refreshFields($('#layerSec'), it); return;
+  }
+  if (xform.many) {
+    const p = facePoint(e, xform.o, xform.face); if (!p) return;
+    moveLayers(xform.o, xform.face, xform.snap, p[0] - xform.at[0], p[1] - xform.at[1]);
+    refreshFields($('#layerSec'), activeLayer()); return;
+  }
+  const { it, o, face, c, mode } = xform, dx = e.clientX - c[0], dy = e.clientY - c[1];
+  if (xform.snap) {
+    if (mode === 'scale') scaleLayers(o, face, xform.snap, xform.px, xform.py, Math.hypot(dx, dy) / xform.d0);
+    else { let a = xform.flip * (Math.atan2(dy, dx) - xform.a0) / DEG; if (e.shiftKey) a = Math.round(a / 15) * 15; rotateLayers(o, face, xform.snap, xform.px, xform.py, a); }
+    refreshFields($('#layerSec'), activeLayer()); return;
+  }
+  if (mode === 'scale') scaleItem(o, face, it, xform.from, Math.hypot(dx, dy) / xform.d0);
+  else {
+    let a = xform.r0 + xform.flip * (Math.atan2(dy, dx) - xform.a0) / DEG;
+    a = ((a + 180) % 360 + 360) % 360 - 180;
+    if (e.shiftKey) a = Math.round(a / 15) * 15; else for (const s of [-180, -90, 0, 90, 180]) if (Math.abs(a - s) < 3) a = s;
+    rotateItem(o, face, it, a);
+  }
+  refreshFields($(it.type ? '#layerSec' : '#stickerSec'), it);
+}
+function endXform() {
+  if (!xform.it.type) { stickerDirty.add(xform.o.id); ui.stickers = true; } else { ui.layers = true; ui.editor = true; }
+  xform = null; controls.enabled = true; commit();
+}
+
 /* hooks up the mouse, touch, drag-and-drop and keyboard */
 function initInteraction() {
   cvs.addEventListener('pointerdown', e => {
@@ -97,8 +200,9 @@ function initInteraction() {
       return;
     }
     if (!lockActive() || drag3) return;
-    if (e.button === 2 || (e.button === 0 && (e.shiftKey || e.ctrlKey || e.metaKey))) {
-      pan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y }; setCamTween(null); cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'move';
+    if (e.button === 2 || (e.button === 0 && (e.shiftKey || e.ctrlKey || e.metaKey || tool() === 'hand'))) {
+      // a Shift- or Ctrl-click that does not move stays a click (it adds a layer to the picked ones)
+      pan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y }; setCamTween(null); if (e.button === 0) down = { x: e.clientX, y: e.clientY }; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'move';
     }
   }, true);
   window.addEventListener('pointermove', e => {
@@ -111,12 +215,40 @@ function initInteraction() {
    window.addEventListener('pointercancel', endPan);
   cvs.addEventListener('dblclick', e => {
     const h = pick(e.clientX, e.clientY); if (!h) return setView('fit');
+    // a double click on a layer of a picked group picks it alone (inside the group)
+    const o = state.objects.find(x => x.id === h.objId);
+    // a sticker: its text is typed (in its panel, the sticker changes as it goes)
+    const st = tool() === 'select' && stickerHit(h);
+    if (st) { editStickerText(o, st.id); return; }
+    if (o && h.face === sel.face && h.uv && !h.wall && tool() === 'select') {
+      const [W, H] = facePx(o, h.face), hl = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H);
+      if (hl?.group && selectedIds().length > 1) { pickLayers([hl.id]); return; }
+      // a text: typed in place, on the model
+      if (hl?.type === 'text') { pickLayers([hl.id]); startTextEdit(hl, '3d'); return; }
+    }
+    // a double click on the selected picture: its crop frame
+    const L = activeLayer();
+    if (L?.type === 'image' && !L.tile && tool() === 'select' && layerUnder(h, L)) { setEditMode(editMode() === 'crop' ? null : 'crop'); renderLayerProps(); ui.editor = true; return; }
     if (h.objId !== sel.obj) select(h.objId, h.face || undefined, null, { flash: true });
     focusSelected({ frame: true });
   });
   cvs.addEventListener('pointerdown', e => {
     if (recording || e.button !== 0 || pan) return;
     down = { x: e.clientX, y: e.clientY };
+    if (tool() !== 'select') return;   // graphics are dragged with the select tool only
+    const g = handleAt(e.clientX, e.clientY);
+    if (editMode()) {
+      // crop or mask mode: corners and the inside edit; a press elsewhere ends the mode
+      if (g?.mode === 'edit' && startEdit(e, g.idx)) return;
+      if (inEditFrame(e) && startEdit(e, 'move')) return;
+      setEditMode(null); renderLayerProps(); ui.editor = true;
+    } else if (g) return startXform(e, g);
+    // several picked layers: a press on any of them moves them all (over their face)
+    const many = selectedLayers(), hm = many.length > 1 && pick(e.clientX, e.clientY);
+    if (hm && many.some(M => layerUnder(hm, M))) {
+      const o = activeObj(), at = facePoint(e, o, sel.face);
+      if (at) { xform = { many: true, snap: snapshot(many), o, face: sel.face, at, it: many[0] }; controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'grabbing'; return; }
+    }
     const h = pick(e.clientX, e.clientY), L = activeLayer();
     // a selected sticker is dragged across the model, face to face
     const hs = sel.sticker && h?.objId === sel.obj ? stickerHit(h) : null;
@@ -142,7 +274,10 @@ function initInteraction() {
       return;
     }
     if (drag3) { dragLayer(e); return; }
-    if (e.buttons || e.timeStamp - hoverT < 50) return; hoverT = e.timeStamp;
+    if (xform) { dragXform(e); return; }
+    if (e.buttons || e.timeStamp - hoverT < 50 || tool() !== 'select') return; hoverT = e.timeStamp;
+    const g = handleAt(e.clientX, e.clientY);
+    if (g) { cvs.style.cursor = g.mode === 'rot' ? 'grab' : g.mode === 'edit' ? editCursor(g.idx) : 'nwse-resize'; return; }
     const h = pick(e.clientX, e.clientY); let cur = 'grab';
     if (h?.face) {
       cur = 'pointer';
@@ -153,6 +288,11 @@ function initInteraction() {
     cvs.style.cursor = cur;
   });
   cvs.addEventListener('pointerup', e => {
+    if (xform) {
+      const was = xform; endXform(); cvs.style.cursor = '';
+      // a click on one of several picked layers, without moving them, falls through and picks it alone
+      if (!(was.many && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) <= 5)) { down = null; return; }
+    }
     if (dragSt) { stickerDirty.add(dragSt.o.id); dragSt = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.stickers = true; commit(); down = null; return; }
     if (drag3) {
       drag3 = null; controls.enabled = true; cvs.style.cursor = 'move';
@@ -161,21 +301,31 @@ function initInteraction() {
     }
     if (e.button !== 0 || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) { down = null; return; }
     down = null;
+    if (tool() === 'hand') return;   // the hand only moves the view
     const h = pick(e.clientX, e.clientY);
-    if (!h) return;
+    // a click on empty space drops the selection, as in Figma
+    if (!h) { if (sel.obj || sel.group) select(null); return; }
     const o = state.objects.find(x => x.id === h.objId); if (!o) return;
+    // a ribbon is picked as an extra of its own
+    if (h.ribbon) return selectExtra(o.id, h.ribbon);
     const hs = stickerHit(h);
     if (hs) {
       if (o.id !== sel.obj || (h.face && h.face !== sel.face)) select(o.id, h.face || undefined, null, { flash: false });
-      sel.sticker = hs.id; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers(); ui.editor = true;
+      sel.sticker = hs.id; sel.ribbon = null; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers(); ui.editor = true;
       return;
     }
-    if (sel.sticker) { sel.sticker = null; ui.stickers = true; }
-    let layerId = null;
-    if (h.face && h.uv && !h.wall) { const [W, H] = facePx(o, h.face); layerId = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H)?.id ?? null; }
-    select(o.id, h.face || undefined, layerId, { flash: true });
+    if (sel.sticker || sel.ribbon) { sel.sticker = sel.ribbon = null; ui.stickers = true; }
+    let hitL = null;
+    if (h.face && h.uv && !h.wall) { const [W, H] = facePx(o, h.face); hitL = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H); }
+    const layerId = hitL?.id ?? null, same = o.id === sel.obj && h.face === sel.face, add = e.shiftKey || e.ctrlKey || e.metaKey;
+    // a layer of a group picks the group (a layer inside it once the group is entered); Shift / Ctrl adds or takes off
+    if (hitL && same) pickLayers(clickPick(o.faces[h.face], hitL, add));
+    else if (add && same) return;
+    else { select(o.id, h.face || undefined, null, { flash: true }); if (hitL) pickLayers(clickPick(o.faces[h.face], hitL)); }
+    // a click on a layer opens its design; a click on a bare face keeps the section that is open
+    if (layerId) setTab('design');
   });
-  cvs.addEventListener('pointercancel', () => { if (drag3) { drag3 = null; controls.enabled = true; } if (dragSt) { dragSt = null; controls.enabled = true; } down = null; });
+  cvs.addEventListener('pointercancel', () => { if (xform) endXform(); if (drag3) { drag3 = null; controls.enabled = true; } if (dragSt) { dragSt = null; controls.enabled = true; } down = null; });
   window.addEventListener('dragover', e => { if (isLibDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
   window.addEventListener('drop', e => {
     if (!isLibDrag(e)) return; e.preventDefault();
@@ -183,7 +333,7 @@ function initInteraction() {
     if (e.target === cvs) {
       const h = pick(e.clientX, e.clientY), st = stickerHit(h);
       // onto a sticker: its picture
-      if (st) { const o = state.objects.find(x => x.id === h.objId); select(o.id, st.face); sel.sticker = st.id; return setStickerImage(o, st, it); }
+      if (st) { const o = state.objects.find(x => x.id === h.objId); select(o.id, st.face); sel.sticker = st.id; sel.ribbon = null; return setStickerImage(o, st, it); }
       if (h?.face && !h.wall) { const o = state.objects.find(x => x.id === h.objId); select(o.id, h.face); return placeLibImage(it, o, h.face, h.uv ? [h.uv.x, 1 - h.uv.y] : null); }
     }
     if (e.target === ed && activeObj()) { const [mx, my] = edPoint(e); return placeLibImage(it, activeObj(), sel.face, [mx / edState.dw, my / edState.dh]); }
@@ -194,6 +344,8 @@ function initInteraction() {
   window.addEventListener('drop', e => {
     if (!isFileDrag(e)) return; e.preventDefault(); dragDepth = 0; $('#dropHint').hidden = true;
     const file = [...e.dataTransfer.files][0]; if (!file) return;
+    // a 3D model (with its companion files): an object where it was dropped
+    if ([...e.dataTransfer.files].some(f => /\.(glb|gltf|obj|fbx|usdz)$/i.test(f.name))) return importModelFiles(e.dataTransfer.files);
     if (/\.(ttf|otf|woff2?)$/i.test(file.name)) return addFontFile(file);
     if (file.name.endsWith('.json')) return openProjectFile(file);
     if (e.target === cvs) {
@@ -203,10 +355,36 @@ function initInteraction() {
     if (e.target === ed && activeObj()) { const [mx, my] = edPoint(e); return addImageToFace(file, activeObj(), sel.face, [mx / edState.dw, my / edState.dh]); }
     if (activeObj()) addImageToFace(file);
   });
+  // layers go to the clipboard as text marked as ours, so they paste onto another face, object or tab
+  const CLIP = 'boxstudio-layers:';
+  const copyOut = (e, cut) => {
+    if (e.target.closest?.('input,textarea') || String(getSelection?.() || '')) return;
+    const o = activeObj(), Ls = selectedLayers(); if (!o || !Ls.length) return;
+    e.preventDefault(); e.clipboardData.setData('text/plain', CLIP + JSON.stringify(copyData(o, sel.face, Ls)));
+    if (cut) deleteLayer(Ls[0].id);
+  };
+  document.addEventListener('copy', e => copyOut(e, false));
+  document.addEventListener('cut', e => copyOut(e, true));
   document.addEventListener('paste', e => {
     if (e.target.closest?.('input,textarea')) return;
+    const txt = e.clipboardData?.getData('text/plain') || '';
+    if (txt.startsWith(CLIP) && activeObj() && sel.face) {
+      e.preventDefault();
+      try { const out = pasteData(activeObj(), sel.face, JSON.parse(txt.slice(CLIP.length))); pickLayers(out.map(l => l.id)); renderFaceTabs(); commit(); } catch { toast('Не удалось вставить слои'); }
+      return;
+    }
+    const o = activeObj(); if (!o) return;
+    // a picture (Figma: Copy as PNG, a screenshot, an image copied in a browser)
     const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
-    if (it && activeObj()) { e.preventDefault(); addImageToFace(it.getAsFile()); }
+    if (it) { e.preventDefault(); addImageToFace(it.getAsFile()); return; }
+    // a vector as SVG code (Figma: Copy as SVG): a vector layer, its colours can be swapped
+    const svg = txt.trim();
+    if (/^(<\?xml[^>]*>\s*)?<svg[\s>]/i.test(svg)) { e.preventDefault(); addImageToFace(new File([svg], 'Из Figma.svg', { type: 'image/svg+xml' })); return; }
+    // Figma's own copy (Cmd+C) is in its closed format: say how to copy it so it pastes
+    const html = e.clipboardData?.getData('text/html') || '';
+    if (/\(fig(ma|meta)\)/.test(html)) { e.preventDefault(); toast('Из Figma вставляется картинкой или вектором: в Figma правый клик → Copy/Paste as → «Copy as PNG» (Shift+Cmd+C) или «Copy as SVG», затем вставьте сюда'); return; }
+    // plain text: a text layer with it
+    if (svg && svg.length <= 2000 && sel.face) { e.preventDefault(); addLayer(Object.assign(newText(svg), { size: svg.length > 40 ? .06 : .12 })); }
   });
   /* keyboard */
   document.addEventListener('keydown', e => {
@@ -216,16 +394,33 @@ function initInteraction() {
     if (mod && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); redo(); return; }
     if (e.key === 'Escape') { $('#exportMenu').hidden = true; $('#exportBtn').setAttribute('aria-expanded', 'false'); }
     if (typing) return;
+    // Enter or Esc ends crop or mask mode
+    if (editMode() && (e.key === 'Escape' || e.key === 'Enter')) { e.preventDefault(); setEditMode(null); renderLayerProps(); ui.editor = true; return; }
     if (!mod && !e.altKey) {
       const key = e.key.toLowerCase();
       if (key === 'f' || key === 'а') { e.preventDefault(); return activeObj() ? focusSelected({ frame: true }) : setView('fit'); }
       if (key === 'h' || key === 'р' || e.key === 'Home') { e.preventDefault(); return setView('fit'); }
     }
+    // the face's layers, as in Figma: Ctrl+A all, Ctrl+G group, Ctrl+Shift+G ungroup, Alt+A/D/W/S/H/V align,
+    // Alt+Shift+H/V distribute, Ctrl+] / Ctrl+[ up and down (with Shift: to the top or the bottom)
+    if (activeObj() && sel.face && activeFaceData()) {
+      if (mod && !e.altKey && e.code === 'KeyA') { e.preventDefault(); return pickLayers(activeFaceData().layers.map(l => l.id)); }
+      if (mod && e.code === 'KeyG' && sel.layer) { e.preventDefault(); return layerCmd(e.shiftKey ? 'ungroup' : 'group'); }
+      if (e.altKey && !mod && sel.layer) {
+        const al = { KeyA: 'left', KeyD: 'right', KeyW: 'top', KeyS: 'bottom', KeyH: 'hcenter', KeyV: 'vcenter' }[e.code];
+        if (e.shiftKey && (e.code === 'KeyH' || e.code === 'KeyV')) { e.preventDefault(); return layerCmd('distribute', e.code === 'KeyH' ? 'x' : 'y'); }
+        if (al) { e.preventDefault(); return layerCmd('align', al); }
+      }
+      if (mod && sel.layer && (e.code === 'BracketRight' || e.code === 'BracketLeft')) {
+        e.preventDefault(); const up = e.code === 'BracketRight';
+        return moveLayer(sel.layer, e.shiftKey ? (up ? Infinity : -Infinity) : up ? 1 : -1);
+      }
+    }
     const ST = !activeLayer() && activeSticker();
     if (ST) {
       const o = activeObj();
       if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return deleteSticker(ST.id); }
-      if (e.key === 'Escape') { sel.sticker = null; return renderStickers(); }
+      if (e.key === 'Escape') return selectObjectItself();
       if (e.key.startsWith('Arrow')) {
         e.preventDefault(); const [mw, mh] = faceMM(o, ST.face), mm = e.shiftKey ? 5 : .5;
         if (e.key === 'ArrowLeft') ST.x -= mm / mw; if (e.key === 'ArrowRight') ST.x += mm / mw;
@@ -234,14 +429,33 @@ function initInteraction() {
       }
       return;
     }
-    const L = activeLayer(); if (!L) return;
+    const L = activeLayer();
+    // no layer: the keys act on the picked objects
+    if (!L) {
+      // the face's background picked: Esc lets it go; Delete does nothing (it is not the object)
+      if (sel.bg) { if (e.key === 'Escape') selectLayer(null); return; }
+      // a sleeve, a carrier or a ribbon picked: the keys act on it, Esc goes back to the object
+      const part = sel.part || ((activeRibbon() || activeFill()) && sel.ribbon);
+      if (part) {
+        if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); extraAction(activeObj(), part, 'del'); }
+        else if (e.key === 'Escape') selectObjectItself();
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') { if (picked().length) { e.preventDefault(); deleteIds(picked()); } }
+      else if (mod && e.key.toLowerCase() === 'd' && picked().length) { e.preventDefault(); duplicateIds(picked()); }
+      return;
+    }
+    // Enter: type into the picked text, in place
+    if (e.key === 'Enter' && !mod && L.type === 'text' && selectedIds().length === 1) { e.preventDefault(); return startTextEdit(L, '3d'); }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteLayer(L.id); }
     else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateLayer(L.id); }
     else if (e.key === 'Escape') selectLayer(null);
     else if (e.key.startsWith('Arrow')) {
-      e.preventDefault(); const st = e.shiftKey ? .05 : .005;
-      if (e.key === 'ArrowLeft') L.x -= st; if (e.key === 'ArrowRight') L.x += st; if (e.key === 'ArrowUp') L.y -= st; if (e.key === 'ArrowDown') L.y += st;
-      markFace(activeObj(), sel.face); refreshFields($('#layerSec'), L); clearTimeout(nudgeT); nudgeT = setTimeout(commit, 400);
+      // all the picked layers, by half a percent of the face (Shift: five)
+      e.preventDefault(); const o = activeObj(), [W, H] = facePx(o, sel.face), st = e.shiftKey ? .05 : .005;
+      const dx = e.key === 'ArrowLeft' ? -st * W : e.key === 'ArrowRight' ? st * W : 0, dy = e.key === 'ArrowUp' ? -st * H : e.key === 'ArrowDown' ? st * H : 0;
+      moveLayers(o, sel.face, snapshot(selectedLayers()), dx, dy);
+      refreshFields($('#layerSec'), L); clearTimeout(nudgeT); nudgeT = setTimeout(commit, 400);
     }
   });
 }

@@ -30,17 +30,18 @@ function computeFrames(o, rt) {
   if (o.type === 'bag') { rt.frames = rt.bagFrames || null; return; }
   if (o.type === 'dome') { rt.frames = domeFrames(o, rt); return; }
   if (o.type === 'torte') { rt.frames = {}; return; }   // films are laid along sections of the solid (torteSample)
-  if (o.type !== 'box' && o.type !== 'paperbag') return;
+  if (o.type !== 'box' && o.type !== 'paperbag' && o.type !== 'board') return;
   // frames are taken closed: lid shut, tray pushed in (and the tray is never a neighbour for stickers)
   const saved = o.lid, savedOut = o.tray?.out; o.lid = 0; if (o.tray) o.tray.out = 0; applyLid(o);
   rt.group.updateMatrixWorld(true);
   const inv = rt.group.matrixWorld.clone().invert(), frames = {};
   rt.group.traverse(m => {
     const k = m.userData?.face || m.userData?.support;
-    if (!m.isMesh || !k || m.userData.wall || frames[k]) return;
+    if (!m.isMesh || !k || m.userData.wall || m.userData.noFrame || frames[k]) return;
     const gp = m.geometry.parameters;
     const M = inv.clone().multiply(m.matrixWorld), [w, h] = m.userData.face ? faceMM(o, k) : [gp.width / S, gp.height / S];
-    const c = new THREE.Vector3().applyMatrix4(M).divideScalar(S);
+    // a face spread over several parts (the halves of a carton's top): its middle, off the part's own (mm)
+    const off = m.userData.frameOff || [0, 0], c = new THREE.Vector3(off[0] * S, off[1] * S, 0).applyMatrix4(M).divideScalar(S);
     const u = new THREE.Vector3(1, 0, 0).transformDirection(M), v = new THREE.Vector3(0, 1, 0).transformDirection(M);
     const pinv = inv.clone().multiply(m.parent.matrixWorld).invert();   // object space → the part's own space (closed)
     frames[k] = { c, u, v, n: new THREE.Vector3().crossVectors(u, v).normalize(), w, h, parent: m.parent, pinv };

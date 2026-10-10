@@ -9,21 +9,27 @@
 
 <div class="app" id="app">
   <header class="topbar">
-    <div class="brand">
-      <span class="reg" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-      <b>Box Studio 3D</b>
-      <small>мокапы упаковки · размеры в мм</small>
+    <button class="btn icon ghost" id="fileBtn" title="Файл" aria-label="Меню файла" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <div class="menu file" id="fileMenu" hidden>
+      <button class="btn ghost" id="myProjBtn" hidden>Мои проекты…</button>
+      <button class="btn ghost" id="newBtn">Новый проект</button>
+      <button class="btn ghost" id="sampleBtn">Открыть пример</button>
+      <button class="btn ghost" id="openBtn">Открыть файл…</button>
+      <hr>
+      <button class="btn ghost" id="saveBtn">Сохранить проект</button>
     </div>
-    <div class="tb-group">
+    <div class="brand">
+      <span class="reg" role="img" aria-label="Box Studio 3D" title="Box Studio 3D"><i></i><i></i><i></i><i></i></span>
+      <span class="proj-name" id="projName" tabindex="0" title="Название проекта — двойной клик, чтобы переименовать"></span>
+      <button class="cloud-state" id="cloudState" hidden></button>
+    </div>
+    <div class="tb-group hist">
       <button class="btn icon ghost" id="undoBtn" title="Отменить (Ctrl+Z)" aria-label="Отменить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
       <button class="btn icon ghost" id="redoBtn" title="Повторить (Ctrl+Shift+Z)" aria-label="Повторить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg></button>
     </div>
+    <div class="tb-group views" id="views"><button class="btn ghost" id="viewBtn" aria-haspopup="menu" title="Вид: стороны, приближение, вращение вокруг выбранного"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>Вид: <b id="viewName">3/4</b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button></div>
     <span class="tb-sep"></span>
     <div class="tb-group main">
-      <button class="btn ghost" id="newBtn">Новый</button>
-      <button class="btn ghost" id="sampleBtn">Пример</button>
-      <button class="btn ghost" id="openBtn">Открыть…</button>
-      <button class="btn" id="saveBtn">Сохранить проект</button>
       <button class="btn primary" id="exportBtn" aria-haspopup="true" aria-expanded="false">Экспорт
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
     </div>
@@ -37,27 +43,37 @@
       <h3>Развёртка выбранного объекта</h3>
       <button class="btn" id="tplBtn">Шаблон развёртки (SVG, мм)</button>
       <button class="btn" id="flatBtn">Развёртка с дизайном (PNG)</button>
-      <p class="hint">Шаблон — упрощённая развёртка без клапанов. Сделайте макет поверх шаблона и загрузите его обратно в разделе «Развёртка».</p>
+      <p class="hint">Шаблон — развёртка в натуральную величину, как на штанцформе: рез, биговка, клапаны, замки, окна и прорези. Развёртка с дизайном — та же раскладка в PNG, без наклеек (их клеят после печати). Сделайте макет поверх шаблона и загрузите его обратно в разделе «Развёртка».</p>
     </div>
   </header>
+  <div class="pdlg-wrap" id="projDlg" hidden><div class="pdlg" role="dialog" aria-modal="true" aria-label="Мои проекты">
+    <div class="sec-h"><h2>Мои проекты</h2><button class="btn icon ghost" id="projClose" aria-label="Закрыть">✕</button></div>
+    <p class="hint">Проекты в вашем аккаунте claude.ai. Они видны только вам и открываются с любого устройства. Изменения сохраняются сами.</p>
+    <div class="plist" id="projList"></div></div></div>
 
-  <aside class="panel left" aria-label="Объекты и сцена">
-    <section class="sec">
+  <nav class="rail" id="rail" aria-label="Разделы">
+    <button class="rail-btn" data-tab="add" aria-label="Добавить: браузер заготовок" title="Добавить: браузер заготовок"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg><span>Добавить</span></button>
+    <button class="rail-btn" data-tab="models" aria-label="Модели" title="Модели"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg><span>Модели</span></button>
+    <button class="rail-btn" data-tab="brand" aria-label="Бренд-кит" title="Бренд-кит: фирменные цвета, логотипы, паттерны, шрифты"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.5-.8 1.5-1.5 0-1-.8-1.4-.8-2.3 0-.9.7-1.7 1.7-1.7H17a4 4 0 0 0 4-4C21 6.5 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10.5" cy="7" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg><span>Бренд</span></button>
+    <button class="rail-btn" data-tab="library" aria-label="Загрузки" title="Загрузки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg><span>Загрузки</span></button>
+    <button class="rail-btn" data-tab="scene" aria-label="Сцена" title="Сцена"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span>Сцена</span></button>
+  </nav>
+
+  <aside class="panel side" id="sidePanel" data-tab="models" aria-label="Сцена и ресурсы">
+    <section class="sec" data-tab="models">
       <div class="sec-h"><h2>Объекты в сцене</h2></div>
       <div class="objlist" id="objList"></div>
-      <div class="row">
-        <select id="addPreset" class="grow" aria-label="Заготовка для нового объекта"></select>
-        <button class="btn" id="addObjBtn">Добавить</button>
-      </div>
-      <div class="grid2">
-        <button class="btn sm" id="dupObjBtn">Дублировать</button>
-        <button class="btn sm danger" id="delObjBtn">Удалить</button>
-        <button class="btn sm" id="groupBtn" title="Выделите строки с Ctrl или Shift и сгруппируйте (Ctrl+G)">Сгруппировать</button>
-        <button class="btn sm" id="ungroupBtn" title="Ctrl+Shift+G">Разгруппировать</button>
-      </div>
     </section>
-    <section class="sec" id="modelSec"></section>
-    <section class="sec" id="sceneSec">
+    <section class="sec" id="galSec" data-tab="add"></section>
+    <section class="sec" id="brandSec" data-tab="brand"></section>
+    <section class="sec" id="libSec" data-tab="library"></section>
+    <section class="sec" data-tab="library">
+      <div class="sec-h"><h2>Свои шрифты</h2></div>
+      <p class="hint">TTF, OTF или WOFF. Шрифт сохраняется внутри проекта.</p>
+      <button class="btn sm" id="fontBtn">Загрузить шрифт…</button>
+      <div class="chips" id="fontList"></div>
+    </section>
+    <section class="sec" id="sceneSec" data-tab="scene">
       <div class="sec-h"><h2>Сцена и свет</h2></div>
       <div class="field wide"><span class="fl">Освещение</span>
         <select id="lightPreset">
@@ -67,6 +83,10 @@
           <option value="flat">Ровный каталожный</option>
         </select></div>
       <div id="sceneFields"></div>
+      <div class="field wide"><span class="fl">Отражения</span><select data-k="envMap" id="envMap" aria-label="Что отражается в фольге и глянце"></select></div>
+      <div class="row" id="envHdrRow"><button class="btn sm" id="envHdrBtn">Загрузить HDR…</button><span class="hint grow" id="envHdrName"></span></div>
+      <div id="envFields"></div>
+      <label class="check"><input type="checkbox" data-k="envSpin"> Блики гуляют (отражения медленно вращаются)</label>
       <div class="field wide"><span class="fl">Фон</span>
         <select data-k="bg" id="bgMode"><option value="gradient">Градиент</option><option value="solid">Сплошной</option><option value="transparent">Прозрачный</option></select></div>
       <div class="row"><span class="hint grow">Цвета фона</span><input type="color" data-k="bg1" aria-label="Цвет фона 1"><input type="color" data-k="bg2" aria-label="Цвет фона 2"></div>
@@ -76,42 +96,40 @@
 
   <main class="stage" id="stage">
     <div id="viewport"></div>
-    <div class="views" id="views">
-      <button class="btn sm" data-view="front">Спереди</button>
-      <button class="btn sm" data-view="q">3/4</button>
-      <button class="btn sm" data-view="side">Сбоку</button>
-      <button class="btn sm" data-view="top">Сверху</button>
-      <button class="btn sm" data-view="back">Сзади</button>
-      <button class="btn sm" data-view="bottom">Снизу</button>
-      <button class="btn sm" data-view="focus" title="Приблизить выбранный объект (F или двойной клик)">К выбранному</button>
-      <button class="btn sm" data-view="fit" title="Вся сцена (H)">Показать всё</button>
-      <button class="btn sm on" id="orbitLockBtn" aria-pressed="true" title="Вращение, сдвиг и масштаб вокруг выбранного объекта">◎ Вокруг выбранного</button>
+    <div class="off-hint" id="offHint" role="status" hidden></div>
+    <div class="cbar" id="ctxBar" role="toolbar" aria-label="Действия с выделенным" hidden></div>
+    <div class="abar" id="actionBar" role="toolbar" aria-label="Инструменты и действия">
+      <button class="ab" data-tool="select" aria-label="Выделение"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l13 8-6 1.5L9 19Z"/></svg></button>
+      <button class="ab" data-tool="move" aria-label="Перемещение"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3"/></svg></button>
+      <button class="ab" data-tool="rotate" aria-label="Поворот"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></button>
+      <button class="ab" data-tool="hand" aria-label="Ладонь"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12M11 11V4.5a1.5 1.5 0 0 1 3 0V12M14 11.5V6.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-4.8-2.4L3.4 15a1.5 1.5 0 0 1 2.3-1.9L8 15"/></svg></button>
+      <span class="ab-sep"></span>
+      <button class="ab needs-obj" id="abText" title="Текст на грань" aria-label="Текст на грань"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></button>
+      <button class="ab needs-obj" id="abImage" title="Картинка на грань: из библиотеки или с компьютера" aria-label="Картинка на грань"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg></button>
+      <span class="ab-split needs-obj-wrap"><button class="ab needs-obj" id="abShape" title="Фигура на грань" aria-label="Фигура на грань"></button><button class="ab caret needs-obj" id="abShapeMenu" title="Выбрать фигуру" aria-label="Выбрать фигуру" aria-haspopup="menu"></button></span>
+      <button class="ab needs-obj" id="abSticker" title="Наклейка на грань" aria-label="Наклейка"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-8-8h8Z"/><path d="M20 12h-5a3 3 0 0 1-3-3V4"/></svg></button>
     </div>
     <div class="stage-hint" id="stageHint">
       <button id="hideHint" aria-label="Скрыть подсказку">×</button>
-      <b>Клик по грани</b> — выбрать её для дизайна. <b>Перетащите выбранный слой</b> прямо по модели.<br>
+      <b>Клик по грани</b> — выбрать её для дизайна. <b>Перетащите выбранный слой</b> прямо по модели. Объект двигают и поворачивают инструменты внизу (M, R), пробел — ладонь.<br>
       Камера вращается вокруг выбранного объекта: левая кнопка — вращение, правая или Shift — сдвиг, колесо — масштаб.
       <b>Двойной клик</b> или F — приблизить объект, H — вся сцена.
     </div>
     <div class="drop" id="dropHint" hidden>Отпустите, чтобы разместить на грани</div>
     <div class="rec" id="recBadge" hidden>● Запись видео…</div>
   </main>
+  <textarea id="textEdit" class="text-edit" spellcheck="false" aria-label="Текст слоя" hidden></textarea>
 
-  <aside class="panel right" aria-label="Дизайн грани">
-    <section class="sec">
+  <aside class="panel props" id="propPanel" data-tab="design" aria-label="Выбранный объект">
+    <nav class="crumb" id="propCrumb" aria-label="Где выбранное" hidden></nav>
+    <div class="ptabs" id="propTabs" role="tablist"><button role="tab" data-tab="shape">Форма</button><button role="tab" data-tab="design">Дизайн</button><button role="tab" data-tab="extras">Допы</button><button role="tab" data-tab="net">Развёртка</button></div>
+    <section class="sec" id="noSelSec" data-tab="none"><div class="empty">Выберите объект на сцене или в списке слева — здесь появятся его форма, дизайн граней, допы (наклейки, рукава) и развёртка.</div></section>
+    <section class="sec" id="modelSec" data-tab="shape"></section>
+    <section class="sec" data-tab="design">
       <div class="sec-h"><h2>Дизайн грани</h2><span class="badge" id="objBadge"></span></div>
       <div class="chips" id="faceTabs"></div>
       <div class="editor-wrap" id="editorWrap"><canvas id="editor" width="300" height="200"></canvas></div>
       <div class="face-meta mono" id="faceMeta"></div>
-      <div class="row">
-        <span class="hint">Фон</span>
-        <input type="color" id="faceBg" aria-label="Цвет фона грани">
-        <div class="swatches" id="bgSwatches"></div>
-      </div>
-      <div class="grid2">
-        <button class="btn sm" id="bgAllBtn">Фон на все грани</button>
-        <button class="btn sm" id="clearFaceBtn">Очистить грань</button>
-      </div>
       <div class="addrow">
         <button class="btn" id="addImgBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>Картинка</button>
         <button class="btn" id="addTextBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>Текст</button>
@@ -124,26 +142,21 @@
         <button class="btn sm" id="copyFaceBtn">Копировать</button>
       </div>
     </section>
-    <section class="sec" id="libSec"></section>
-    <section class="sec" id="layerSec"></section>
-    <section class="sec" id="stickerSec"></section>
-    <section class="sec">
+    <section class="sec" id="layerSec" data-tab="design"></section>
+    <section class="sec" id="stickerSec" data-tab="extras"></section>
+    <section class="sec" data-tab="net">
       <div class="sec-h"><h2>Развёртка</h2><span class="mono hint" id="netSize"></span></div>
       <canvas id="net" width="300" height="200" aria-label="Развёртка: клик по панели выбирает грань"></canvas>
       <p class="hint">Клик по панели развёртки выбирает грань. Готовый макет всей развёртки можно наложить целиком: он сам разрежется по граням.</p>
       <div class="grid2">
         <button class="btn sm" id="tplBtn2">Шаблон SVG</button>
-        <button class="btn sm" id="dielineBtn">Загрузить макет</button>
+        <button class="btn sm" id="flatBtn2">PNG с дизайном</button>
       </div>
+      <button class="btn sm" id="dielineBtn">Загрузить макет</button>
       <button class="btn sm danger" id="dielineOffBtn" hidden>Убрать макет развёртки</button>
     </section>
-    <section class="sec">
-      <div class="sec-h"><h2>Свои шрифты</h2></div>
-      <p class="hint">TTF, OTF или WOFF. Шрифт сохраняется внутри проекта.</p>
-      <button class="btn sm" id="fontBtn">Загрузить шрифт…</button>
-      <div class="chips" id="fontList"></div>
-    </section>
   </aside>
+
 </div>
 
 <input type="file" id="imgInput" accept="image/*" hidden>
