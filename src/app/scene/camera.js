@@ -92,6 +92,15 @@ function setOrbitLock(on) {
   controls.enablePan = !on;
   if (on) focusSelected(); else if (view.x || view.y) tweenCamera(camera.position.clone(), controls.target.clone());
 }
+/* depth precision depends on the near plane: a fixed 5 mm near plane leaves too few depth steps far away,
+   and thin board, paper and film (inside and outside a fraction of a mm apart) flicker as the camera moves.
+   So the near plane sits just short of the closest object (half the gap, for shadows and handles around them),
+   never closer than 1/200 of the orbit distance */
+function fitClipPlanes() {
+  const d = camera.position.distanceTo(controls.target), gap = sceneBounds().distanceToPoint(camera.position);
+  const near = clamp(gap * .5, Math.max(.002, d / 200), 50);
+  if (Math.abs(near - camera.near) > camera.near * .02) { camera.near = near; camera.updateProjectionMatrix(); }
+}
 function updateShadowCam() {
   invalidate();
   const b = sceneBounds(), c = b.getCenter(new THREE.Vector3()), r = Math.max(.5, b.getBoundingSphere(new THREE.Sphere()).radius);
@@ -161,7 +170,7 @@ function initCamera() {
       const f = rt.faces[k];
       if (f.flash > 0) { changed = true; f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
     }
-    if (changed) renderer.render(scene, camera);
+    if (changed) { fitClipPlanes(); renderer.render(scene, camera); }
     syncCtxBar(changed);
     if (ui.editor) { ui.editor = false; drawEditor(); }
     if (ui.net) { ui.net = false; drawNet(); }
