@@ -20,6 +20,7 @@ import { buildRibbons } from '../carriers/ribbon.js';
 import { modelInput, renderModel } from './model-panel.js';
 import { startTextEdit, textEditing } from './text-edit.js';
 import { renderActionBar } from './action-bar.js';
+import { bindNum } from './fields.js';
 
 /* What it holds follows the selection: an object — open it (a click, or partly with the slider), turn it by 90°,
    its sizes, zoom to it, duplicate, delete; a layer — crop a picture or type into a text, duplicate, delete; a
@@ -60,7 +61,7 @@ function build(kind) {
   if (kind === 'object') {
     const lid = lidAction(o), open = o.lid > 0;
     return (lid ? `<button class="ab wide ${open ? 'on' : ''}" id="cbLid" title="${esc(open ? lid[1] : lid[0])}">${ICON.lidOpen}<span>${esc(open ? lid[1] : lid[0])}</span></button>
-        <input type="range" id="cbLidR" min="0" max="${lid[2]}" step="1" value="${o.lid || 0}" aria-label="Насколько открыть">${sep}` : '')
+        <span class="nf fill cb-nf"><span class="nf-bar"></span><input class="num" type="number" inputmode="decimal" id="cbLidR" min="0" max="${lid[2]}" step="1" value="${o.lid || 0}" aria-label="Насколько открыть"></span>${sep}` : '')
       + ib('cbRotL', ICON.rotL, 'Повернуть на 90° влево') + ib('cbRotR', ICON.rotR, 'Повернуть на 90° вправо') + sep
       + (dimKeys(o).length ? `<span class="cb-dims">${dimKeys(o).map(([k, t]) => `<label title="${t}, мм"><span>${t}</span><input class="num" type="number" min="5" max="2000" step="1" data-dim="${k}" value="${fmt(o.dims[k])}"></label>`).join('')}<span class="hint">мм</span></span>${sep}` : '')
       + ib('cbFocus', ICON.focus, 'Приблизить (F)') + ib('cbDup', ICON.copy, 'Дублировать (Ctrl+D)') + ib('cbDel', ICON.trash, 'Удалить (Delete)');
@@ -69,7 +70,7 @@ function build(kind) {
   if (kind === 'part' && sel.part === 'insert') return `<span class="hint cb-l">Ложемент</span>${[['board', 'Картон'], ['foam', 'Пена']].map(([v, t]) => `<button class="ab wide ${o.insert.mat === v ? 'on' : ''}" data-imat="${v}"><span>${t}</span></button>`).join('')}${sep}` + ib('cbDel', ICON.trash, 'Удалить (Delete)');
   if (kind === 'part') {
     const [k, t, max] = partSlide(o, sel.part), v = sel.part === 'sleeve' ? o.sleeve.slide : o.carry.slide;
-    return `<span class="hint cb-l">${t}</span><input type="range" id="cbSlide" data-k="${k}" min="0" max="${max}" step="1" value="${v || 0}" aria-label="${t}">${sep}` + ib('cbDel', ICON.trash, 'Удалить (Delete)');
+    return `<span class="hint cb-l">${t}</span><span class="nf fill cb-nf"><span class="nf-bar"></span><input class="num" type="number" inputmode="decimal" id="cbSlide" data-k="${k}" min="0" max="${max}" step="1" value="${v || 0}" aria-label="${t}"><i>мм</i></span>${sep}` + ib('cbDel', ICON.trash, 'Удалить (Delete)');
   }
   if (kind === 'layer' || kind === 'layers') {
     const one = kind === 'layer' ? L : null;
@@ -87,6 +88,7 @@ function build(kind) {
 }
 function bind(kind) {
   const o = activeObj(), on = (id, ev, fn) => { const el = $('#' + id); if (el) el.addEventListener(ev, fn); };
+  bindNum(bar());
   if (kind === 'object') {
     on('cbLid', 'click', () => toggleLid(o).then(() => { renderActionBar(); renderModel(); refresh(); }));
     on('cbLidR', 'input', e => { o.lid = +e.target.value; applyLid(o); $('#cbLid')?.classList.toggle('on', o.lid > 0); });
@@ -134,6 +136,8 @@ function syncCtxBar(moved = true) {
   if (!kind) { el.hidden = true; key = ''; return; }
   // nothing new and the view still: it stays where it is
   if (k === key && !moved) return;
+  // not while one of its fields is dragged or typed into: the field would be lost under the pointer
+  if (k !== key && el.querySelector('.nf.drag, .nf.typing')) return;
   if (k !== key) { key = k; el.innerHTML = build(kind); bind(kind); }
   el.hidden = false;
   const ab = $('#actionBar'), w = el.offsetWidth, sw = el.parentElement.clientWidth;
