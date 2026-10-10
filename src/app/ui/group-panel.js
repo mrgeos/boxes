@@ -19,7 +19,7 @@ function renderGroupPanel(sec) {
     ${rangeField('Отступ между объектами, мм', 'gap', 0, 500, 1)}
     <div class="field wide"><span class="fl">Выравнивание</span><select data-k="align">${Object.entries(ALIGN[g.dir] || ALIGN.x).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
     <p class="hint">Порядок в ряду — как в списке объектов: перетаскивайте строки или объекты на сцене за кольцо на полу. Размеры объектов можно менять — ряд перестроится сам.</p>
-    <div class="sec-h" style="margin-top:4px"><h2>Положение в сцене</h2></div>
+    <div class="sec-h"><h2>Положение в сцене</h2></div>
     ${parent ? `<p class="hint">Группу ставит в ряд группа «${esc(parent.name)}». Поворот — внутри неё.</p>`
       : rangeField('Смещение X, мм', 'pos.x', -2000, 2000, 1) + rangeField('Смещение Z, мм', 'pos.z', -2000, 2000, 1)}
     ${rangeField(parent ? 'Поворот в группе, °' : 'Поворот, °', 'rotY', -180, 180, 1)}

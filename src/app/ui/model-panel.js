@@ -34,7 +34,7 @@ import { syncProps } from './tabs.js';
 import { renderActionBar } from './action-bar.js';
 import { renderGroupPanel } from './group-panel.js';
 import { commit } from '../core/project.js';
-import { bindFields, rangeField, refreshFields } from './fields.js';
+import { bindFields, foldSections, rangeField, refreshFields } from './fields.js';
 import { renderFacePanel, renderFaceTabs, updateFaceMeta } from './face-panel.js';
 import { INSERT_CELL, INSERT_MAT, insertDims } from '../carriers/insert.js';
 import { LININGS } from '../carriers/rigid.js';
@@ -174,7 +174,7 @@ function renderPartModel(sec, o) {
     <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="${k}.name" placeholder="${esc(extraName(o, { ...e, T: { ...e.T, name: '' } }))}" aria-label="Название"></div>
     ${k === 'sleeve' ? sleeveFields(o) : k === 'tissue' ? tissueFields(o) : k === 'insert' ? insertFields(o) : carryFields(o)}
     <div class="grid2"><button class="btn sm" id="partHide">${e.T.hidden ? 'Показать' : 'Скрыть'}</button><button class="btn sm danger" id="partDel">Удалить</button></div>`;
-  bindFields(sec, activeObj, modelInput, modelCommit);
+  bindFields(sec, activeObj, modelInput, modelCommit); foldSections(sec);
   $('#partHide').onclick = () => { extraAction(o, k, 'vis'); renderModel(); };
   $('#partDel').onclick = () => extraAction(o, k, 'del');
   if (k === 'tissue') bindTissue(sec, o);
@@ -188,10 +188,10 @@ function renderModelObject(sec, o, group) {
     <div class="row"><button class="btn sm" id="modelReplace">Заменить своим файлом…</button></div>
     ${rangeField('Размер по длинной стороне, мм', 'size', 5, 1500, 1)}
     <p class="hint">${o.dims.w}×${o.dims.d}×${o.dims.h} мм${f ? ` · ${f.tris?.toLocaleString('ru-RU')} треуг. · Poly Haven, CC0` : ''}. Модель стоит на полу, двигается и поворачивается как объект; в упаковку её кладут во вкладке «Допы» упаковки (начинка).</p>
-    <div class="sec-h" style="margin-top:4px"><h2>Положение в сцене</h2></div>
+    <div class="sec-h"><h2>Положение в сцене</h2></div>
     ${group ? `<p class="hint">Место в ряду задаёт группа «${esc(group.name)}».</p>` : rangeField('Смещение X, мм', 'pos.x', -1000, 1000, 1) + rangeField('Смещение Z, мм', 'pos.z', -1000, 1000, 1)}
     ${rangeField(group ? 'Поворот в группе, °' : 'Поворот, °', 'rotY', -180, 180, 1)}`;
-  bindFields(sec, activeObj, modelInput, modelCommit);
+  bindFields(sec, activeObj, modelInput, modelCommit); foldSections(sec);
   $('#modelPick').onchange = e => { const x = foodById(e.target.value); if (!x) return; o.model = { lib: x.id }; o.name = x.name; o.size = x.size; rebuildQueue.add(o.id); renderModel(); renderObjects(); commit(); };
   $('#modelReplace').onclick = () => {
     const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = '.glb,.gltf,.bin,.obj,.mtl,.fbx,.usdz,.jpg,.jpeg,.png,.webp';
@@ -263,7 +263,7 @@ function renderModel() {
   if (o.type === 'model') return renderModelObject(sec, o, group);
   const box = o.type === 'box', cboard = o.type === 'board', foilCover = cboard && isFoil(o.cbCover), pbag = o.type === 'paperbag', cup = o.type === 'cup', bag = o.type === 'bag', dome = o.type === 'dome', torte = o.type === 'torte', film = bagFilm(o);
   sec.innerHTML = `
-    <div class="sec-h"><h2>Форма и размеры</h2></div>
+    <div class="sec-h"><h2>${box ? 'Размеры' : 'Форма и размеры'}</h2></div>
     <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="name" aria-label="Название"></div>
     <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="dome">Лоток с прозрачной крышкой-призмой</option><option value="torte">Тортница (ПЭТ)</option><option value="board">Подложка под торт</option><option value="cup">Бумажный стакан</option><option value="bag">Пакет</option><option value="paperbag">Бумажный пакет с ручками</option><option value="tube">Тубус / банка</option></select></div>
     <div class="field wide"><span class="fl">Заготовка</span><select id="presetSel"><option value="">— выбрать размер —</option>${PRESETS.filter(p => p.type === o.type).map(p => `<option value="${p.id}">${p.label}</option>`).join('')}</select></div>
@@ -305,7 +305,7 @@ function renderModel() {
             + (o.cake.model ? '' : rangeField('Высота торта, мм', 'cake.h', 10, 250, 1)) + `<div class="row"><button class="btn sm" id="cakeFit">По размеру подложки</button></div>` : '')
           + `<p class="hint">Подложка — толстый картон, обтянутый фольгой или ламинированной бумагой с печатью. Дизайн — на гранях «Верх подложки» и «Низ подложки» по форме подложки (с язычком и волнистым краем). Торт стоит сверху: круглый или прямоугольный на любой подложке, размеры задаются; «По размеру подложки» подгоняет его заново.</p>`
       : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
-    ${box ? `<div class="field wide"><span class="fl">Конструкция</span><select data-k="lidType">${LID_GROUPS.map(([g, ks]) => `<optgroup label="${g}">${ks.map(k => `<option value="${k}">${LID_TYPES[k]}</option>`).join('')}</optgroup>`).join('')}</select></div>` : ''}
+    ${box ? `<div class="sec-h"><h2>Конструкция</h2></div><div class="field wide"><span class="fl">Вариант</span><select data-k="lidType">${LID_GROUPS.map(([g, ks]) => `<optgroup label="${g}">${ks.map(k => `<option value="${k}">${LID_TYPES[k]}</option>`).join('')}</optgroup>`).join('')}</select></div>` : ''}
     ${box && o.lidType === 'tuck' ? `<div class="field wide"><span class="fl">Пачка (ECMA)</span><select data-k="style"><option value="">Нет: клапан на лотке-кресте</option>${Object.entries(BOX_STYLES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select></div>` : ''}
     ${box && (o.lidType === 'pyramid' || o.lidType === 'hexagon') ? rangeField('Граней', 'sides', 3, o.lidType === 'pyramid' ? 8 : 12, 1) : ''}
     ${box && o.lidType === 'gable' ? rangeField('Подъём ската, мм', 'roofH', 5, 400, 1) + rangeField('Высота ручки, мм', 'gripH', 20, 200, 1) : ''}
@@ -353,7 +353,7 @@ function renderModel() {
     ${box && o.lidType === 'f0427' ? `<p class="hint">FEFCO 0427 собирается без клея: боковые стенки и перед двойные, завёрнуты внутрь и встают замками в прорези дна; ушки передней и задней стенок зажаты в боковых. Крышка — на задней стенке, её передний край завёрнут, клапан с пылевыми ушками уходит внутрь за переднюю стенку.</p>` : ''}
     ${box && windowPlace(o) ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
     ${box && o.window.on && windowPlace(o) ? windowFields(o) : ''}
-    <div class="sec-h" style="margin-top:4px"><h2>Материал</h2></div>
+    <div class="sec-h"><h2>Материал</h2></div>
     ${cboard ? `<div class="field wide"><span class="fl">Покрытие</span><select data-k="cbCover">${Object.entries(BOARD_COVER).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + (foilCover ? `<p class="hint">Фольга — металл: блики даёт то, что она отражает («Отражения» в настройках сцены: снимите выделение, кликнув мимо моделей). Печать поверх фольги — краска, она не блестит.</p>`
         : `<div class="field wide"><span class="fl">Цвет бумаги</span><div class="row">
@@ -374,11 +374,11 @@ function renderModel() {
     <div class="field wide"><span class="fl">Покрытие</span><select data-k="finish">${Object.entries(FINISHES).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('')}</select></div>
     ${rangeField('Фактура бумаги', 'grain', 0, 100, 1, 100)}`}
     ${box || dome || (cboard && !o.cbWrap) ? `<div class="field wide"><span class="fl">Цвет торца</span><div class="row"><input type="color" data-k="edge" aria-label="Цвет торца"><span class="hint">виден на срезе картона</span></div></div>` : ''}
-    <div class="sec-h" style="margin-top:4px"><h2>Положение в сцене</h2></div>
+    <div class="sec-h"><h2>Положение в сцене</h2></div>
     ${group ? `<p class="hint">Место в ряду задаёт группа «${esc(group.name)}»: порядок — как в списке, отступ и выравнивание — в настройках группы. Поворот — внутри группы.</p>`
       : rangeField('Смещение X, мм', 'pos.x', -1000, 1000, 1) + rangeField('Смещение Z, мм', 'pos.z', -1000, 1000, 1)}
     ${rangeField(group ? 'Поворот в группе, °' : 'Поворот, °', 'rotY', -180, 180, 1)}`;
-  bindFields(sec, activeObj, modelInput, modelCommit);
+  bindFields(sec, activeObj, modelInput, modelCommit); foldSections(sec);
   const board = c => { setBoard(o, c); applyObjMaterials(o); markObj(o); renderFacePanel(); $$('#boardSw .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === c)); $('#boardColor').value = c; };
   $$('#boardSw .sw').forEach(b => b.onclick = () => { board(b.dataset.c); commit(); });
   // the casket's velvet: a colour, or none (the printed paper)

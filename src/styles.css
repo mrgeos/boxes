@@ -95,12 +95,27 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sec{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
 .sec-h{display:flex;align-items:center;gap:8px;justify-content:space-between}
 .sec-h h2{margin:0;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.sec-h.fold{cursor:pointer;user-select:none;margin-top:4px}
+.sec-h.fold:first-child{margin-top:0}
+.sec-h.fold h2::before{content:"";display:inline-block;width:0;height:0;margin:0 6px 1px 0;border-left:4px solid currentColor;border-top:3.5px solid transparent;border-bottom:3.5px solid transparent;transform:rotate(90deg);transition:transform .15s}
+.sec-h.fold[aria-expanded=false] h2::before{transform:none}
+.sec-h.fold:hover h2{color:var(--fg)}
+.folded{display:none!important}
 .hint{color:var(--muted);font-size:11.5px;line-height:1.45;margin:0}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
-.field{display:grid;grid-template-columns:92px minmax(0,1fr) 58px;align-items:center;gap:8px}
+.field{display:grid;grid-template-columns:108px minmax(0,1fr) 58px;align-items:center;gap:8px}
 .field .fl{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.field.wide{grid-template-columns:92px minmax(0,1fr)}
+.field.wide{grid-template-columns:108px minmax(0,1fr)}
+.field.mm{grid-template-columns:minmax(0,1fr) 104px}
+.field .fl small{display:block;font-size:10.5px;opacity:.8;white-space:normal;line-height:1.25}
+.field .fl.scrub{cursor:ew-resize;user-select:none;touch-action:none}
+.field .fl.scrub:hover{color:var(--fg)}
+.unit-in{position:relative;display:block}
+.unit-in .num{padding-right:28px}
+.unit-in i{position:absolute;right:7px;top:50%;transform:translateY(-50%);font-style:normal;font-size:10.5px;color:var(--muted);pointer-events:none}
+.field.grp-end{margin-bottom:8px}
+.fgrp{margin:6px 0 -2px;font-size:11.5px;font-weight:600;color:var(--fg)}
 .num{width:100%;height:26px;border:1px solid var(--line);border-radius:5px;background:var(--field);padding:0 6px;font-family:var(--mono);font-size:11.5px;text-align:right}
 .unit{display:none}
 input[type=range]{width:100%;accent-color:var(--accent);height:18px;margin:0}
@@ -349,7 +364,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .imgcard .ic-t{display:flex;flex-direction:column;min-width:0;gap:2px}
 .imgcard .ic-n{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .imgcard .hint b.warn{color:var(--warn)}.imgcard .hint b.bad{color:var(--danger)}
-.field.rotf{grid-template-columns:92px minmax(0,1fr) 58px auto}
+.field.rotf{grid-template-columns:108px minmax(0,1fr) 58px auto}
 .field .flips{display:flex;gap:1px}
 
 /* the shape button of the action bar: the shape itself and a little arrow for its menu */
