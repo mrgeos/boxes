@@ -434,3 +434,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .pcard:hover .pa,.pcard:focus-within .pa{display:flex}
 .pcard .vx.sure{width:auto;padding:0 6px;color:var(--danger);font-size:11.5px}
 .pcard:has(.vx.sure) .pa{display:flex}
+/* a sticker, a ribbon, a filling: one section, its panes follow the Форма / Дизайн tabs */
+#stickerSec > [data-pane]{display:flex;flex-direction:column;gap:10px}
+[data-pane] > .sec-h:not(:first-child){margin-top:6px}
+#stickerSec[data-pane=shape] [data-pane=design],#stickerSec[data-pane=design] [data-pane=shape]{display:none}

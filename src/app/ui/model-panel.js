@@ -23,7 +23,7 @@ import { TAPES } from '../carriers/rsc.js';
 import { HANDLE_SHAPES, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, defaultFrontWin, defaultHandle } from '../carriers/handle-box.js';
 import { CARRY_PANEL, CARRY_STYLES, applyCarry, carryDims, carryOn } from '../carriers/carry.js';
 import { EXTRA_LABEL, extraById, extraName } from '../core/extras.js';
-import { extraAction, renderStickers } from './stickers-panel.js';
+import { bindExtraFoot, extraFoot, renderStickers } from './stickers-panel.js';
 import { refreshTabs } from './tabs.js';
 import { SLEEVE_AXES, SLEEVE_FIN, SLEEVE_PANEL, applySleeve, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn } from '../carriers/sleeve.js';
 import { applyScene, lastView, setView, updateShadowCam } from '../scene/camera.js';
@@ -43,7 +43,7 @@ import { BOX_STYLES } from '../carriers/carton-net.js';
 
 /* the paper sleeve round a box: its own shape panel (an extra, core/extras.js) */
 function sleeveFields(o) { const SD = sleeveDims(o); return `<div class="field wide"><span class="fl">Рукав опоясывает</span><select data-k="sleeve.axis">${Object.entries(SLEEVE_AXES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
-      + rangeField('Рукав: ширина ленты, мм', 'sleeve.w', 10, Math.ceil(SD.len + 1), 1) + rangeField('Рукав: смещение от центра, мм', 'sleeve.x', -Math.ceil(SD.len / 2), Math.ceil(SD.len / 2), 1)
+      + rangeField('Ширина ленты, мм', 'sleeve.w', 10, Math.ceil(SD.len + 1), 1) + rangeField('Смещение от центра, мм', 'sleeve.x', -Math.ceil(SD.len / 2), Math.ceil(SD.len / 2), 1)
       + rangeField('Сдвинуть рукав, мм', 'sleeve.slide', 0, Math.ceil(SD.len + SD.bw), 1)
       + `<label class="check"><input type="checkbox" data-k="sleeve.handle.on"> Ручка из рукава (лента поднимается над крышкой)</label>`
       + (o.sleeve.handle?.on ? rangeField('Ручка: высота, мм', 'sleeve.handle.h', 15, 300, 1) + rangeField('Ручка: скругление верхних углов, мм', 'sleeve.handle.r', 0, 100, .5)
@@ -173,10 +173,9 @@ function renderPartModel(sec, o) {
   sec.innerHTML = `<div class="sec-h"><h2>${EXTRA_LABEL[k]}</h2></div>
     <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="${k}.name" placeholder="${esc(extraName(o, { ...e, T: { ...e.T, name: '' } }))}" aria-label="Название"></div>
     ${k === 'sleeve' ? sleeveFields(o) : k === 'tissue' ? tissueFields(o) : k === 'insert' ? insertFields(o) : carryFields(o)}
-    <div class="grid2"><button class="btn sm" id="partHide">${e.T.hidden ? 'Показать' : 'Скрыть'}</button><button class="btn sm danger" id="partDel">Удалить</button></div>`;
+    ${extraFoot(!!e.T.hidden)}`;
   bindFields(sec, activeObj, modelInput, modelCommit); foldSections(sec);
-  $('#partHide').onclick = () => { extraAction(o, k, 'vis'); renderModel(); };
-  $('#partDel').onclick = () => extraAction(o, k, 'del');
+  bindExtraFoot(sec, o, k);
   if (k === 'tissue') bindTissue(sec, o);
 }
 /* a 3D model standing in the scene: which model, its size, its place */
