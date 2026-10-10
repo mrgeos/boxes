@@ -2,6 +2,7 @@
 import { clamp } from '../core/util.js';
 import { doubleWall, faceKeys, faceMM } from '../core/model.js';
 import { mailerNet } from './mailer.js';
+import { cartonNet, isCarton } from './carton-net.js';
 import { rscNet } from './rsc.js';
 import { bookNet } from './book.js';
 import { casketNet, drawerNet } from './rigid.js';
@@ -22,6 +23,7 @@ function cornerTabs(tabs, wall, x, y0, y1, side, tw, chamfer) {
 }
 function boxNet(o) {
   const { w, h, d } = o.dims, keys = faceKeys(o), lt = o.lidType || 'flat', t = clamp(o.thickness, .3, 10);
+  if (isCarton(o)) return cartonNet(o);
   if (lt === 'f0427') return mailerNet(o);
   if (lt === 'f0201') return rscNet(o);
   if (lt === 'book') return bookNet(o);
@@ -122,4 +124,4 @@ function dieLines(pieces) {
   return { cuts, creases };
 }
 
-export { boxNet, dieLines, netPoint };
+export { boxNet, cornerTabs, dieLines, netPoint };

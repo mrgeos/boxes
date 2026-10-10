@@ -93,6 +93,7 @@ function ensureFaces(o) {
     o.wallT ??= o.thickness;
     o.lidFit ??= 'over';
     o.tape ??= 'clear';
+    o.style ??= '';
     o.lining ??= ''; o.pull ??= 'ribbon'; o.pullColor ??= '#b8461b';
     if (o.lidType === 'gable') { o.roofH ??= Math.round(o.dims.d * .45); o.gripH ??= Math.round(Math.min(80, o.dims.w * .3)); }
     if (o.lidType === 'pyramid' || o.lidType === 'hexagon') o.sides ??= o.lidType === 'pyramid' ? 4 : 6;
@@ -132,7 +133,7 @@ function newObject(presetId = 'mailer') {
     sleeve: p.sleeve ? { ...defaultSleeve(p.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true } : undefined,
     handle: p.handle ? applyHandlePreset({ ...defaultHandle(p.dims), ...p.handle }, p.handle.shape || 'arch') : undefined,
     frontWin: p.frontWin ? { ...defaultFrontWin(p.dims), ...p.frontWin } : undefined,
-    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2, flute: p.flute || '', tape: p.tape, lining: p.lining, pull: p.pull, sides: p.sides };
+    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2, flute: p.flute || '', style: p.lid?.style || '', tape: p.tape, lining: p.lining, pull: p.pull, sides: p.sides };
   if (p.bag) applyBagPreset(o, p);
   if (p.dome) applyDomePreset(o, p);
   if (p.torte) applyTortePreset(o, p);

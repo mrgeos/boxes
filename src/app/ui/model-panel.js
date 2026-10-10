@@ -39,6 +39,7 @@ import { renderFacePanel, renderFaceTabs, updateFaceMeta } from './face-panel.js
 import { INSERT_CELL, INSERT_MAT, insertDims } from '../carriers/insert.js';
 import { LININGS } from '../carriers/rigid.js';
 import { isShape } from '../carriers/shapes.js';
+import { BOX_STYLES } from '../carriers/carton-net.js';
 
 /* the paper sleeve round a box: its own shape panel (an extra, core/extras.js) */
 function sleeveFields(o) { const SD = sleeveDims(o); return `<div class="field wide"><span class="fl">Рукав опоясывает</span><select data-k="sleeve.axis">${Object.entries(SLEEVE_AXES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
@@ -73,6 +74,7 @@ function modelInput(k) {
   if (k === 'sleeve.name' || k === 'carry.name') { renderObjects(); renderStickers(); refreshTabs(); return; }
   if (k === 'name') { renderObjects(); $('#objBadge').textContent = o.name; return; }
   if (k === 'type') { o.dims = { ...PRESETS.find(p => p.type === o.type).dims }; ensureFaces(o); if (o.type === 'board') setBoardCover(o); rebuildQueue.add(o.id); select(o.id, faceKeys(o)[0]); renderModel(); renderObjects(); return; }
+  if (k === 'style') { ui.net = true; updateFaceMeta(); return; }
   if (k === 'sides' || k === 'roofH' || k === 'gripH') { ensureFaces(o); rebuildQueue.add(o.id); ui.net = true; select(o.id, faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]); updateFaceMeta(); if (k === 'sides') renderModel(); return; }
   if (k === 'lidType') { if (o.lidType === 'pyramid' || o.lidType === 'hexagon') o.sides = o.lidType === 'pyramid' ? 4 : 6; if (o.lidType === 'gable') { o.roofH ??= Math.round(o.dims.d * .45); o.gripH ??= Math.round(Math.min(80, o.dims.w * .3)); } ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
   if (k === 'wallT' || k === 'lidFit' || k === 'tape' || k === 'pull' || k === 'pullColor') { rebuildQueue.add(o.id); applyObjMaterials(o); ui.net = true; updateFaceMeta(); return; }
@@ -304,6 +306,7 @@ function renderModel() {
           + `<p class="hint">Подложка — толстый картон, обтянутый фольгой или ламинированной бумагой с печатью. Дизайн — на гранях «Верх подложки» и «Низ подложки» по форме подложки (с язычком и волнистым краем). Торт стоит сверху: круглый или прямоугольный на любой подложке, размеры задаются; «По размеру подложки» подгоняет его заново.</p>`
       : rangeField('Диаметр, мм', 'dims.w', 20, 400, 1) + rangeField('Высота, мм', 'dims.h', 10, 800, 1)}
     ${box ? `<div class="field wide"><span class="fl">Конструкция</span><select data-k="lidType">${LID_GROUPS.map(([g, ks]) => `<optgroup label="${g}">${ks.map(k => `<option value="${k}">${LID_TYPES[k]}</option>`).join('')}</optgroup>`).join('')}</select></div>` : ''}
+    ${box && o.lidType === 'tuck' ? `<div class="field wide"><span class="fl">Пачка (ECMA)</span><select data-k="style"><option value="">Нет: клапан на лотке-кресте</option>${Object.entries(BOX_STYLES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select></div>` : ''}
     ${box && (o.lidType === 'pyramid' || o.lidType === 'hexagon') ? rangeField('Граней', 'sides', 3, o.lidType === 'pyramid' ? 8 : 12, 1) : ''}
     ${box && o.lidType === 'gable' ? rangeField('Подъём ската, мм', 'roofH', 5, 400, 1) + rangeField('Высота ручки, мм', 'gripH', 20, 200, 1) : ''}
     ${box && o.lidType === 'hexagon' ? rangeField('Высота крышки, мм', 'lidH', 5, 600, 1) : ''}
@@ -404,7 +407,7 @@ function renderModel() {
       o.lidType = p.lid?.type ?? 'flat';
       for (const [k, v] of [['flapH', p.lid?.flapH], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
       o.lidMat = p.lid?.mat ?? 'board'; o.lidFit = p.lid?.fit ?? 'over'; o.wallT = p.wallT ?? o.thickness;
-      o.earsOn = true; o.earFull = true; o.flute = p.flute || ''; o.tape = p.tape ?? 'clear'; o.lining = p.lining ?? ''; o.pull = p.pull ?? 'ribbon';
+      o.earsOn = true; o.earFull = true; o.flute = p.flute || ''; o.tape = p.tape ?? 'clear'; o.lining = p.lining ?? ''; o.pull = p.pull ?? 'ribbon'; o.style = p.lid?.style ?? '';
       if (p.sleeve) { o.sleeve = { ...defaultSleeve(o.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true }; ensureFaces(o); if (p.sleeve.bg) o.faces.sleeve.bg = p.sleeve.bg; }
       if (o.lidType === 'handle') {
         o.handle = applyHandlePreset({ ...defaultHandle(o.dims), ...(p.handle || {}) }, p.handle?.shape || 'arch');
