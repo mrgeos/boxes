@@ -14,6 +14,7 @@ import { drawNet } from '../net/net-view.js';
 import { syncRings } from './move.js';
 import { syncSelBox } from './sel-box.js';
 import { syncCtxBar } from '../ui/context-bar.js';
+import { syncStageHint } from '../ui/stage-hint.js';
 import { renderBrand } from '../ui/brand-panel.js';
 import { layoutPending } from '../core/groups.js';
 import { applyEnv, spinEnv } from './environments.js';
@@ -171,7 +172,7 @@ function initCamera() {
       if (f.flash > 0) { changed = true; f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
     }
     if (changed) { fitClipPlanes(); renderer.render(scene, camera); }
-    syncCtxBar(changed);
+    syncCtxBar(changed); syncStageHint();
     if (ui.editor) { ui.editor = false; drawEditor(); }
     if (ui.net) { ui.net = false; drawNet(); }
     if (ui.layers) { ui.layers = false; renderLayers(); }
