@@ -18,7 +18,7 @@ import { RT, markFace, ui } from '../scene/renderer.js';
 import { pickLayers, select } from '../core/selection.js';
 import { addBackgroundImage, bgToAllFaces, clearFace, imageFitOf, selectBg, setFaceBg, setFaceBgGrad, setImageFit, alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setVisible, shiftLayers } from '../core/layers.js';
 import { commit } from '../core/project.js';
-import { bindFields, rangeField } from './fields.js';
+import { bindFields, bindNum, placeField, rangeField } from './fields.js';
 import { MASKS, cropped, editMode, hasPanels, resetCrop, setClipBelow, setClipTo, setEditMode, setMask } from '../core/mask.js';
 import { invalidate } from '../scene/camera.js';
 
@@ -304,8 +304,8 @@ function renderLayerProps() {
   }
   const img = L.type === 'image';
   // a picture's flips sit by its turn, as two toggles
-  const rot = img ? rangeField('Поворот, °', 'rot', -180, 180, 1).replace(/<\/div>$/, `<span class="flips"><button class="vx" id="flipX" aria-pressed="${!!L.flipX}" title="Отразить по горизонтали">${ICON.flipH}</button><button class="vx" id="flipY" aria-pressed="${!!L.flipY}" title="Отразить по вертикали">${ICON.flipV}</button></span></div>`).replace('class="field"', 'class="field rotf"') : rangeField('Поворот, °', 'rot', -180, 180, 1);
-  const pos = `${rangeField('Центр X, %', 'x', -50, 150, .1, 100)}${rangeField('Центр Y, %', 'y', -50, 150, .1, 100)}${rot}
+  const rot = img ? rangeField('Поворот, °', 'rot', -180, 180, 1).replace(/<\/div>$/, `<span class="flips"><button class="vx" id="flipX" aria-pressed="${!!L.flipX}" title="Отразить по горизонтали">${ICON.flipH}</button><button class="vx" id="flipY" aria-pressed="${!!L.flipY}" title="Отразить по вертикали">${ICON.flipV}</button></span></div>`).replace('class="field nfrow turn"', 'class="field nfrow turn rotf"') : rangeField('Поворот, °', 'rot', -180, 180, 1);
+  const pos = `${placeField('Центр', 'x', 'y', -50, 150, .1, 100)}${rot}
     ${!(img && L.tile) && Object.keys(RT.get(o.id)?.frames || {}).length ? '<label class="check" title="Часть слоя за краем грани печатается на соседних гранях, через сгиб. Включается сама, если тянуть слой через ребро на модели"><input type="checkbox" data-k="wrap"> Переходит через рёбра на соседние грани</label>' : ''}`;
   html += img ? `<div class="cut"><h3>Размер и положение</h3>${fitSegHTML(o, L)}${rangeField(L.tile ? 'Размер плитки, %' : 'Ширина, %', 'w', 1, 400, .1, 100)}${pos}</div>` : pos;
   html += `
@@ -491,7 +491,7 @@ function vecColorsHTML(T) {
   } else if (T.src) {
     const ko = T.keyout || [];
     html += `<div class="field wide"><span class="fl">Убрать цвет</span><div class="kos">${ko.map((q, i) => `<div class="ko"><span class="sw" style="background:${q.c}" title="${q.c}"></span>
-      <input type="range" min="0" max="60" step="1" value="${Math.round(q.tol * 100)}" data-ko="${i}" aria-label="Допуск для ${q.c}" title="Допуск: захватывает близкие оттенки"><span class="mono kt">${Math.round(q.tol * 100)}%</span>
+      <span class="nf fill" title="Допуск: захватывает близкие оттенки"><span class="nf-bar"></span><input class="num" type="number" inputmode="decimal" min="0" max="60" step="1" value="${Math.round(q.tol * 100)}" data-ko="${i}" aria-label="Допуск для ${q.c}"><i>%</i></span>
       <button class="vx" data-kodel="${i}" title="Вернуть цвет">✕</button></div>`).join('') || '<span class="hint">Цвет, убранный с картинки, не печатается: видно бумагу или слой ниже.</span>'}</div></div>
     <div class="row">${'EyeDropper' in window ? `<button class="btn sm" id="koPick" title="Клик по цвету в любом месте экрана: на модели или в окне грани">${ICON.picker}Пипетка</button>` : ''}<button class="btn sm" id="koWhite">Белый фон</button><input type="color" id="koAdd" value="#ffffff" title="Выбрать цвет, который убрать" aria-label="Убрать цвет"></div>`;
   }
@@ -499,6 +499,7 @@ function vecColorsHTML(T) {
 }
 /* hooks up vecColorsHTML: onChange(T) shows the change, redraw() draws the panel again (a colour added or taken back) */
 function bindVecColors(root, getT, onChange, redraw = () => {}) {
+  bindNum(root);
   const cols = () => vecColors(getT()?.src), set = (rc, done) => { const t = getT(); if (!t) return; t.recolor = rc; onChange(t); if (done) commit(); };
   const edit = (fn, again = false) => { const t = getT(); if (!t) return; fn(t); onChange(t); commit(); if (again) redraw(); };
   $$('[data-vc]', root).forEach(inp => {
@@ -518,8 +519,8 @@ function bindVecColors(root, getT, onChange, redraw = () => {}) {
   $('#koAdd', root) && $('#koAdd', root).addEventListener('change', e => add(e.target.value));
   $('#koPick', root) && ($('#koPick', root).onclick = async () => { try { const r = await new EyeDropper().open(); if (r?.sRGBHex) add(r.sRGBHex.startsWith('#') ? r.sRGBHex : '#' + r.sRGBHex.match(/\d+/g).slice(0, 3).map(v => (+v).toString(16).padStart(2, '0')).join('')); } catch { /* cancelled */ } });
   $$('[data-ko]', root).forEach(inp => {
-    const i = +inp.dataset.ko, out = inp.nextElementSibling;
-    inp.addEventListener('input', () => { const t = getT(); if (!t) return; setKeyoutTol(t, i, +inp.value / 100); out.textContent = inp.value + '%'; onChange(t); });
+    const i = +inp.dataset.ko;
+    inp.addEventListener('input', () => { const t = getT(); if (!t) return; setKeyoutTol(t, i, +inp.value / 100); onChange(t); });
     inp.addEventListener('change', () => commit());
   });
   $$('[data-kodel]', root).forEach(b => b.onclick = () => edit(t => removeKeyout(t, +b.dataset.kodel), true));

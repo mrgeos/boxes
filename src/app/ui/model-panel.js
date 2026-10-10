@@ -232,8 +232,8 @@ function tissueFields(o) {
     <div class="row"><span class="hint">Цвет бумаги</span><input type="color" id="tissueColor" value="${o.faces.tissue?.bg || '#ffffff'}" aria-label="Цвет бумаги"><span class="grow"></span></div>
     ${rangeField('Просвечивает, %', 'tissue.sheer', 0, 70, 1)}${rangeField('Мятость, %', 'tissue.crumple', 0, 100, 1)}
     <div class="field wide"><span class="fl">Узор</span><div class="row"><button class="btn sm" id="patPick">${P ? 'Заменить картинку…' : 'Логотип или картинка узором…'}</button>${P ? '<button class="btn sm" id="patOff">Убрать</button>' : ''}</div></div>
-    ${P ? `<div class="field"><span class="fl">Узор: размер, мм</span><input type="range" id="patSize" min="10" max="${Math.round(fw / 2)}" step="1" value="${Math.round(P.w * fw)}"><input class="num" type="number" id="patSizeN" min="10" max="${Math.round(fw)}" value="${Math.round(P.w * fw)}"></div>
-      <div class="field"><span class="fl">Узор: поворот, °</span><input type="range" id="patRot" min="-90" max="90" step="1" value="${P.rot || 0}"><input class="num" type="number" id="patRotN" min="-90" max="90" value="${P.rot || 0}"></div>` : ''}
+    ${P ? `<div class="field nfrow"><span class="fl scrub">Узор: размер</span><span class="nf"><input class="num" type="number" inputmode="decimal" id="patSizeN" min="10" max="${Math.round(fw)}" step="1" value="${Math.round(P.w * fw)}" aria-label="Размер узора"><i>мм</i></span></div>
+      <div class="field nfrow"><span class="fl scrub">Узор: поворот</span><span class="nf fill"><span class="nf-bar"></span><input class="num" type="number" inputmode="decimal" id="patRotN" min="-90" max="90" step="1" value="${P.rot || 0}" aria-label="Поворот узора"><i>°</i></span></div>` : ''}
     <p class="hint">Тишью видна при открытой крышке. Узор — картинка, повторённая по листу; свой дизайн — во вкладке «Дизайн», грань «Тишью» (оба листа печатаются одинаково). На развёртке — лист тишью отдельно${T.layout === 'cross' ? ', нужно два' : ''}.</p>`;
 }
 function bindTissue(sec, o) {
@@ -248,9 +248,9 @@ function bindTissue(sec, o) {
     redraw(); renderModel(); commit();
   }, { brand: true });
   if ($('#patOff')) $('#patOff').onclick = () => { o.faces.tissue.layers = o.faces.tissue.layers.filter(L => !L.pattern); redraw(); renderModel(); commit(); };
-  const pair = (r, n, set) => { for (const el of [$(r), $(n)]) if (el) { el.oninput = () => { const v = +el.value; if (!(v === v)) return; set(v); $(r).value = $(n).value = v; redraw(); }; el.onchange = () => commit(); } };
-  pair('#patSize', '#patSizeN', v => { patLayer(o).w = Math.max(5, v) / fw(); });
-  pair('#patRot', '#patRotN', v => { patLayer(o).rot = v; });
+  const pair = (r, n, set) => { const el = $(n); if (el) { el.addEventListener('input', () => { const v = +el.value; if (!(v === v)) return; set(v); redraw(); }); el.addEventListener('change', () => commit()); } };
+  pair(null, '#patSizeN', v => { patLayer(o).w = Math.max(5, v) / fw(); });
+  pair(null, '#patRotN', v => { patLayer(o).rot = v; });
 }
 function renderModel() {
   const o = activeObj(), sec = $('#modelSec');

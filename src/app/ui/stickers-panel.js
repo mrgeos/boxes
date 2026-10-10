@@ -8,7 +8,7 @@ import { RT, markFace, ui } from '../scene/renderer.js';
 import { hbOpen } from '../carriers/handle-box.js';
 import { STICKER_FINISH, STICKER_KIND, activeSticker, newSticker, stickerKeys, stickerSize, touchSticker } from '../stickers/placement.js';
 import { commit } from '../core/project.js';
-import { bindFields, rangeField } from './fields.js';
+import { bindFields, placeField, presetField, rangeField } from './fields.js';
 import { bindVecColors, vecColorsHTML } from './face-panel.js';
 import { pickAsset } from './asset-picker.js';
 import { activeFill, activeRibbon, addFill, addPart, addRibbon, deleteExtra, duplicateExtra, extraById, extraHidden, extraName, extrasOf, isPart, renameExtra, setExtraHidden, setExtraLocked } from '../core/extras.js';
@@ -84,12 +84,11 @@ function renderStickers() {
       ${custom ? `<div class="row"><button class="btn sm" id="stShape">${st.src ? 'Заменить форму…' : 'Загрузить форму…'}</button></div>${rangeField('Белая окантовка, мм', 'outline', 0, 10, .1)}` : ''}
       <div class="sec-h"><h2>Плёнка</h2></div>
       ${rangeField('Толщина, мм', 'thick', 0, 3, .05)}
-      ${rangeField('Натяжение, %', 'tension', 0, 100, 1, 100)}
-      <p class="hint">0 % — плотно облегает внутренние углы и ступеньки, 100 % — натянута и перекидывается через них (радиус до 15 мм).</p>
+      ${presetField('Натяжение', 'tension', [[0, 'Облегает', 'Плотно облегает внутренние углы и ступеньки'], [.5, 'Средне'], [1, 'Натянута', 'Натянута и перекидывается через углы и ступеньки (радиус до 15 мм)']], 0, 100, 1, 100)}
       <div class="field wide"><span class="fl">Покрытие</span><select data-k="finish">${Object.entries(STICKER_FINISH).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       <div class="sec-h"><h2>Место</h2></div>
       <div class="field wide"><span class="fl">Грань</span><select data-k="face">${faceKeys(o).map(k => `<option value="${k}">${faceLabel(o, k)}</option>`).join('')}</select></div>
-      ${rangeField('Центр X, %', 'x', -20, 120, .1, 100)}${rangeField('Центр Y, %', 'y', -20, 120, .1, 100)}${rangeField('Поворот, °', 'rot', -180, 180, 1)}
+      ${placeField('Центр', 'x', 'y', -20, 120, .1, 100)}${rangeField('Поворот, °', 'rot', -180, 180, 1)}
       <div class="row"><button class="btn sm" id="stSealPos">Пломбой на линию открытия</button></div>
       ${extraFoot(st.visible === false)}
     </div>

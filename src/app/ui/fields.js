@@ -1,4 +1,4 @@
-// Поля настроек: ползунки, привязка к данным
+// Поля настроек: числовые поля (тянуть вбок, касание — ввод), место X/Y, привязка к данным
 import { $$, esc, getPath, setPath } from '../core/util.js';
 import { commit } from '../core/project.js';
 import { brandColor, checkLink, linkOf, setLink } from '../core/brand.js';
@@ -9,15 +9,106 @@ function parseLabel(label) {
   const name = m[2] || label;
   return { grp: m[1] || '', name: m[1] ? name[0].toUpperCase() + name.slice(1) : name, unit: m[3] || '', note: m[4] ? m[4].slice(1, -1) : '' };
 }
-/* a numeric setting. Millimetres get a number box with the unit and no slider (a slider is too coarse for sizes;
-   dragging the label changes the value, as in Figma); other values keep the slider. A label's group prefix
-   ("Окно: …") becomes a subheading over the run of fields that share it (see groupFields) */
+/* A numeric setting is one field, as in Figma and Blender: drag it (or its label) sideways to change the value,
+   a tap without moving types a number, arrows step it, Shift steps ×10. Sizes in mm are a plain number with
+   the unit; a value with clear bounds (%, a strength) is filled to its share of the range; a turn of −180…180°
+   gets quarter-turn buttons. The real <input type=number> inside keeps data-k, so bindFields works as before.
+   A label's group prefix ("Окно: …") becomes a subheading over the run of fields that share it (see groupFields) */
+const isTurn = (k, min, max) => /(^|\.)(rot|envRot)$/.test(k) && min === -180 && max === 180;
+function numBox(k, min, max, step, mul, unit, aria, { fill = false, pre = '' } = {}) {
+  return `<span class="nf${fill ? ' fill' : ''}">${fill ? '<span class="nf-bar"></span>' : ''}${pre ? `<b class="nf-pre">${pre}</b>` : ''}<input class="num" type="number" inputmode="decimal" min="${min}" max="${max}" step="${step}" data-k="${k}" data-mul="${mul}" aria-label="${esc(aria)}">${unit ? `<i>${unit}</i>` : ''}</span>`;
+}
 function rangeField(label, k, min, max, step, mul = 1) {
-  const { grp, name, unit, note } = parseLabel(label), attrs = `min="${min}" max="${max}" step="${step}" data-k="${k}" data-mul="${mul}" aria-label="${esc(label)}"`;
-  const text = unit && unit !== 'мм' ? `${name}, ${unit}` : name, g = grp ? ` data-grp="${esc(grp)}"` : '';
-  const fl = cls => `<span class="${cls}" title="${esc(label)}">${esc(text)}${note ? `<small>${esc(note)}</small>` : ''}</span>`;
-  if (unit === 'мм') return `<div class="field mm"${g}>${fl('fl scrub')}<span class="unit-in"><input class="num" type="number" ${attrs}><i>мм</i></span></div>`;
-  return `<div class="field"${g}>${fl('fl')}<input type="range" ${attrs}><input class="num" type="number" ${attrs}></div>`;
+  const { grp, name, unit, note } = parseLabel(label), g = grp ? ` data-grp="${esc(grp)}"` : '', turn = isTurn(k, min, max);
+  const fl = `<span class="fl scrub" title="${esc(label)}">${esc(name)}${note ? `<small>${esc(note)}</small>` : ''}</span>`;
+  const box = numBox(k, min, max, step, mul, unit, label, { fill: unit !== 'мм' && !turn });
+  const q = turn ? '<span class="nf-q"><button type="button" class="btn sm" data-turn="-90" title="Повернуть на −90°">−90°</button><button type="button" class="btn sm" data-turn="90" title="Повернуть на +90°">+90°</button></span>' : '';
+  return `<div class="field nfrow${turn ? ' turn' : ''}"${g}>${fl}${box}${q}</div>`;
+}
+/* the place of a thing on a face: X and Y in one row, and a 3 × 3 grid that puts it in the middle, by an edge or in a corner */
+function placeField(label, kx, ky, min, max, step, mul = 1, at = [.15, .5, .85]) {
+  const cells = at.flatMap(y => at.map(x => `<button type="button" data-ax="${x}" data-ay="${y}" aria-label="X ${Math.round(x * 100)} %, Y ${Math.round(y * 100)} %"></button>`)).join('');
+  return `<div class="field place"><span class="fl">${esc(label)}<span class="anchor" role="group" aria-label="Быстрое положение">${cells}</span></span>
+    <span class="pair">${numBox(kx, min, max, step, mul, '%', label + ' X', { pre: 'X' })}${numBox(ky, min, max, step, mul, '%', label + ' Y', { pre: 'Y' })}</span></div>`;
+}
+/* a value with a few usual settings: buttons for them, and the exact number under them */
+function presetField(label, k, presets, min, max, step, mul = 1) {
+  return `<div class="field wide"><span class="fl">${esc(label)}</span><span class="seg nf-seg" data-for="${k}">${presets.map(([v, t, tip]) => `<button type="button" data-v="${v}" title="${esc(tip || '')}">${esc(t)}</button>`).join('')}</span></div>
+    <div class="field nfrow"><span class="fl scrub">Точно</span>${numBox(k, min, max, step, mul, '%', label, { fill: true })}</div>`;
+}
+/* sets a field's input as if typed: the data follows, and with done the change is kept (undo step) */
+function putNum(inp, v, done) {
+  const lo = +inp.min, hi = +inp.max, st = +inp.step || 1;
+  v = Math.min(hi, Math.max(lo, Math.round(v / st) * st));
+  inp.value = +v.toFixed(4); inp.dispatchEvent(new Event('input'));
+  if (done) inp.dispatchEvent(new Event('change'));
+}
+/* the look that follows a value: the fill, the picked preset, the picked grid cell */
+function paintNum(inp) {
+  const nf = inp.closest('.nf'), v = parseFloat(inp.value);
+  const bar = nf?.querySelector('.nf-bar');
+  if (bar) bar.style.width = (Number.isNaN(v) ? 0 : Math.min(1, Math.max(0, (v - inp.min) / (inp.max - inp.min))) * 100) + '%';
+  const row = inp.closest('.field')?.previousElementSibling;
+  row?.querySelectorAll(`.nf-seg[data-for="${inp.dataset.k}"] button`).forEach(b => { const on = Math.abs(b.dataset.v * (+inp.dataset.mul || 1) - v) < 1e-6; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+  const pl = inp.closest('.place');
+  if (pl) {
+    const [ix, iy] = pl.querySelectorAll('input.num'), m = +ix.dataset.mul || 1;
+    pl.querySelectorAll('.anchor button').forEach(b => b.classList.toggle('on', Math.abs(b.dataset.ax * m - ix.value) < .01 && Math.abs(b.dataset.ay * m - iy.value) < .01));
+  }
+}
+/* drag on `el` sideways changes `inp`: a fill field spans its range over its width, a plain one moves a step per 2 px.
+   A press that does not move types into the field */
+function dragNum(el, inp, fill) {
+  let x0 = null, v0 = 0, moved = false, pid = null;
+  el.addEventListener('pointerdown', e => {
+    if (e.button > 0 || el.closest('.nf')?.classList.contains('typing') && el.classList.contains('nf')) return;
+    x0 = e.clientX; v0 = parseFloat(inp.value) || 0; moved = false; pid = e.pointerId;
+  });
+  el.addEventListener('pointermove', e => {
+    if (x0 == null || e.pointerId !== pid) return;
+    const dx = e.clientX - x0;
+    if (!moved) { if (Math.abs(dx) < 4) return; moved = true; el.setPointerCapture(pid); el.classList.add('drag'); }
+    const box = inp.closest('.nf'), per = fill ? (inp.max - inp.min) / box.clientWidth : (+inp.step || 1) / 2;
+    putNum(inp, v0 + dx * per * (e.shiftKey ? 10 : 1));
+  });
+  const end = e => {
+    if (x0 == null || e.pointerId !== pid) return;
+    x0 = null; el.classList.remove('drag');
+    if (moved) inp.dispatchEvent(new Event('change'));
+    else if (e.type === 'pointerup') typeNum(inp);
+  };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+}
+function typeNum(inp) {
+  const nf = inp.closest('.nf'); nf.classList.add('typing'); inp.focus(); inp.select();
+}
+function bindNum(root) {
+  $$('.nf input.num', root).forEach(inp => {
+    if (inp.__nf) return; inp.__nf = true;
+    const nf = inp.closest('.nf'), fill = nf.classList.contains('fill');
+    dragNum(nf, inp, fill);
+    const fl = nf.closest('.field')?.querySelector(':scope > .fl.scrub'); if (fl) dragNum(fl, inp, fill);
+    inp.addEventListener('input', () => paintNum(inp));
+    inp.addEventListener('focus', () => nf.classList.add('typing'));
+    inp.addEventListener('blur', () => nf.classList.remove('typing'));
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') inp.blur(); });
+    paintNum(inp);
+  });
+  $$('.nf-q [data-turn]', root).forEach(b => {
+    if (b.__nf) return; b.__nf = true;
+    b.onclick = () => { const inp = b.closest('.field').querySelector('input.num'); let v = (parseFloat(inp.value) || 0) + +b.dataset.turn; if (v > 180) v -= 360; if (v < -180) v += 360; putNum(inp, v, true); };
+  });
+  $$('.nf-seg', root).forEach(g => {
+    if (g.__nf) return; g.__nf = true;
+    const inp = g.closest('.field').nextElementSibling?.querySelector(`input.num[data-k="${g.dataset.for}"]`); if (!inp) return;
+    g.onclick = e => { const b = e.target.closest('[data-v]'); if (b) putNum(inp, b.dataset.v * (+inp.dataset.mul || 1), true); };
+    paintNum(inp);
+  });
+  $$('.place .anchor', root).forEach(a => {
+    if (a.__nf) return; a.__nf = true;
+    const [ix, iy] = a.closest('.place').querySelectorAll('input.num'), m = +ix.dataset.mul || 1;
+    a.onclick = e => { const b = e.target.closest('[data-ax]'); if (!b) return; putNum(ix, b.dataset.ax * m); putNum(iy, b.dataset.ay * m, true); ix.dispatchEvent(new Event('change')); };
+  });
 }
 /* a subheading over each run of fields of one group */
 function groupFields(root) {
@@ -29,33 +120,14 @@ function groupFields(root) {
     const h = document.createElement('div'); h.className = 'fgrp'; h.textContent = g; el.before(h);
   });
 }
-/* drag a millimetre field's label sideways to change it: a step per 2 px, ×10 with Shift */
-function bindScrub(fl) {
-  if (fl.__scrub) return; fl.__scrub = true;
-  const num = fl.parentElement.querySelector('input.num'); if (!num) return;
-  fl.addEventListener('pointerdown', e => {
-    if (e.button !== 0) return;
-    e.preventDefault(); fl.setPointerCapture(e.pointerId);
-    const x0 = e.clientX, v0 = parseFloat(num.value) || 0, step = +num.step || 1, lo = +num.min, hi = +num.max;
-    let moved = false;
-    const move = ev => {
-      const n = Math.round((ev.clientX - x0) / 2); if (!n && !moved) return; moved = true;
-      const v = Math.min(hi, Math.max(lo, v0 + n * step * (ev.shiftKey ? 10 : 1)));
-      if (+num.value !== v) { num.value = +v.toFixed(2); num.dispatchEvent(new Event('input')); }
-    };
-    const up = () => { fl.removeEventListener('pointermove', move); if (moved) num.dispatchEvent(new Event('change')); else num.focus(); };
-    fl.addEventListener('pointermove', move); fl.addEventListener('pointerup', up, { once: true }); fl.addEventListener('pointercancel', up, { once: true });
-  });
-}
 function showVal(el, v) {
   const mul = +(el.dataset.mul || 1);
   if (el.type === 'checkbox') el.checked = !!v;
-  else if (el.type === 'range' || el.type === 'number') el.value = +((+v || 0) * mul).toFixed(2);
+  else if (el.type === 'range' || el.type === 'number') { el.value = +((+v || 0) * mul).toFixed(2); if (el.__nf) paintNum(el); }
   else el.value = v ?? '';
 }
 function bindFields(root, getT, onInput, onCommit = commit) {
   groupFields(root);
-  $$('.fl.scrub', root).forEach(bindScrub);
   $$('[data-k]', root).forEach(el => {
     const k = el.dataset.k, t = getT(); if (!t) return;
     showVal(el, getPath(t, k));
@@ -75,6 +147,7 @@ function bindFields(root, getT, onInput, onCommit = commit) {
     });
     el.addEventListener('change', () => onCommit(k));
   });
+  bindNum(root);
 }
 /* the name of the kit colour a colour field is linked to, beside it; its ✕ drops the link */
 function linkChip(el, t, k) {
@@ -110,4 +183,4 @@ function foldSections(root) {
 }
 function refreshFields(root, t) { $$('[data-k]', root).forEach(el => { if (el !== document.activeElement) showVal(el, getPath(t, el.dataset.k)); }); }
 
-export { bindFields, foldSections, linkChip, rangeField, refreshFields };
+export { bindFields, bindNum, foldSections, linkChip, placeField, presetField, rangeField, refreshFields };
