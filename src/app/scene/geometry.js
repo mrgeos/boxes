@@ -1,7 +1,11 @@
 // Геометрия деталей: плоскости с вырезами, ленты, сетки по поверхности
 import * as THREE from 'three';
 import { S, V2, clamp, dedupe } from '../core/util.js';
-import { faceMM } from '../core/model.js';
+import { TOUCH, faceMM } from '../core/model.js';
+
+/* the number of segments around or along a curved part: half on a touch screen, where a phone's graphics card draws
+   the whole scene (a cup's lid keeps its look at a phone's size with a quarter of the triangles) */
+const seg = (n, min = 8) => TOUCH ? Math.max(min, Math.round(n / 2)) : n;
 
 /* polyline of a U-shaped notch cut into the top or bottom edge of a centred W×H plane */
 function notchPts(W, H, hw, depth, r, edge) {
@@ -106,4 +110,4 @@ function surfFrame(o, key, s3, parent, pinv) {
   return { c: V(s3.rest.c), u, v, n, w, h, parent, pinv, map, nrm, key };
 }
 
-export { gridGeo, loopSurface, notchPts, planeGeo, planeGeoHole, quadGeo, ribbonGeo, rrLoop, rrectPts, surfFrame };
+export { gridGeo, loopSurface, seg, notchPts, planeGeo, planeGeoHole, quadGeo, ribbonGeo, rrLoop, rrectPts, surfFrame };

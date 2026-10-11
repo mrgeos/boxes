@@ -1,6 +1,7 @@
 // Бумажный стакан: конус, развёртка веером
 import * as THREE from 'three';
 import { S, clamp, pixelsOf, sampleInto } from '../core/util.js';
+import { seg } from '../scene/geometry.js';
 
 /* ---------- paper cup ----------
    The printed side wall is a cone. It is designed on a rectangle that maps onto the cone conformally:
@@ -87,9 +88,9 @@ function buildCup(o, rt) {
   const G = cupGeom(o), ud = { objId: o.id, face: null };
   const add = (geo, mat, extra = {}) => { const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; m.userData = { ...ud, ...extra }; rt.group.add(m); return m; };
   // a cone band between heights ya and yb (mm) with radius r(y), open at both ends
-  const cone = (ra, rb, ya, yb) => { const g = new THREE.CylinderGeometry(rb * S, ra * S, (yb - ya) * S, 160, 1, true); g.translate(0, (ya + yb) / 2 * S, 0); return g; };
+  const cone = (ra, rb, ya, yb) => { const g = new THREE.CylinderGeometry(rb * S, ra * S, (yb - ya) * S, seg(160), 1, true); g.translate(0, (ya + yb) / 2 * S, 0); return g; };
   // printed wall: u around (seam at the back), v up the slant (conformal on a cone)
-  const nu = 160, nv = 40, P = [], N = [], UV = [], I = [];
+  const nu = seg(160), nv = seg(40), P = [], N = [], UV = [], I = [];
   for (let j = 0; j <= nv; j++) {
     const v = j / nv, d = cupSlant(G, v), r = G.r0 + d * G.sa, y = G.y0 + d * G.ca;
     for (let i = 0; i <= nu; i++) {
@@ -109,14 +110,14 @@ function buildCup(o, rt) {
   if (G.dbl) {
     // inner cup shows below the sleeve; its lower edge closes the gap, flush with the sleeve (no lip)
     add(cone(G.rw(0), G.rw(G.yTop), 0, G.yTop), rt.foldMat);
-    const ring = new THREE.RingGeometry(G.rw(G.y0) * S, (G.r0 - .03) * S, 160); ring.rotateX(Math.PI / 2); ring.translate(0, G.y0 * S, 0);
+    const ring = new THREE.RingGeometry(G.rw(G.y0) * S, (G.r0 - .03) * S, seg(160)); ring.rotateX(Math.PI / 2); ring.translate(0, G.y0 * S, 0);
     add(ring, rt.foldMat);
   }
   // inside wall and bottom, the base recess underneath, the rolled rim
   add(cone(G.rw(yB) - tk, G.rw(G.yTop) - tk, yB, G.yTop), rt.innerMat);
-  const ib = new THREE.CircleGeometry((G.rw(yB) - tk) * S, 96); ib.rotateX(-Math.PI / 2); ib.translate(0, yB * S, 0); add(ib, rt.innerMat);
-  const ub = new THREE.CircleGeometry(G.rw(1.5) * S, 96); ub.rotateX(Math.PI / 2); ub.translate(0, 1.5 * S, 0); add(ub, rt.foldMat);
-  const rim = new THREE.TorusGeometry(G.Rc * S, G.rr * S, 16, 160); rim.rotateX(Math.PI / 2); rim.translate(0, G.yTop * S, 0); add(rim, rt.foldMat);
+  const ib = new THREE.CircleGeometry((G.rw(yB) - tk) * S, seg(96)); ib.rotateX(-Math.PI / 2); ib.translate(0, yB * S, 0); add(ib, rt.innerMat);
+  const ub = new THREE.CircleGeometry(G.rw(1.5) * S, seg(96)); ub.rotateX(Math.PI / 2); ub.translate(0, 1.5 * S, 0); add(ub, rt.foldMat);
+  const rim = new THREE.TorusGeometry(G.Rc * S, G.rr * S, seg(16), seg(160)); rim.rotateX(Math.PI / 2); rim.translate(0, G.yTop * S, 0); add(rim, rt.foldMat);
   if (o.cupLid) buildCupLid(o, rt, G);
 }
 /* sip lid: a sunken centre, a wide raised ring with the sip slot at the front and the vent pinhole at the back,
@@ -127,9 +128,9 @@ function buildCupLid(o, rt, G) {
     .map(([r, y]) => [r * R, y * k])
     .concat([[R - .4, 3.9], [R + .9, 3.3], [R + 1.4, 1.8], [R + 1.4, -.6], [R + 1.9, -1.4], [R + 1.9, -2.6], [R + 2.8, -5], [R + 3, -6.4], [R + 2.4, -6.7]].map(([r, y]) => [r, y * k]));
   const curve = new THREE.CatmullRomCurve3(prof.map(([r, y]) => new THREE.Vector3(r * S, y * S, 0)), false, 'centripetal', .2);
-  const pts = curve.getSpacedPoints(240).map(p => new THREE.Vector2(Math.max(0, p.x), p.y));
+  const pts = curve.getSpacedPoints(seg(240)).map(p => new THREE.Vector2(Math.max(0, p.x), p.y));
   pts[0].x = 0;
-  const lid = new THREE.Mesh(new THREE.LatheGeometry(pts, 128), rt.cupLidMat);
+  const lid = new THREE.Mesh(new THREE.LatheGeometry(pts, seg(128)), rt.cupLidMat);
   lid.castShadow = lid.receiveShadow = true; lid.userData = { objId: o.id, face: null }; g.add(lid);
   // height of the lid's top surface at radius rho (mm), so the openings sit exactly on it
   const yAt = rho => {

@@ -1,7 +1,8 @@
 // Тортница: непрозрачное дно и прозрачная крышка из ПЭТ
 import * as THREE from 'three';
 import { DEG, S, clamp } from '../core/util.js';
-import { faceMM } from '../core/model.js';
+import { TOUCH, faceMM } from '../core/model.js';
+import { seg } from '../scene/geometry.js';
 
 const TORTE_COLORS = [['#b8893a', 'Золото'], ['#c3c7cc', 'Серебро'], ['#1d1d1f', 'Чёрное'], ['#f4f4f1', 'Белое'], ['#7a1f2b', 'Бордо']];
 const TORTE_FIN = { metal: 'Металлик', gloss: 'Глянцевый цветной ПЭТ', clear: 'Прозрачный ПЭТ' };
@@ -50,16 +51,18 @@ function buildTorte(o, rt) {
   const G = torteGeom(o), g = rt.group, F = k => rt.faces[k].mat, pr = torteProfiles(G);
   rt.baseMat ??= new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, shadowSide: THREE.DoubleSide });
   const flip = pts => pts.map(p => new THREE.Vector2(p.x * S, p.y * S));
-  const base = new THREE.Mesh(new THREE.LatheGeometry(flip(pr.base), 144), o.baseFin === 'clear' ? rt.petMat : rt.baseMat);
+  const base = new THREE.Mesh(new THREE.LatheGeometry(flip(pr.base), seg(144)), o.baseFin === 'clear' ? rt.petMat : rt.baseMat);
   base.castShadow = o.baseFin !== 'clear'; base.receiveShadow = true; base.userData = { objId: o.id, face: null }; g.add(base);
   const lg = new THREE.Group(); g.add(lg); rt.torteLid = lg;
-  const shell = new THREE.Mesh(new THREE.LatheGeometry(flip(pr.lid), 144), rt.petMat); shell.raycast = () => {}; lg.add(shell);
+  const shell = new THREE.Mesh(new THREE.LatheGeometry(flip(pr.lid), seg(144)), rt.petMat); shell.raycast = () => {}; lg.add(shell);
   for (const [r, y] of [[G.Rl + 1.2, G.hb + 2.5], [G.Rl, G.y1], [G.Rs, G.yS], [G.Rt, G.H]]) {
     const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 145 }, (_, i) => { const t = i / 144 * Math.PI * 2; return new THREE.Vector3(r * Math.sin(t) * S, y * S, r * Math.cos(t) * S); })), rt.petEdgeMat);
     ring.raycast = () => {}; ring.renderOrder = 4; lg.add(ring);
   }
-  // print on the lid: the wall (u around, seam at the back, as on a cup) and the flat top
-  const nu = 160, nv = 12, P = [], N = [], UV = [], I = [], lift = .06, sl = (G.Rl - G.Rs) / Math.hypot(G.Rl - G.Rs, G.yS - G.y1), cl = Math.sqrt(1 - sl * sl);
+  /* print on the lid: the wall (u around, seam at the back, as on a cup) and the flat top. It floats `lift` over the
+     shell; with the phone's fewer segments the shell's corners would poke through it, so there it takes the shell's
+     own count and its corners fall on the shell's */
+  const nu = TOUCH ? seg(144) : 160, nv = 12, P = [], N = [], UV = [], I = [], lift = .06, sl = (G.Rl - G.Rs) / Math.hypot(G.Rl - G.Rs, G.yS - G.y1), cl = Math.sqrt(1 - sl * sl);
   for (let j = 0; j <= nv; j++) {
     const v = j / nv, y = G.y1 + (G.yS - G.y1) * v, r = G.rW(y) + lift;
     for (let i = 0; i <= nu; i++) { const u = i / nu, th = Math.PI + u * Math.PI * 2, sn = Math.sin(th), cs = Math.cos(th); P.push(r * sn * S, y * S, r * cs * S); N.push(cl * sn, sl, cl * cs); UV.push(u, v); }
@@ -69,7 +72,7 @@ function buildTorte(o, rt) {
   wg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); wg.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
   wg.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2)); wg.setIndex(I);
   const wall = new THREE.Mesh(wg, F('lidWrap')); wall.userData = { objId: o.id, face: 'lidWrap' }; wall.renderOrder = 3; lg.add(wall);
-  const tg = new THREE.CircleGeometry(G.Rt * S, 96); tg.rotateX(-Math.PI / 2); tg.translate(0, (G.H + lift) * S, 0);
+  const tg = new THREE.CircleGeometry(G.Rt * S, seg(96)); tg.rotateX(-Math.PI / 2); tg.translate(0, (G.H + lift) * S, 0);
   const top = new THREE.Mesh(tg, F('top')); top.userData = { objId: o.id, face: 'top' }; top.renderOrder = 3; lg.add(top);
 }
 /* sticker film on the container. Each column of the sticker follows the section of the solid cut by a plane
