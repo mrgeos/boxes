@@ -9,7 +9,7 @@ import { commit } from '../core/project.js';
 import { refreshFields } from '../ui/fields.js';
 import { tool } from '../ui/action-bar.js';
 import { pick } from './interaction.js';
-import { select } from '../core/selection.js';
+import { select, topItem } from '../core/selection.js';
 import { renderObjects } from '../ui/object-list.js';
 
 /* With the move or rotate tool (ui/action-bar.js) an object is dragged by itself or by its ring; with the others
@@ -42,8 +42,27 @@ function frameGeom(b, pad, w) {
   const g = new THREE.ShapeGeometry(o, 6); g.rotateX(Math.PI / 2); g.scale(S, S, S);
   return g;
 }
+/* several items picked (Shift+click, the Alt frame, the list): they move and turn as one, round one ring.
+   Only items at the top of the list take part: an item inside a group keeps its place in the row */
+const MULTI = '@multi';
+const multiIds = () => sel.multi.length > 1 ? sel.multi.filter(id => own(id) && !parentOf(id)) : [];
+/* the frame round the picked items together: their footprints turned onto the floor, boxed (mm) */
+function multiFrame() {
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const id of multiIds()) {
+    const f = itemFrame(id); if (!f) continue;
+    for (const [bx, bz] of [[f.box.x0, f.box.z0], [f.box.x1, f.box.z0], [f.box.x0, f.box.z1], [f.box.x1, f.box.z1]]) {
+      const [wx, wz] = rotXZ(bx, bz, f.rot); x0 = Math.min(x0, f.x + wx); x1 = Math.max(x1, f.x + wx); z0 = Math.min(z0, f.z + wz); z1 = Math.max(z1, f.z + wz);
+    }
+  }
+  if (!(x0 < x1)) return null;
+  const x = (x0 + x1) / 2, z = (z0 + z1) / 2;
+  return { x, z, rot: 0, box: { x0: x0 - x, x1: x1 - x, z0: z0 - z, z1: z1 - z } };
+}
+const frameOf = id => id === MULTI ? multiFrame() : itemFrame(id);
 /* which items get a ring right now */
 function ringItems() {
+  if (multiIds().length > 1) return multiIds();   // a ring under each picked item: any of them moves them all
   const id = sel.group || sel.obj; if (!id || !own(id)) return [];
   const top = topOf(id);
   return top && top.id !== id ? [id, top.id] : [id];
@@ -51,14 +70,17 @@ function ringItems() {
 /* keeps the rings in step with the selection and the layout; true when they changed and need drawing */
 function syncRings() {
   const ids = (hover || drag) && !recording && (tool() === 'move' || tool() === 'rotate') ? ringItems() : [];
-  const frames = ids.map(itemFrame);
+  const frames = ids.map(frameOf);
   const s = JSON.stringify([ids, frames.map(f => f && [f.x, f.z, f.rot, f.box])]);
   if (s === sig) return false;
   sig = s;
+  const many = ids.length > 1 && multiIds().length > 1;
+  while (rings.length < ids.length) { const m = makeRing(1); rings.push(m); scene.add(m); }
   rings.forEach((m, i) => {
-    const f = frames[i]; m.visible = !!f; m.userData.id = ids[i];
+    const f = frames[i]; m.visible = !!f; m.userData.id = many ? MULTI : ids[i];
+    m.material.opacity = many || !i ? .85 : .32;
     if (!f) return;
-    const size = Math.max(f.box.x1 - f.box.x0, f.box.z1 - f.box.z0), w = clamp(size * .02, 3, 9), pad = i ? 18 : 8;
+    const size = Math.max(f.box.x1 - f.box.x0, f.box.z1 - f.box.z0), w = clamp(size * .02, 3, 9), pad = i && !many ? 18 : 8;
     m.geometry.dispose(); m.geometry = frameGeom(f.box, pad, w);
     m.userData.hit.geometry.dispose(); m.userData.hit.geometry = frameGeom(f.box, pad - 2, w + 14);
     m.position.set(f.x * S, .6 * S, f.z * S); m.rotation.y = f.rot * DEG;
@@ -75,12 +97,21 @@ function floorAt(e) { aim(e); return ray.ray.intersectPlane(floorPlane, pt) ? { 
 /* the item a press on the model takes: the selected group when the object is in it, else the object */
 function itemAt(e) {
   const h = pick(e.clientX, e.clientY); if (!h?.objId) return null;
+  // one of several picked: they all go together
+  if (multiIds().length > 1 && multiIds().includes(topItem(h.objId))) return MULTI;
   if (sel.group && objectsIn(sel.group).includes(h.objId)) return sel.group;
   if (sel.obj !== h.objId) select(h.objId, h.face || undefined, null);
   return h.objId;
 }
 function startDrag(e, id) {
-  const p = floorAt(e), f = itemFrame(id); if (!p || !f) return false;
+  const p = floorAt(e), f = frameOf(id); if (!p || !f) return false;
+  if (id === MULTI) {
+    // each item's place and turn at the start; they move by the same step and turn round the centre of them all
+    const items = multiIds().map(i => { const t = own(i); return { t, pos: { ...t.pos }, rot: t.rotY || 0 }; });
+    drag = { id, items, grab: { x: p.x - f.x, z: p.z - f.z }, c: { x: f.x, z: f.z }, a0: Math.atan2(p.z - f.z, p.x - f.x), turn: tool() === 'rotate' };
+    controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'grabbing';
+    return true;
+  }
   const parent = parentOf(id), t = own(id);
   // rotate: the angle round the item's centre on the floor; move: where it was grabbed
   drag = { id, parent, grab: { x: p.x - f.x, z: p.z - f.z }, start: parent ? null : { ...t.pos },
@@ -90,6 +121,7 @@ function startDrag(e, id) {
 }
 function dragTo(e) {
   const p = floorAt(e); if (!p) return;
+  if (drag.id === MULTI) return dragMulti(e, p);
   const t = own(drag.id);
   if (drag.rot) {
     // turning: three.js turns +y counter-clockwise seen from above, which is the floor angle's way back
@@ -115,6 +147,24 @@ function dragTo(e) {
   const f = itemFrame(drag.id), dx = (x - f.x) * S, dz = (z - f.z) * S;
   for (const oid of objectsIn(drag.id)) { const rt = RT.get(oid); if (rt) { rt.group.position.x += dx; rt.group.position.z += dz; } }
   invalidate();
+}
+/* several items: moved by the same step (Shift: along one axis) or turned round their common centre (Shift: by 15°) */
+function dragMulti(e, p) {
+  const { c } = drag;
+  if (drag.turn) {
+    let d = -(Math.atan2(p.z - c.z, p.x - c.x) - drag.a0) / DEG;
+    d = e.shiftKey ? Math.round(d / 15) * 15 : Math.round(d);
+    for (const it of drag.items) {
+      const [x, z] = rotXZ(it.pos.x - c.x, it.pos.z - c.z, d);
+      it.t.pos = { x: Math.round(c.x + x), z: Math.round(c.z + z) };
+      it.t.rotY = ((it.rot + d + 180) % 360 + 360) % 360 - 180;
+    }
+  } else {
+    let dx = p.x - drag.grab.x - c.x, dz = p.z - drag.grab.z - c.z;
+    if (e.shiftKey) { if (Math.abs(dx) > Math.abs(dz)) dz = 0; else dx = 0; }
+    for (const it of drag.items) it.t.pos = { x: Math.round(it.pos.x + dx), z: Math.round(it.pos.z + dz) };
+  }
+  layoutAll(); invalidate();
 }
 function endDrag() {
   drag = null; controls.enabled = true; layoutAll(); renderObjects(); commit(); invalidate();

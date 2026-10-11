@@ -46,8 +46,9 @@ function pickLayers(ids, main = ids.at(-1)) {
 /* shows a group's settings; its first object (or the selected one, if inside) stays active for the face panels */
 function selectGroup(gid) {
   const objs = objectsIn(gid);
-  select(objs.includes(sel.obj) ? sel.obj : objs[0] ?? null, undefined, null);
+  select(objs.includes(sel.obj) ? sel.obj : objs[0] ?? null, undefined, null, { focus: false });
   sel.group = gid; sel.multi = [gid];
+  if (orbitLock) focusSelected();   // round the whole group, not its first object
   renderObjects(); renderModel();
 }
 
@@ -61,9 +62,11 @@ function pickItems(ids) {
   if (!ids.length) return select(null);
   if (ids.length === 1) return groupById(ids[0]) ? selectGroup(ids[0]) : select(ids[0], undefined, null);
   const first = objectsIn(ids[0])[0];
-  // the camera stays: picking several does not fly to the first of them
+  // not to the first of them: the camera goes by all of them below
   if (first !== sel.obj) select(first, undefined, null, { focus: false });
   sel.group = null; sel.multi = ids;
+  // the camera turns round the centre of them all: the pivot moves there, the viewing angle stays
+  if (orbitLock) focusSelected();
   renderObjects(); renderModel(); refreshTabs(); invalidate();
 }
 /* adds the item of this object to the picked ones, or takes it off */
