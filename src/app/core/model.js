@@ -220,10 +220,23 @@ function faceMM(o, k) {
 /* face texture size: every face gets as many pixels as a TEX_MAX square, so long narrow parts (a sleeve,
    a cup wrap, a tall bag) keep the detail per mm of square ones instead of being limited by their long side;
    at most TEX_SIDE on a side (works on every GPU) and 10 px/mm */
-const TEX_MAX = 1536, TEX_SIDE = 4096;
+/* The resolution of a face's picture. Its canvas is held twice (the page's memory and the graphics card's), and a
+   phone's browser drops canvases or reloads the page past a few hundred MB (Safari on iPhone: about 384 MB for
+   all canvases): a touch screen gets a lower ceiling, and a face with nothing on it but its colour (no layers of
+   its own or running onto it, no gradient, no dieline) a small canvas — enough for the paper grain, if any */
+const TOUCH = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+const TEX_MAX = TOUCH ? 768 : 1536, TEX_SIDE = TOUCH ? 1536 : 4096;
+function plainFace(o, k) {
+  const f = o.faces?.[k];
+  if (!f || f.layers?.length || f.bgGrad) return false;
+  if (o.dieline && outerKeys(o).includes(k)) return false;
+  // a layer elsewhere on the object may run over an edge onto this face
+  return !Object.values(o.faces).some(q => q.layers?.some(L => L.wrap));
+}
 function facePx(o, k) {
   const [mw, mh] = faceMM(o, k);
-  const s = Math.min(TEX_MAX / Math.sqrt(mw * mh), TEX_SIDE / Math.max(mw, mh), 10);
+  let s = Math.min(TEX_MAX / Math.sqrt(mw * mh), TEX_SIDE / Math.max(mw, mh), 10);
+  if (plainFace(o, k)) s = Math.min(s, o.grain > 0 ? 3 : 64 / Math.max(mw, mh));
   return [Math.max(16, Math.round(mw * s)), Math.max(16, Math.round(mh * s)), s];
 }
 function netLayout(o) {
