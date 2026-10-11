@@ -112,7 +112,7 @@ function ensureFaceRT(o, k) {
     f.tex = new THREE.CanvasTexture(f.canvas);
     f.tex.colorSpace = THREE.SRGBColorSpace; f.tex.anisotropy = maxAniso;
     f.mat.map = f.tex;
-    for (const n of ['fx', 'bump', 'coat', 'iri']) if (f[n]) { f[n + 'Tex'].dispose(); f[n] = null; }
+    for (const n of ['fx', 'bump', 'coat', 'iri']) if (f[n]) { f[n + 'Tex'].dispose(); release(f[n]); f[n] = null; }
     f.mat.needsUpdate = true;
   }
   const [mw, mh] = faceMM(o, k);
@@ -121,6 +121,8 @@ function ensureFaceRT(o, k) {
   f.ppm = ppm;
   return f;
 }
+/* frees a canvas's pixels now: Safari counts them against its canvas memory limit until garbage collection */
+function release(c) { if (c) c.width = c.height = 0; }
 function aux(f, n) {
   const W = Math.max(8, f.canvas.width >> 1), H = Math.max(8, f.canvas.height >> 1);
   if (!f[n]) { f[n] = document.createElement('canvas'); f[n].width = W; f[n].height = H; f[n + 'Ctx'] = f[n].getContext('2d'); f[n + 'Tex'] = new THREE.CanvasTexture(f[n]); f[n + 'Tex'].anisotropy = maxAniso; }
@@ -173,7 +175,7 @@ function disposeObject(id) {
   disposeRibbons(rt);
   rt.group.traverse(m => { if ((m.isMesh || m.isLine) && !m.userData.shared) m.geometry.dispose(); });
   world.remove(rt.group);
-  for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.coatTex?.dispose(); f.iriTex?.dispose(); f.grain?.dispose(); }
+  for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.coatTex?.dispose(); f.iriTex?.dispose(); f.grain?.dispose(); for (const n of ['canvas', 'fx', 'bump', 'coat', 'iri']) release(f[n]); }
   for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
   rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); rt.cupLidMat.dispose(); rt.holeMat.dispose();
   rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); rt.baseMat?.dispose(); rt.trayMat?.dispose(); rt.cakeMats?.forEach(m => m.dispose()); rt.cbSideMat?.dispose(); rt.sleeveIn?.dispose(); rt.sleeveEdge?.dispose(); RT.delete(id);
