@@ -7,6 +7,7 @@ const KEY = 'box-studio-3d/hint';
 let off = false, shown = '';
 /* the hint for what is picked now */
 function hintNow() {
+  if (sel.multi.length > 1) return 'Shift+клик добавляет или убирает объект, Alt + рамка выбирает областью';
   if (!activeObj()) return 'Выберите объект на сцене или в списке';
   if (activeLayer()) return 'Тащите слой прямо по модели, стрелки сдвигают его. Esc — снять выбор';
   if (activeSticker()) return 'Тащите наклейку прямо по модели, стрелки сдвигают её. Esc — к объекту';

@@ -128,7 +128,7 @@ function initMove() {
   cvs.addEventListener('pointerleave', () => { hover = false; invalidate(); });
   // before the other handlers (and the orbit controls) on the canvas, so grabbing a ring does not turn the camera
   cvs.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || e.pointerType === 'touch' || e.ctrlKey || e.metaKey || recording || (tool() !== 'move' && tool() !== 'rotate')) return;
+    if (e.button !== 0 || e.pointerType === 'touch' || e.ctrlKey || e.metaKey || e.altKey || recording || (tool() !== 'move' && tool() !== 'rotate')) return;   // Alt: the selection frame (scene/marquee.js)
     const id = ringAt(e) || itemAt(e);
     if (id && startDrag(e, id)) { e.stopImmediatePropagation(); e.preventDefault(); }
   }, true);

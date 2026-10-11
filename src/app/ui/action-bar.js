@@ -16,6 +16,7 @@ import { ICON } from '../core/constants.js';
 import { pickAsset } from './asset-picker.js';
 import { setTab } from './tabs.js';
 import { startTextEdit } from './text-edit.js';
+import { setMultiMode } from '../core/selection.js';
 
 /* Tools decide what a drag on the model does:
    select (V) — picks faces, layers and stickers and drags the graphics over the model; objects stay put;
@@ -54,6 +55,9 @@ function addShape(kind) {
 }
 const face = o => sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0];
 function initActionBar() {
+  // a touch screen: «several» — while it is on, a tap on an object adds it to the picked ones or takes it off
+  const multi = $('#abMulti');
+  if (multi) multi.onclick = () => { const on = multi.getAttribute('aria-pressed') !== 'true'; multi.setAttribute('aria-pressed', String(on)); multi.classList.toggle('on', on); setMultiMode(on); };
   $$('#actionBar [data-tool]').forEach(b => { b.onclick = () => setTool(b.dataset.tool); b.title = TOOLS[b.dataset.tool]; });
   $('#abText').onclick = () => { const o = activeObj(); if (!o) return; setTab('design'); const L = newText('Ваш текст'); addLayer(L, face(o), o); startTextEdit(L, '3d', true); };
   $('#abImage').onclick = e => { const o = activeObj(); if (!o) return; pickAsset(e.currentTarget, 'Картинка на грань', r => { setTab('design'); placeLibImage(r, o, face(o)); }, { brand: true }); };

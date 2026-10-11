@@ -88,6 +88,8 @@
       <button class="ab needs-obj" id="abImage" title="Картинка на грань: из библиотеки или с компьютера" aria-label="Картинка на грань"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg></button>
       <span class="ab-split needs-obj-wrap"><button class="ab needs-obj" id="abShape" title="Фигура на грань" aria-label="Фигура на грань"></button><button class="ab caret needs-obj" id="abShapeMenu" title="Выбрать фигуру" aria-label="Выбрать фигуру" aria-haspopup="menu"></button></span>
       <button class="ab needs-obj" id="abSticker" title="Наклейка на грань" aria-label="Наклейка"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-8-8h8Z"/><path d="M20 12h-5a3 3 0 0 1-3-3V4"/></svg></button>
+      <span class="ab-sep touch-only"></span>
+      <button class="ab touch-only" id="abMulti" aria-pressed="false" title="Выбрать несколько: касание объекта добавляет его или убирает" aria-label="Выбрать несколько"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="10" height="10" rx="2"/><rect x="11" y="3" width="10" height="10" rx="2"/><path d="m14 8 2 2 3-4"/></svg></button>
     </div>
     <div class="stage-hint" id="stageHint" role="status"><span id="hintText"></span><button id="hideHint" title="Больше не показывать подсказки" aria-label="Скрыть подсказки">×</button></div>
     <button class="help-btn" id="helpBtn" title="Управление и клавиши" aria-label="Управление и клавиши" aria-expanded="false" aria-controls="helpPop">?</button>
@@ -96,6 +98,8 @@
       <dl><dt>Левая кнопка</dt><dd>вращение вокруг выбранного</dd><dt>Правая или Shift</dt><dd>сдвиг вида</dd><dt>Колесо</dt><dd>масштаб</dd><dt>Двойной клик, F</dt><dd>приблизить объект</dd><dt>H</dt><dd>вся сцена</dd></dl>
       <h3>Инструменты</h3>
       <dl><dt>V</dt><dd>выделение и графика</dd><dt>M</dt><dd>перемещение объекта</dd><dt>R</dt><dd>поворот объекта</dd><dt>Пробел</dt><dd>ладонь, пока зажат</dd></dl>
+      <h3>Объекты</h3>
+      <dl><dt>Shift+клик</dt><dd>добавить объект к выбранным или убрать</dd><dt>Alt + рамка</dt><dd>выбрать всё в рамке, с Shift — добавить</dd><dt>Tab / Shift+Tab</dt><dd>следующий / предыдущий объект</dd><dt>Ctrl+G</dt><dd>сгруппировать выбранные</dd></dl>
       <h3>Слои</h3>
       <dl><dt>Стрелки</dt><dd>сдвиг, с Shift — сильнее</dd><dt>Ctrl+A</dt><dd>все слои грани</dd><dt>Ctrl+G</dt><dd>группа, с Shift — разгруппировать</dd><dt>Ctrl+] / [</dt><dd>выше / ниже</dd><dt>Alt+A D W S</dt><dd>выровнять по краю</dd><dt>Delete</dt><dd>удалить</dd><dt>Esc</dt><dd>снять выбор</dd></dl>
       <h3>Общее</h3>
