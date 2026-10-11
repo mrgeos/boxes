@@ -496,3 +496,12 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
   .vc-sheet button.spin.on{background:var(--field);color:var(--fg);border-color:var(--line)}
   .vc-sheet button[data-v=focus]{border-color:var(--accent);color:var(--accent)}
 }
+/* previous and next object in the stage's other corner (ui/item-nav.js) */
+.inav{position:absolute;left:16px;bottom:16px;z-index:3;display:flex;gap:4px}
+.inav button{width:36px;height:36px;display:grid;place-items:center;padding:0;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--panel) 94%,transparent);backdrop-filter:blur(8px);color:var(--fg);cursor:pointer;box-shadow:var(--shadow)}
+.inav button:hover:not(:disabled){border-color:var(--line-2);background:var(--panel)}
+.inav button:active:not(:disabled){background:var(--accent-soft);color:var(--accent)}
+.inav button:disabled{opacity:.4;cursor:default}
+.inav button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.inav svg{width:18px;height:18px}
+@media (max-width:700px),(pointer:coarse){.inav{left:10px}.inav button{width:44px;height:44px}}
