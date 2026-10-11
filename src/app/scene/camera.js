@@ -4,6 +4,7 @@ import { $, DEG, clamp } from '../core/util.js';
 import { activeObj, sel, state } from '../core/state.js';
 import { RT, buildObject, camera, controls, dirtyFaces, fillLight, floor, keyLight, markObj, rebuildQueue, renderer, scene, staleShadow, takeShadowStale, ui, viewport } from './renderer.js';
 import { frameScale, noteFrame } from './quality.js';
+import { shadersReady, warmShaders } from './warmup.js';
 import { planTextures } from '../core/model.js';
 import { renderFace } from '../faces/render.js';
 import { stickerDirty } from '../stickers/placement.js';
@@ -206,10 +207,11 @@ function initCamera() {
     if (dirtyFaces.size || stickerDirty.size) staleShadow();   // a face's picture may cut it (alpha) and so its shadow
     let turning = !!camTween;
     for (const id of rebuildQueue) { const o = state.objects.find(x => x.id === id); if (o) buildObject(o); }
-    if (rebuildQueue.size) { rebuildQueue.clear(); updateShadowCam(); }
+    if (rebuildQueue.size) { rebuildQueue.clear(); updateShadowCam(); warmShaders(); }
     if (layoutPending()) changed = true;
     for (const o of planTextures(state.objects, selIds())) markObj(o);
     const painting = dirtyFaces.size > 0;
+    if (painting || stickerDirty.size) warmShaders();   // a painted face may take new maps (another program)
     paintFaces(wasMoving ? FACE_MS_MOVING : FACE_MS);
     for (const id of stickerDirty) { const o = state.objects.find(x => x.id === id); if (o) buildStickerFilms(o); }
     stickerDirty.clear();
@@ -238,6 +240,8 @@ function initCamera() {
     // a frame where only faces were painted is drawn now and then, and when the last of them is done
     if (painting && !changed && (!dirtyFaces.size || now - lastDraw > PAINT_DRAW_MS)) changed = true;
     wasMoving = moving;
+    // the frame waits (the last one stays on screen) while the programs it needs are built in the background
+    if (changed && !shadersReady(now)) { changed = false; invalidate(); }
     if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
     syncCtxBar(changed); syncStageHint();
     if (ui.editor) { ui.editor = false; drawEditor(); }
