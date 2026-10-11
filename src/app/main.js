@@ -7,6 +7,7 @@ import { initSelLook } from './scene/sel-look.js';
 import { initViewCube } from './ui/view-cube.js';
 import { initItemNav } from './ui/item-nav.js';
 import { initMarquee } from './scene/marquee.js';
+import { footprint } from './core/arrange.js';
 import { initProjects } from './ui/projects.js';
 import { initTextEdit } from './ui/text-edit.js';
 import * as THREE from 'three';
@@ -58,5 +59,5 @@ if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
 libLoadBrowser(); loadMyModels();
 initProjects();
-window.__boxStudio = { library, state, sel, select, setView, faceMM,
+window.__boxStudio = { library, state, sel, select, setView, faceMM, footprint,
   sleeveHoles: o => { const D = sleeveDims(o); return sleeveSheet(D).holes.map(h => h.reduce((a, p) => a + p[1], 0) / h.length / D.P); }, sleeveFold: o => { const D = sleeveDims(o); return D.s0 / D.P; }, RT, camera, THREE, renderer, scene, applyScene, markObj, rebuildQueue, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };
