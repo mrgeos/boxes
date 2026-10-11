@@ -1,7 +1,7 @@
 // Пакеты: плоский и с дном, верх, окно, экстендер, содержимое
 import * as THREE from 'three';
 import { S, clamp, esc, smooth } from '../core/util.js';
-import { faceMM } from '../core/model.js';
+import { TOUCH, faceMM } from '../core/model.js';
 import { getImg } from '../core/assets.js';
 import { gridGeo, surfFrame } from '../scene/geometry.js';
 
@@ -259,7 +259,7 @@ function buildBag(o, rt) {
   // the product inside: a cut-out photo, softened behind frosty film or tracing paper
   const pr = o.product, im = pr?.src && getImg(pr.src);
   if (im) {
-    const k = Math.min(1, 1024 / Math.max(im.naturalWidth, im.naturalHeight)), w = Math.round(im.naturalWidth * k), h = Math.round(im.naturalHeight * k);
+    const k = Math.min(1, (TOUCH ? 512 : 1024) / Math.max(im.naturalWidth, im.naturalHeight)), w = Math.round(im.naturalWidth * k), h = Math.round(im.naturalHeight * k);
     const blur = film ? BAG_FILM[o.bagMat].blur * Math.max(w, h) : 0, pad = Math.ceil(blur * 2.5);
     const c = document.createElement('canvas'); c.width = w + pad * 2; c.height = h + pad * 2;
     const x = c.getContext('2d'); if (blur) x.filter = `blur(${blur}px)`; x.drawImage(im, pad, pad, w, h);

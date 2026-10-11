@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { $, DEG, clamp } from '../core/util.js';
 import { activeObj, sel, state } from '../core/state.js';
-import { RT, buildObject, camera, controls, dirtyFaces, fillLight, floor, keyLight, rebuildQueue, renderer, scene, ui, viewport } from './renderer.js';
+import { RT, buildObject, camera, controls, dirtyFaces, fillLight, floor, keyLight, markObj, rebuildQueue, renderer, scene, ui, viewport } from './renderer.js';
+import { planTextures } from '../core/model.js';
 import { renderFace } from '../faces/render.js';
 import { stickerDirty } from '../stickers/placement.js';
 import { buildStickerFilms } from '../stickers/film.js';
@@ -179,6 +180,8 @@ function initCamera() {
     for (const id of rebuildQueue) { const o = state.objects.find(x => x.id === id); if (o) buildObject(o); }
     if (rebuildQueue.size) { rebuildQueue.clear(); updateShadowCam(); }
     if (layoutPending()) changed = true;
+    for (const o of planTextures(state.objects, selIds())) markObj(o);
+    if (dirtyFaces.size) changed = true;
     for (const key of dirtyFaces) {
       const [id, k] = key.split('|'); const o = state.objects.find(x => x.id === id); if (o) renderFace(o, k);
     }
