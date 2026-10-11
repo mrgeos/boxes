@@ -1,5 +1,6 @@
 // Плавающая панель над выделенным на сцене: быстрые действия с объектом, слоем, наклейкой или рукавом
 import { $, esc, fmt } from '../core/util.js';
+import { liftOverBars } from './view-cube.js';
 import { ICON } from '../core/constants.js';
 import { activeLayer, activeObj, sel } from '../core/state.js';
 import { applyLid, cvs, markFace, rebuildQueue, ui } from '../scene/renderer.js';
@@ -171,17 +172,24 @@ function syncCtxBar(moved = true) {
   const el = bar(); if (!el) return;
   const kind = busy ? null : kindNow(), o = activeObj();
   const k = kind && [kind, sel.multi.join(','), o?.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, o.tissue?.layout, o.insert?.mat, o.fill?.count, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
-  if (!kind) { el.hidden = true; key = ''; return; }
+  if (!kind) { if (!el.hidden) { el.hidden = true; corners(); } key = ''; return; }
   // nothing new and the view still: it stays where it is
   if (k === key && !moved) return;
   // not while one of its fields is dragged or typed into: the field would be lost under the pointer
   if (k !== key && el.querySelector('.nf.drag, .nf.typing')) return;
   if (k !== key) { key = k; el.innerHTML = build(kind); bind(kind); }
   el.hidden = false;
+  // measured from the stage's left edge: an absolute box only takes the width right of its `left`, so measured
+  // where the previous (narrower) bar was centred, a new one wrapped onto two rows and stayed so
+  el.style.left = '8px';
   const ab = $('#actionBar'), w = el.offsetWidth, sw = el.parentElement.clientWidth;
   el.style.left = Math.round(Math.max(8, (sw - w) / 2)) + 'px';
   el.style.top = Math.round(ab.offsetTop - el.offsetHeight - 8) + 'px';
+  corners();
 }
+/* the view cube and the item arrows rise over the bar where it reaches under them: placed again as soon as the bar
+   changed (the frame placed them before the bar was built, and may be the last one for a while) */
+function corners() { liftOverBars($('#viewCube')); liftOverBars($('#itemNav')); }
 /* the bar is built again on the next frame */
 function refresh() { key = ''; }
 function initCtxBar() {
