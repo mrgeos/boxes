@@ -5,6 +5,7 @@ import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { DEG } from '../core/util.js';
 import { assets, state } from '../core/state.js';
 import { pmrem, scene } from './renderer.js';
+import { warmShaders } from './warmup.js';
 import { invalidate } from './camera.js';
 
 /* Metal and gloss show what is round them, not their own colour: a foil in an even grey room looks a dull grey from
@@ -90,7 +91,7 @@ function applyEnv() {
   if (name === 'hdr' && s.envHdr !== hdrKey) { hdrTex?.dispose(); hdrKey = s.envHdr || ''; hdrTex = assets[s.envHdr] ? hdrFrom(assets[s.envHdr]) : null; }
   scene.environment = envTexture(name) || envTexture('softbox');
   scene.environmentRotation.set(0, (s.envRot || 0) * DEG, 0);
-  invalidate();
+  warmShaders(); invalidate();
 }
 /* the reflections turning by themselves: called each frame; true when they moved */
 let spinT = null;

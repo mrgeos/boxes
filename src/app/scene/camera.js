@@ -4,6 +4,7 @@ import { $, DEG, clamp } from '../core/util.js';
 import { activeObj, sel, state } from '../core/state.js';
 import { RT, buildObject, camera, controls, dirtyFaces, fillLight, floor, keyLight, markObj, rebuildQueue, renderer, scene, staleShadow, takeShadowStale, ui, viewport } from './renderer.js';
 import { frameScale, noteFrame } from './quality.js';
+import { shadersReady, warmShaders } from './warmup.js';
 import { planTextures } from '../core/model.js';
 import { renderFace } from '../faces/render.js';
 import { stickerDirty } from '../stickers/placement.js';
@@ -151,6 +152,30 @@ function applyScene() {
   st.style.background = s.bg === 'gradient' ? `radial-gradient(120% 95% at 50% 32%, ${s.bg1} 0%, ${s.bg2} 100%)` : s.bg === 'solid' ? s.bg1 : '';
   updateShadowCam();
 }
+/* The faces waiting for their picture are painted a few a frame, like a game streaming its world in: about FACE_MS
+   of each frame, the selected objects' first, then the nearest to the camera. Opening a big project no longer
+   freezes the page for seconds; until its turn a face shows its ground colour. While the camera is still the share
+   is bigger and the scene is drawn only a few times a second (as a game's loading screen); while it moves, painting
+   steps back. flushFaces paints them all at once (before an export). */
+const FACE_MS = 40, FACE_MS_MOVING = 8, PAINT_DRAW_MS = 200;
+function paintFaces(ms) {
+  if (!dirtyFaces.size) return;
+  const t0 = performance.now(), mine = new Set(selIds()), rank = new Map(), objs = new Map(state.objects.map(o => [o.id, o]));
+  const idOf = key => key.slice(0, key.indexOf('|'));
+  for (const key of dirtyFaces) {
+    const id = idOf(key); if (rank.has(id)) continue;
+    const g = RT.get(id)?.group;
+    rank.set(id, mine.has(id) ? -1 : g ? g.getWorldPosition(new THREE.Vector3()).distanceTo(camera.position) : 1e9);
+  }
+  for (const key of [...dirtyFaces].sort((a, b) => rank.get(idOf(a)) - rank.get(idOf(b)))) {
+    dirtyFaces.delete(key);
+    const id = idOf(key), o = objs.get(id); if (!o) continue;
+    renderFace(o, key.slice(id.length + 1));
+    if (id === sel.obj) { ui.editor = true; ui.net = true; }
+    if (performance.now() - t0 > ms) break;
+  }
+}
+const flushFaces = () => paintFaces(Infinity);
 function resize() {
   const w = viewport.clientWidth, h = viewport.clientHeight; if (!w || !h) return;
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); applyViewOffset();
@@ -174,22 +199,20 @@ function initCamera() {
   // (input outside the 3D view may change the scene in ways the parts do not report: its shadow is drawn anew)
   for (const t of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'click', 'drop', 'paste']) addEventListener(t, e => { invalidate(); if (e.target !== renderer.domElement) staleShadow(); }, { capture: true, passive: true });
   renderer.domElement.addEventListener('pointermove', () => invalidate(), { passive: true });
-  let lastNow = 0;
+  let lastNow = 0, wasMoving = false, lastDraw = 0;
   renderer.setAnimationLoop(now => {
     // seconds since the last frame: the auto-rotation turns by time, not by frames (a slow machine turns as fast)
     const gap = lastNow ? now - lastNow : 0, dt = Math.min(.25, gap / 1000); lastNow = now;
-    let changed = rebuildQueue.size || dirtyFaces.size || stickerDirty.size || camTween || recording || now < drawUntil;
+    let changed = rebuildQueue.size || stickerDirty.size || camTween || recording || now < drawUntil;
     if (dirtyFaces.size || stickerDirty.size) staleShadow();   // a face's picture may cut it (alpha) and so its shadow
     let turning = !!camTween;
     for (const id of rebuildQueue) { const o = state.objects.find(x => x.id === id); if (o) buildObject(o); }
-    if (rebuildQueue.size) { rebuildQueue.clear(); updateShadowCam(); }
+    if (rebuildQueue.size) { rebuildQueue.clear(); updateShadowCam(); warmShaders(); }
     if (layoutPending()) changed = true;
     for (const o of planTextures(state.objects, selIds())) markObj(o);
-    if (dirtyFaces.size) changed = true;
-    for (const key of dirtyFaces) {
-      const [id, k] = key.split('|'); const o = state.objects.find(x => x.id === id); if (o) renderFace(o, k);
-    }
-    dirtyFaces.clear();
+    const painting = dirtyFaces.size > 0;
+    if (painting || stickerDirty.size) warmShaders();   // a painted face may take new maps (another program)
+    paintFaces(wasMoving ? FACE_MS_MOVING : FACE_MS);
     for (const id of stickerDirty) { const o = state.objects.find(x => x.id === id); if (o) buildStickerFilms(o); }
     stickerDirty.clear();
     if (camTween) {
@@ -214,7 +237,12 @@ function initCamera() {
       const f = rt.faces[k];
       if (f.flash > 0) { changed = true; f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
     }
-    if (changed) { fitClipPlanes(); if (takeShadowStale() || !moving) renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
+    // a frame where only faces were painted is drawn now and then, and when the last of them is done
+    if (painting && !changed && (!dirtyFaces.size || now - lastDraw > PAINT_DRAW_MS)) changed = true;
+    wasMoving = moving;
+    // the frame waits (the last one stays on screen) while the programs it needs are built in the background
+    if (changed && !shadersReady(now)) { changed = false; invalidate(); }
+    if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
     syncCtxBar(changed); syncStageHint();
     if (ui.editor) { ui.editor = false; drawEditor(); }
     if (ui.net) { ui.net = false; drawNet(); }
@@ -225,4 +253,4 @@ function initCamera() {
   });
 }
 
-export { VIEW_DIRS, VIEW_LABEL, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
+export { VIEW_DIRS, VIEW_LABEL, flushFaces, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };

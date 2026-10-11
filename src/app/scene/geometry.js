@@ -1,6 +1,7 @@
 // Геометрия деталей: плоскости с вырезами, ленты, сетки по поверхности
 import * as THREE from 'three';
 import { S, V2, clamp, dedupe } from '../core/util.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TOUCH, faceMM } from '../core/model.js';
 
 /* the number of segments around or along a curved part: half on a touch screen, where a phone's graphics card draws
@@ -110,4 +111,30 @@ function surfFrame(o, key, s3, parent, pinv) {
   return { c: V(s3.rest.c), u, v, n, w, h, parent, pinv, map, nrm, key };
 }
 
-export { gridGeo, loopSurface, seg, notchPts, planeGeo, planeGeoHole, quadGeo, ribbonGeo, rrLoop, rrectPts, surfFrame };
+/* Like a game batching its static props: an object's parts that look the same and never move apart (one opaque
+   material, the same parent, no face or other role of their own, and nothing in the object's record holding them,
+   as the lid's or the contact shadow's parts are held) become one mesh per parent: one draw instead of dozens. */
+function mergeStatic(rt) {
+  const held = new Set(), hold = v => { if (v?.isObject3D) held.add(v); };
+  for (const v of Object.values(rt)) { hold(v); if (Array.isArray(v) || v instanceof Set || v instanceof Map) v.forEach(hold); }
+  const sets = new Map();
+  rt.group.traverse(m => {
+    if (!m.isMesh || m.isInstancedMesh || !m.visible || held.has(m) || Array.isArray(m.material) || m.material.transparent) return;
+    const g = m.geometry, ud = m.userData;
+    if (g.groups.length || Object.keys(g.morphAttributes).length || Object.keys(ud).some(k => k !== 'objId' && !(k === 'face' && ud.face == null))) return;
+    const key = [m.parent.uuid, m.material.uuid, m.castShadow, m.receiveShadow, m.renderOrder, m.raycast === THREE.Mesh.prototype.raycast, !!g.index, Object.keys(g.attributes).sort().join()].join('|');
+    if (!sets.has(key)) sets.set(key, []);
+    sets.get(key).push(m);
+  });
+  for (const ms of sets.values()) {
+    if (ms.length < 2) continue;
+    const geos = ms.map(m => { m.updateMatrix(); return m.geometry.clone().applyMatrix4(m.matrix); });
+    const merged = mergeGeometries(geos); geos.forEach(g => g.dispose()); if (!merged) continue;
+    const a = ms[0], m = new THREE.Mesh(merged, a.material);
+    m.castShadow = a.castShadow; m.receiveShadow = a.receiveShadow; m.renderOrder = a.renderOrder; m.raycast = a.raycast; m.userData = { ...a.userData };
+    a.parent.add(m);
+    for (const x of ms) { x.parent.remove(x); x.geometry.dispose(); }
+  }
+}
+
+export { gridGeo, loopSurface, mergeStatic, seg, notchPts, planeGeo, planeGeoHole, quadGeo, ribbonGeo, rrLoop, rrectPts, surfFrame };

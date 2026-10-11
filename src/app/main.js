@@ -19,7 +19,7 @@ import { sleeveDims, sleeveSheet } from './carriers/sleeve.js';
 import { libLoadBrowser, library } from './core/library.js';
 import { loadMyModels } from './core/model-library.js';
 import { markAllText } from './core/fonts.js';
-import { RT, camera, controls, markObj, rebuildQueue, renderer, scene } from './scene/renderer.js';
+import { RT, camera, controls, dirtyFaces, markObj, rebuildQueue, renderer, scene } from './scene/renderer.js';
 import { placementsFor } from './stickers/placement.js';
 import { buildStickerFilms } from './stickers/film.js';
 import { applyScene, initCamera, invalidate, orbitLock, resize, setOrbitLock, setView } from './scene/camera.js';
@@ -62,5 +62,5 @@ if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
 libLoadBrowser(); loadMyModels();
 initProjects();
-window.__boxStudio = { library, state, sel, select, setView, faceMM, footprint,
+window.__boxStudio = { library, state, sel, select, setView, faceMM, footprint, pendingFaces: () => dirtyFaces.size,
   sleeveHoles: o => { const D = sleeveDims(o); return sleeveSheet(D).holes.map(h => h.reduce((a, p) => a + p[1], 0) / h.length / D.P); }, sleeveFold: o => { const D = sleeveDims(o); return D.s0 / D.P; }, RT, camera, THREE, renderer, scene, applyScene, markObj, rebuildQueue, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };
