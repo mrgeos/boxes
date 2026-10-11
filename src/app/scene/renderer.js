@@ -37,6 +37,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;   // drawn when the scene changes, not on every frame of a camera move (shadowStale)
 renderer.setClearColor(0x000000, 0);
 viewport.appendChild(renderer.domElement);
 const cvs = renderer.domElement;
@@ -128,8 +129,14 @@ function aux(f, n) {
   if (!f[n]) { f[n] = document.createElement('canvas'); f[n].width = W; f[n].height = H; f[n + 'Ctx'] = f[n].getContext('2d'); f[n + 'Tex'] = new THREE.CanvasTexture(f[n]); f[n + 'Tex'].anisotropy = maxAniso; }
   return f[n];
 }
+/* The key light's shadow is drawn again only after the scene changed: whatever moves, builds or removes a part says
+   so here, and so does any input outside the 3D view (a panel's field). A frame that only turns the camera keeps the
+   shadow it has (it does not depend on the camera), and the still frame after a move draws it anew anyway. */
+let shadowStale = true;
+const staleShadow = () => { shadowStale = true; };
+function takeShadowStale() { const s = shadowStale; shadowStale = false; return s; }
 function buildObject(o) {
-  invalidate();
+  invalidate(); staleShadow();
   ensureFaces(o);
   let rt = RT.get(o.id);
   if (!rt) {
@@ -170,6 +177,7 @@ function measureFoot(rt) {
   return b.isEmpty() ? null : { x0: b.min.x / S, x1: b.max.x / S, z0: b.min.z / S, z1: b.max.z / S };
 }
 function disposeObject(id) {
+  staleShadow();
   invalidate();
   const rt = RT.get(id); if (!rt) return;
   disposeRibbons(rt);
@@ -204,7 +212,7 @@ const contactMat = (() => {
   return new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false });
 })();
 function applyTransform(o, shadow = true) {
-  invalidate();
+  invalidate(); staleShadow();
   const rt = RT.get(o.id); if (!rt) return;
   const before = rt.group.position.clone(), p = placeOf(o);
   rt.group.position.set(p.x * S, 0, p.z * S); rt.group.rotation.y = p.rot * DEG;
@@ -215,7 +223,7 @@ function applyTransform(o, shadow = true) {
   if (shadow) updateShadowCam();
 }
 function applyLid(o) {
-  invalidate();
+  invalidate(); staleShadow();
   const rt = RT.get(o.id); if (!rt) return;
   if (rt.bagPivot) rt.bagPivot.rotation.x = -clamp(o.lid, 0, 180) * DEG;
   if (rt.bagTape) rt.bagTape.visible = o.lid > 1;
@@ -287,4 +295,4 @@ function applyObjMaterials(o) {
   rt.innerMat.bumpScale = o.grain * 1.2; rt.innerMat.needsUpdate = true;
 }
 
-export { RT, pmrem, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, rebuildQueue, renderer, scene, ui, viewport, world };
+export { RT, pmrem, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, rebuildQueue, renderer, scene, staleShadow, takeShadowStale, ui, viewport, world };

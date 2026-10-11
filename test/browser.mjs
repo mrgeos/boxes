@@ -15,6 +15,8 @@ export async function openEditor(browser, { offline = false } = {}) {
     window.__noThumbs = true;
     let s = 12345; Math.random = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
     try { localStorage.clear(); indexedDB.deleteDatabase('box-studio-3d'); } catch {}
+    // a fixed quality: «Авто» would lower it on this slow software renderer, and pictures would differ between runs
+    try { localStorage.setItem('bs3d-quality', 'high'); } catch {}
   });
   const page = await ctx.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
