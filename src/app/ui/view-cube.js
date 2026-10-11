@@ -24,8 +24,10 @@ const SHEET = ['q', 'front', 'back', 'side', 'left', 'top', 'bottom'];   // 3/4 
 const ICON_FOCUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/><circle cx="12" cy="12" r="3"/></svg>';
 const ICON_ALL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="7" height="9" rx="1"/><rect x="14" y="7" width="7" height="13" rx="1"/><path d="M6 7l3-3 3 3"/></svg>';
 
-const C = new THREE.Matrix4().makeScale(1, -1, 1), M = new THREE.Matrix4(), Ry = new THREE.Matrix4(), V = new THREE.Matrix4();
+const C = new THREE.Matrix4().makeScale(1, -1, 1), M = new THREE.Matrix4(), Ry = new THREE.Matrix4(), V = new THREE.Matrix4(), T = new THREE.Matrix4();
 let last = '';
+/* the faces' outward normals in CSS axes (y down), to tell which face is turned to the viewer */
+const CSS_N = { front: [0, 0, 1], back: [0, 0, -1], side: [1, 0, 0], left: [-1, 0, 0], top: [0, -1, 0], bottom: [0, 1, 0] }, N = new THREE.Vector3();
 /* the direction of a cell: the face, plus the neighbouring faces for an edge or a corner cell */
 function cellDir(f, i, j) {
   const [, , n, r, u] = FACES.find(x => x[0] === f), a = i - 1, b = 1 - j;
@@ -37,9 +39,21 @@ function syncViewCube() {
   const cube = $('#vcCube'); if (!cube || cube.offsetParent === null) return;
   const o = activeObj(), yaw = o && orbitLock ? o.rotY * DEG : 0;
   V.extractRotation(camera.matrixWorldInverse); Ry.makeRotationY(yaw);
+  // straight from above or below the side faces stand edge-on and the browser's hit test of the faces breaks:
+  // tip the cube by a degree and a half there (not seen, but every cell takes clicks again)
+  const up = camera.position.clone().sub(controls.target).normalize().y;
+  if (Math.abs(up) > .9995) V.premultiply(T.makeRotationX(.026 * Math.sign(up)));
   M.copy(C).multiply(V).multiply(Ry).multiply(C);
   const t = `matrix3d(${M.elements.map(v => +v.toFixed(5)).join(',')})`;
-  if (t !== last) { last = t; cube.style.transform = t; }
+  if (t !== last) {
+    last = t; cube.style.transform = t;
+    // faces turned away are hidden here, not by backface-visibility: Safari draws a hidden face's text through
+    // (the upside-down «Верх» over «Перед» seen from the front)
+    cube.querySelectorAll('.vc-face').forEach(el => {
+      const n = CSS_N[el.dataset.f]; N.set(...n).transformDirection(M);
+      el.style.visibility = N.z > .02 ? '' : 'hidden';
+    });
+  }
 }
 /* the corner, raised over the action bar and the selection's bar when they reach under it (a narrow stage, a phone) */
 function placeCube() {
