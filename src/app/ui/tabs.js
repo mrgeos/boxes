@@ -22,6 +22,7 @@ function show(panel, t) {
    net; a sticker or a ribbon its settings (in the extras' section). A tab missing for the selection is shown as the first one
    it has, and the chosen tab comes back with the next object. */
 function tabsNow() {
+  if (sel.multi.length > 1) return ['shape'];   // several picked: their shared settings only (ui/model-panel.js)
   if (sel.group || !activeObj()) return RIGHT;
   // an extra without a face of its own: its settings split into the same tabs as a part's (in the extras' section)
   if (activeSticker() || activeRibbon()) return ['shape', 'design'];

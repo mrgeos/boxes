@@ -26,15 +26,16 @@ import { EXTRA_LABEL, extraById, extraName } from '../core/extras.js';
 import { bindExtraFoot, extraFoot, renderStickers } from './stickers-panel.js';
 import { refreshTabs } from './tabs.js';
 import { SLEEVE_AXES, SLEEVE_FIN, SLEEVE_PANEL, applySleeve, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn } from '../carriers/sleeve.js';
-import { applyScene, lastView, setView, updateShadowCam } from '../scene/camera.js';
-import { select } from '../core/selection.js';
+import { applyScene, invalidate, lastView, setView, updateShadowCam } from '../scene/camera.js';
+import { select, selectGroup } from '../core/selection.js';
 import { groupById, layoutAll, parentOf } from '../core/groups.js';
 import { renderObjects } from './object-list.js';
 import { syncProps } from './tabs.js';
 import { renderActionBar } from './action-bar.js';
 import { renderGroupPanel } from './group-panel.js';
 import { commit } from '../core/project.js';
-import { bindFields, foldSections, rangeField, refreshFields } from './fields.js';
+import { bindFields, bindNum, foldSections, rangeField, refreshFields } from './fields.js';
+import { commonValue, fitting, objectsOf, setOnAll } from '../core/bulk.js';
 import { renderFacePanel, renderFaceTabs, updateFaceMeta } from './face-panel.js';
 import { INSERT_CELL, INSERT_MAT, insertDims } from '../carriers/insert.js';
 import { LININGS } from '../carriers/rigid.js';
@@ -178,6 +179,36 @@ function renderPartModel(sec, o) {
   bindExtraFoot(sec, o, k);
   if (k === 'tissue') bindTissue(sec, o);
 }
+/* several items picked: their names (a click picks one alone) and the material they share, set on all at once.
+   Where they differ, a select says «разные» and the box is half-ticked; a value set goes to all it fits */
+function renderMultiPanel(sec) {
+  const ids = sel.multi, objs = objectsOf(ids), MIX = '__mix';
+  const name = id => (groupById(id) || state.objects.find(o => o.id === id))?.name || '';
+  const sel1 = (k, opts, label) => { const v = commonValue(ids, k); return fitting(ids, k).length ? `<div class="field wide"><span class="fl">${label}</span><select data-bulk="${k}">${v === undefined ? `<option value="${MIX}" selected>— разные —</option>` : ''}${opts.map(([val, t]) => `<option value="${val}" ${v === val ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>` : ''; };
+  const board = commonValue(ids, 'board'), white = commonValue(ids, 'whiteInside'), grain = commonValue(ids, 'grain'), edge = commonValue(ids, 'edge');
+  sec.innerHTML = `<div class="sec-h"><h2>Несколько объектов</h2><span class="badge">${objs.length} шт.</span></div>
+    <div class="mlist">${ids.map(id => `<button type="button" class="mrow" data-id="${id}" title="Выбрать только его">${groupById(id) ? '▸ ' : ''}${esc(name(id))}</button>`).join('')}</div>
+    <p class="hint">Изменения ниже — у всех выбранных сразу. Где значения разные, это видно; новое значение получат все, кому оно подходит.</p>
+    <div class="sec-h"><h2>Материал</h2></div>
+    ${fitting(ids, 'board').length ? `<div class="field wide"><span class="fl">Цвет картона</span><div class="row">
+      <div class="swatches" id="mBoardSw">${BOARD.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${board === c}"></button>`).join('')}</div>
+      <input type="color" id="mBoardColor" value="${board || objs[0]?.board || '#ffffff'}" aria-label="Свой цвет картона"></div></div>
+      ${board === undefined ? '<p class="hint">Цвет у объектов разный.</p>' : ''}` : ''}
+    ${fitting(ids, 'flute').length === objs.length ? sel1('flute', [['', 'Коробочный (листовой)'], ...Object.entries(FLUTES).map(([k, v]) => [k, v.label])], 'Картон') : ''}
+    ${fitting(ids, 'whiteInside').length ? `<label class="check"><input type="checkbox" id="mWhite" ${white ? 'checked' : ''}> Белая внутренняя сторона</label>` : ''}
+    ${sel1('finish', Object.entries(FINISHES).map(([k, f]) => [k, f.label]), 'Покрытие')}
+    ${fitting(ids, 'grain').length ? `<div class="field nfrow"><span class="fl scrub">Фактура бумаги</span><span class="nf fill"><span class="nf-bar"></span><input class="num" type="number" inputmode="decimal" id="mGrain" min="0" max="100" step="1" ${grain === undefined ? 'placeholder="разная"' : `value="${Math.round(grain * 100)}"`} aria-label="Фактура бумаги"><i>%</i></span></div>` : ''}
+    ${fitting(ids, 'edge').length ? `<div class="field wide"><span class="fl">Цвет торца</span><div class="row"><input type="color" id="mEdge" value="${edge || fitting(ids, 'edge')[0].edge || '#e9e5dc'}" aria-label="Цвет торца"><span class="hint">${edge === undefined ? 'у объектов разный' : 'виден на срезе картона'}</span></div></div>` : ''}`;
+  const set = (k, v, keep = true) => { setOnAll(ids, k, v); if (k === 'flute') renderModel(); renderFacePanel(); invalidate(); if (keep) commit(); };
+  $$('.mrow', sec).forEach(b => b.onclick = () => { const id = b.dataset.id; groupById(id) ? selectGroup(id) : select(id, undefined, null); });
+  $$('#mBoardSw .sw', sec).forEach(b => b.onclick = () => { set('board', b.dataset.c); renderModel(); });
+  const bc = $('#mBoardColor', sec); if (bc) { bc.oninput = () => set('board', bc.value, false); bc.onchange = () => { commit(); renderModel(); }; }
+  const wi = $('#mWhite', sec); if (wi) { wi.indeterminate = white === undefined; wi.onchange = () => set('whiteInside', wi.checked); }
+  $$('select[data-bulk]', sec).forEach(el => el.onchange = () => { if (el.value !== MIX) { set(el.dataset.bulk, el.value); renderModel(); } });
+  const gr = $('#mGrain', sec); if (gr) { gr.addEventListener('input', () => { const v = parseFloat(gr.value); if (v === v) set('grain', Math.min(100, Math.max(0, v)) / 100, false); }); gr.addEventListener('change', () => commit()); }
+  const ed = $('#mEdge', sec); if (ed) { ed.oninput = () => set('edge', ed.value, false); ed.onchange = () => commit(); }
+  bindNum(sec); foldSections(sec);
+}
 /* a 3D model standing in the scene: which model, its size, its place */
 function renderModelObject(sec, o, group) {
   const lib = o.model?.lib, f = lib && foodById(lib);
@@ -256,6 +287,7 @@ function renderModel() {
   const o = activeObj(), sec = $('#modelSec');
   syncProps(!!o || !!(sel.group && groupById(sel.group))); renderActionBar();
   if (sel.group && groupById(sel.group)) return renderGroupPanel(sec);
+  if (sel.multi.length > 1) return renderMultiPanel(sec);
   const group = o && parentOf(o.id);
   if (!o) { sec.innerHTML = '<div class="sec-h"><h2>Форма</h2></div><div class="empty">Нет выбранного объекта</div>'; return; }
   if (sel.part) return renderPartModel(sec, o);

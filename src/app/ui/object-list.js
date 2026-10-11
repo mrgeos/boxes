@@ -11,7 +11,7 @@ import { renderModel } from './model-panel.js';
 import { extraById, extraHidden, extraName, extrasOf, renameExtra } from '../core/extras.js';
 import { extraAction, extraActs, extraIcon, renderStickers } from './stickers-panel.js';
 import { refreshTabs } from './tabs.js';
-import { select, selectExtra, selectGroup } from '../core/selection.js';
+import { select, selectExtra, selectGroup, pickItems } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { setView } from '../scene/camera.js';
 
@@ -69,10 +69,11 @@ function renderObjects() {
       // a double click renames: the first click may have redrawn the list (a group row does), so no dblclick
       // comes; the second click's count tells it
       if (e.detail === 2 && !e.shiftKey && !e.ctrlKey && !e.metaKey) { renameRow(id); return; }
-      if (e.ctrlKey || e.metaKey) { sel.multi = on.has(id) ? [...on].filter(x => x !== id) : [...on, id]; anchor = id; renderObjects(); return; }
+      // several picked: the same action as on the scene (the panel shows what they share, the camera turns round them)
+      if (e.ctrlKey || e.metaKey) { anchor = id; pickItems(on.has(id) ? [...on].filter(x => x !== id) : [...on, id]); return; }
       if (e.shiftKey && anchor) {
         const ids = visibleRows().map(r => r.id), a = ids.indexOf(anchor), b = ids.indexOf(id);
-        if (a >= 0 && b >= 0) { sel.multi = ids.slice(Math.min(a, b), Math.max(a, b) + 1); renderObjects(); return; }
+        if (a >= 0 && b >= 0) { pickItems(ids.slice(Math.min(a, b), Math.max(a, b) + 1)); return; }
       }
       anchor = id;
       isGroup(id) ? selectGroup(id) : select(id, undefined, null);
