@@ -127,7 +127,7 @@ function initWiring() {
   // the whole scene, and whether the camera turns round the selected object
   $('#viewBtn').onclick = e => {
     const r = e.currentTarget.getBoundingClientRect(), side = k => ({ label: VIEW_LABEL[k], checked: viewName === k, run: () => setView(k) });
-    const items = [...['front', 'q', 'side', 'top', 'back', 'bottom'].map(side), 'sep',
+    const items = [...['front', 'q', 'side', 'left', 'top', 'back', 'bottom'].map(side), 'sep',
       { label: 'К выбранному', key: 'F', disabled: !activeObj(), run: () => setView('focus') }, { label: 'Показать всё', key: 'H', run: () => setView('fit') }, 'sep',
       { label: 'Вращать вокруг выбранного', checked: orbitLock, run: () => setOrbitLock(!orbitLock) }];
     openMenu(r.left, r.bottom + 6, items, 'Вид');   // under the button, in the top bar
