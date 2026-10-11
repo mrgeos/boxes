@@ -4,7 +4,7 @@ import { ICON } from '../core/constants.js';
 import { activeLayer, activeObj, sel } from '../core/state.js';
 import { applyLid, cvs, markFace, rebuildQueue, ui } from '../scene/renderer.js';
 import { fitTissue } from '../carriers/tissue.js';
-import { recording, setView } from '../scene/camera.js';
+import { invalidate, recording, setView } from '../scene/camera.js';
 import { selectedLayers } from '../core/layers.js';
 import { editMode, setEditMode } from '../core/mask.js';
 import { commit } from '../core/project.js';
@@ -20,6 +20,8 @@ import { buildRibbons } from '../carriers/ribbon.js';
 import { modelInput, renderModel } from './model-panel.js';
 import { startTextEdit, textEditing } from './text-edit.js';
 import { renderActionBar } from './action-bar.js';
+import { alignItems, distributeItems, rowItems } from '../core/arrange.js';
+import { openMenu } from './menu.js';
 import { bindNum } from './fields.js';
 
 /* What it holds follows the selection: an object — open it (a click, or partly with the slider), turn it by 90°,
@@ -57,13 +59,35 @@ function kindNow() {
   if (sel.bg) return null;
   return 'object';
 }
+const ALIGN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v18"/><rect x="7" y="6" width="10" height="4" rx="1"/><rect x="7" y="14" width="14" height="4" rx="1"/></svg>';
 const FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l2 2h9A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>';
+/* lining up several objects on the floor (core/arrange.js): the menu over the button */
+function alignMenu(btn) {
+  const run = fn => () => { if (fn(picked())) { renderObjects(); renderModel(); commit(); invalidate(); } };
+  const r = btn.getBoundingClientRect();
+  const m = openMenu(r.left, r.top, [
+    { label: 'По левому краю', run: run(ids => alignItems(ids, 'x', 'min')) },
+    { label: 'По центру (ширина)', run: run(ids => alignItems(ids, 'x', 'mid')) },
+    { label: 'По правому краю', run: run(ids => alignItems(ids, 'x', 'max')) },
+    'sep',
+    { label: 'По заднему краю', run: run(ids => alignItems(ids, 'z', 'min')) },
+    { label: 'По центру (глубина)', run: run(ids => alignItems(ids, 'z', 'mid')) },
+    { label: 'По переднему краю', run: run(ids => alignItems(ids, 'z', 'max')) },
+    'sep',
+    { label: 'Равные промежутки по ширине', disabled: picked().length < 3, run: run(ids => distributeItems(ids, 'x')) },
+    { label: 'Равные промежутки по глубине', disabled: picked().length < 3, run: run(ids => distributeItems(ids, 'z')) },
+    'sep',
+    { label: 'В ряд по ширине, шаг 40 мм', run: run(ids => rowItems(ids, 'x')) },
+    { label: 'В ряд по глубине, шаг 40 мм', run: run(ids => rowItems(ids, 'z')) },
+  ], 'Выровнять');
+  if (m) { const h = m.getBoundingClientRect(); m.style.top = Math.max(4, r.top - h.height - 6) + 'px'; }   // above the bar
+}
 /* «3 объекта», «5 объектов» */
 const objectsWord = n => { const t = n % 10, h = n % 100; return `${n} ${t === 1 && h !== 11 ? 'объект' : t >= 2 && t <= 4 && (h < 12 || h > 14) ? 'объекта' : 'объектов'}`; };
 function build(kind) {
   const o = activeObj(), L = activeLayer();
   // several objects picked (Shift+click, the Alt frame or the object list): what is done to them all
-  if (kind === 'multi') return `<span class="hint cb-l">${objectsWord(sel.multi.length)}</span>${sep}<button class="ab wide" id="cbGroup" title="Сгруппировать (Ctrl+G)">${FOLDER}<span>Сгруппировать</span></button>${sep}`
+  if (kind === 'multi') return `<span class="hint cb-l">${objectsWord(sel.multi.length)}</span>${sep}<button class="ab wide" id="cbGroup" title="Сгруппировать (Ctrl+G)">${FOLDER}<span>Сгруппировать</span></button><button class="ab wide" id="cbAlign" title="Выровнять и расставить" aria-haspopup="menu">${ALIGN}<span>Выровнять</span></button>${sep}`
     + ib('cbDupAll', ICON.copy, 'Дублировать') + ib('cbDelAll', ICON.trash, 'Удалить (Delete)');
   if (kind === 'object') {
     const lid = lidAction(o), open = o.lid > 0;
@@ -98,6 +122,7 @@ function bind(kind) {
   bindNum(bar());
   if (kind === 'multi') {
     on('cbGroup', 'click', () => groupIds(picked()));
+    on('cbAlign', 'click', e => alignMenu(e.currentTarget));
     on('cbDupAll', 'click', () => duplicateIds(picked()));
     on('cbDelAll', 'click', () => deleteIds(picked()));
     return;
