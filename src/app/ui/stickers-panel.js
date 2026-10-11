@@ -2,22 +2,22 @@
 import { $, $$, esc, fmt, uid } from '../core/util.js';
 import { ICON } from '../core/constants.js';
 import { activeObj, sel } from '../core/state.js';
-import { clearLid, ensureFaces, faceKeys, faceLabel, newImage } from '../core/model.js';
+import { clearLid, ensureFaces, faceKeys, faceLabel, newImage, newText } from '../core/model.js';
 import { migrateSticker, stickerKey } from '../stickers/design.js';
 import { markFace, ui } from '../scene/renderer.js';
 import { hbOpen } from '../carriers/handle-box.js';
 import { STICKER_FINISH, STICKER_KIND, activeSticker, newSticker, stickerKeys, stickerSize, touchSticker } from '../stickers/placement.js';
 import { commit } from '../core/project.js';
 import { bindFields, placeField, presetField, rangeField } from './fields.js';
-import { renderFacePanel, renderFaceTabs, renderLayerProps, renderLayers } from './face-panel.js';
+import { addLayer, renderFacePanel, renderFaceTabs, renderLayerProps, renderLayers } from './face-panel.js';
 import { pickAsset } from './asset-picker.js';
 import { activeFill, activeRibbon, addFill, addPart, addRibbon, deleteExtra, duplicateExtra, extraById, extraHidden, extraName, extrasOf, isPart, renameExtra, setExtraHidden, setExtraLocked } from '../core/extras.js';
 import { sleeveOn } from '../carriers/sleeve.js';
 import { carryOn } from '../carriers/carry.js';
 import { tissueOn } from '../carriers/tissue.js';
-import { select, selectExtra } from '../core/selection.js';
+import { pickLayers, select, selectExtra } from '../core/selection.js';
 import { renameExtraTree, renderObjects } from './object-list.js';
-import { refreshTabs } from './tabs.js';
+import { refreshTabs, setTab } from './tabs.js';
 import { openMenu } from './menu.js';
 import { renderModel } from './model-panel.js';
 import { ribbonFits } from '../carriers/ribbon.js';
@@ -26,6 +26,8 @@ import { renderFillPanel } from './fill-panel.js';
 import { fillFits, fillOn } from '../carriers/fill.js';
 import { insertOn } from '../carriers/insert.js';
 import { isShape } from '../carriers/shapes.js';
+import { startTextEdit } from './text-edit.js';
+import { placeLibImage } from './library-panel.js';
 
 /* ---------- stickers panel ---------- */
 /* a seal goes across the line where the box opens */
@@ -216,13 +218,19 @@ function renameExtraRow(o, row) {
   for (const t of ['click', 'pointerdown']) inp.addEventListener(t, ev => ev.stopPropagation());
 }
 
-/* types into a sticker's text: the sticker is picked and its text field gets the caret, its text selected */
+/* types into a sticker's text, on the model: the top text layer of its design (a new one when it has none),
+   all of it selected */
 function editStickerText(o, id) {
   selectExtra(o.id, id);
-  requestAnimationFrame(() => { const ta = $('#stickerSec textarea[data-k="text"]'); if (ta) { ta.focus(); ta.select(); } });
+  const st = o.stickers.find(t => t.id === id); if (!st?.design) return;
+  let L = st.design.layers.findLast(x => x.type === 'text');
+  if (!L) { L = newText('Текст'); addLayer(L, stickerKey(st), o); }
+  pickLayers([L.id]); setTab('design'); startTextEdit(L, '3d', true);
 }
-/* a picture put into a sticker (from the library, dropped on it): the shape of a custom one, the background of the others */
-function setStickerImage(o, st, it) {
+/* a picture put into a sticker (from the library, dropped on it): a layer of its design (at: where, its share of the
+   sticker); an older sticker still waiting for its pictures takes it as its background */
+function setStickerImage(o, st, it, at = null) {
+  if (st.design) { placeLibImage(it, o, stickerKey(st), at); setTab('design'); return; }
   if (st.kind === 'custom') { st.src = it.id; st.aspect = it.aspect; st.recolor = {}; } else st.bgSrc = it.id;
   touchSticker(o, st); renderStickers(); commit();
 }

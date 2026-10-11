@@ -29,7 +29,8 @@ import { bindScene } from './ui/model-panel.js';
 import { initFacePanel } from './ui/face-panel.js';
 import { initFaceEditor } from './ui/face-editor.js';
 import { initNetView } from './net/net-view.js';
-import { initInteraction } from './scene/interaction.js';
+import { initInteraction, pick, stickerHit } from './scene/interaction.js';
+import { boxOnScreen, handleAt } from './scene/sel-box.js';
 import { initMove } from './scene/move.js';
 import { initContextMenus } from './ui/context-menus.js';
 import { sampleProject } from './core/sample.js';
@@ -62,5 +63,5 @@ if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
 libLoadBrowser(); loadMyModels();
 initProjects();
-window.__boxStudio = { library, state, sel, select, setView, faceMM, footprint, pendingFaces: () => dirtyFaces.size,
+window.__boxStudio = { library, state, sel, select, pick, stickerHit, boxOnScreen, handleAt, setView, faceMM, footprint, pendingFaces: () => dirtyFaces.size,
   sleeveHoles: o => { const D = sleeveDims(o); return sleeveSheet(D).holes.map(h => h.reduce((a, p) => a + p[1], 0) / h.length / D.P); }, sleeveFold: o => { const D = sleeveDims(o); return D.s0 / D.P; }, RT, camera, THREE, renderer, scene, applyScene, markObj, rebuildQueue, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };
