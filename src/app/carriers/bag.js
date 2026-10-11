@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { S, clamp, esc, smooth } from '../core/util.js';
 import { TOUCH, faceMM } from '../core/model.js';
 import { getImg } from '../core/assets.js';
-import { gridGeo, surfFrame } from '../scene/geometry.js';
+import { gridGeo, seg, surfFrame } from '../scene/geometry.js';
 
 const BAG_MATS = { clear: 'Прозрачная плёнка', frosty: 'Матовая плёнка (frosty)', tracing: 'Калька', paper: 'Бумага белая', kraft: 'Крафт-бумага' };
 const BAG_TOPS = { flap: 'Клапан с клеевой лентой', fold: 'Завёрнут (отворот)', seal: 'Запаян', open: 'Открыт (горловина)' };
@@ -195,7 +195,7 @@ function bagShape(o) {
 function buildBag(o, rt) {
   const { B, S3 } = bagShape(o), film = bagFilm(o), clear = o.bagMat === 'clear', frames = rt.bagFrames = {}, wins = bagWindows(o);
   const I4 = new THREE.Matrix4();
-  const res = k => { const [w, h] = faceMM(o, k); return [clamp(Math.ceil(w / 3), 4, 60), clamp(Math.ceil(h / 2.5), 4, 120)]; };
+  const res = k => { const [w, h] = faceMM(o, k); return [seg(clamp(Math.ceil(w / 3), 4, 60), 4), seg(clamp(Math.ceil(h / 2.5), 4, 120), 4)]; };
   const face = (key, parent, off = [0, 0, 0], pinv = I4) => {
     let [nu, nv] = res(key), vtop = null;
     if (B.zig && ['front', 'back', 'left', 'right'].includes(key)) {

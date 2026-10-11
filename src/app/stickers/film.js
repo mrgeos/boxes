@@ -141,7 +141,7 @@ function buildStickerFilms(o) {
     if (!st.visible) continue;
     const torte = o.type === 'torte', pls = torte ? [] : placementsFor(o, st).filter(pl => rt.frames[pl.key]); if (!pls.length && !torte) continue;
     const look = stickerLook(rt, st), [ew, eh] = look.ext;
-    const step = Math.max(.7, Math.max(ew, eh) / 110) * (dragSt ? 2 : 1), nx = Math.max(2, Math.ceil(ew / step) + 1), ny = Math.max(2, Math.ceil(eh / step) + 1), N = nx * ny;
+    const step = (TOUCH ? Math.max(1.4, Math.max(ew, eh) / 60) : Math.max(.7, Math.max(ew, eh) / 110)) * (dragSt ? 2 : 1), nx = Math.max(2, Math.ceil(ew / step) + 1), ny = Math.max(2, Math.ceil(eh / step) + 1), N = nx * ny;
     const P = new Array(N), Nn = new Array(N), own = new Array(N), sup = new Array(N);
     if (torte) torteSample(o, rt, st, ew, eh, nx, ny, P, Nn, own, sup, lift);
     else for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
