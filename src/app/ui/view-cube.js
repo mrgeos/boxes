@@ -55,15 +55,21 @@ function syncViewCube() {
     });
   }
 }
-/* the corner, raised over the action bar and the selection's bar when they reach under it (a narrow stage, a phone) */
-function placeCube() {
-  const box = $('#viewCube'); if (!box) return;
-  const st = box.parentElement, x0 = st.clientWidth - box.offsetWidth - 24;
-  let top = st.clientHeight;
-  for (const el of [$('#actionBar'), $('#ctxBar')]) if (el && !el.hidden && el.offsetWidth && el.offsetLeft + el.offsetWidth > x0) top = Math.min(top, el.offsetTop);
-  const bottom = top < st.clientHeight ? st.clientHeight - top + 10 : 16;
-  if (box.style.bottom !== bottom + 'px') box.style.bottom = bottom + 'px';
+/* a corner widget raised over the action bar and the selection's bar when they reach under it (a narrow stage,
+   a phone). Measured on screen: the bars are centred with a transform, which offsetLeft does not see */
+function liftOverBars(box) {
+  if (!box) return;
+  const st = box.parentElement.getBoundingClientRect(), r = box.getBoundingClientRect();
+  let top = st.bottom;
+  for (const el of [$('#actionBar'), $('#ctxBar')]) {
+    if (!el || el.hidden || !el.offsetWidth) continue;
+    const q = el.getBoundingClientRect();
+    if (q.right > r.left - 8 && q.left < r.right + 8) top = Math.min(top, q.top);
+  }
+  const bottom = (top < st.bottom ? st.bottom - top + 10 : 16) + 'px';
+  if (box.style.bottom !== bottom) box.style.bottom = bottom;
 }
+const placeCube = () => liftOverBars($('#viewCube'));
 /* the camera turned by a drag on the cube: round the pivot, as the orbit controls do */
 function orbitBy(dx, dy) {
   const off = camera.position.clone().sub(controls.target), s = new THREE.Spherical().setFromVector3(off);
@@ -164,4 +170,4 @@ function initViewCube() {
   if (name) new MutationObserver(() => { $('#vcFabName').textContent = name.textContent; }).observe(name, { childList: true, characterData: true, subtree: true });
 }
 
-export { initViewCube, setSpin, syncViewCube };
+export { initViewCube, liftOverBars, setSpin, syncViewCube };

@@ -17,6 +17,7 @@ import { syncCtxBar } from '../ui/context-bar.js';
 import { syncStageHint } from '../ui/stage-hint.js';
 import { drawSelLook, syncSelLook } from './sel-look.js';
 import { syncViewCube } from '../ui/view-cube.js';
+import { syncItemNav } from '../ui/item-nav.js';
 import { renderBrand } from '../ui/brand-panel.js';
 import { layoutPending } from '../core/groups.js';
 import { applyEnv, spinEnv } from './environments.js';
@@ -62,6 +63,14 @@ function tweenCamera(p1, q1, instant = false) {
 function objBounds(id) {
   const rt = RT.get(id), b = new THREE.Box3(); if (rt) b.expandByObject(rt.group);
   return b.isEmpty() ? null : b;
+}
+/* frames these objects together (an object, or the objects of a group) from the same side the camera looks from now */
+function frameItems(ids) {
+  const b = new THREE.Box3(); for (const id of ids) { const q = objBounds(id); if (q) b.union(q); }
+  if (b.isEmpty()) return;
+  const c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
+  const off = camera.position.clone().sub(controls.target).setLength(fitDistance(r));
+  tweenCamera(c.clone().add(off), c);
 }
 /* move the pivot to the selected object; keep the viewing angle, adjust distance only if it is far off */
 function focusSelected({ frame = false } = {}) {
@@ -181,7 +190,7 @@ function initCamera() {
       const f = rt.faces[k];
       if (f.flash > 0) { changed = true; f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
     }
-    if (changed) { fitClipPlanes(); renderer.render(scene, camera); drawSelLook(); syncViewCube(); }
+    if (changed) { fitClipPlanes(); renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
     syncCtxBar(changed); syncStageHint();
     if (ui.editor) { ui.editor = false; drawEditor(); }
     if (ui.net) { ui.net = false; drawNet(); }
@@ -192,4 +201,4 @@ function initCamera() {
   });
 }
 
-export { VIEW_DIRS, VIEW_LABEL, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
+export { VIEW_DIRS, VIEW_LABEL, frameItems, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
