@@ -11,7 +11,9 @@ import { drawLayer, layerBox } from '../faces/render.js';
 import { clipRect, editCursor, editDrag, editFrom, editHandles, editMode, editRects, maskPath, setEditMode, uncropped } from '../core/mask.js';
 import { renderLayerProps } from './face-panel.js';
 import { placementsFor } from '../stickers/placement.js';
-import { drawSticker } from '../stickers/film.js';
+import { drawSticker, stickerFoil, tinted } from '../stickers/film.js';
+import { stickerOfKey } from '../stickers/design.js';
+import { stickerSize } from '../stickers/placement.js';
 import { pickLayers } from '../core/selection.js';
 import { startTextEdit } from './text-edit.js';
 import { boundsOf, clickPick, groupOf, layerAABB, moveLayers, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
@@ -26,6 +28,21 @@ const ed = $('#editor'), ectx = ed.getContext('2d');
 /* the face is drawn with a margin round it (PAD px), where the part of a layer past its edge shows */
 const PAD = 16;
 const edState = { k: 1, dw: 0, dh: 0, drag: null, guides: [], marquee: null };
+/* a sticker's design: what lies outside its shape is cut away; it is veiled, the shape's edge dashed */
+let veilC = null;
+function stickerVeil(c, st, dw, dh) {
+  veilC ??= document.createElement('canvas'); veilC.width = Math.max(1, Math.round(dw * 2)); veilC.height = Math.max(1, Math.round(dh * 2));
+  const x = veilC.getContext('2d'), W = veilC.width, H = veilC.height, [w] = stickerSize(st);
+  x.fillStyle = 'rgba(244,241,234,.78)'; x.fillRect(0, 0, W, H); x.globalCompositeOperation = 'destination-out';
+  const path = q => { q.beginPath(); if (st.kind === 'circle') q.ellipse(W / 2, H / 2, W / 2, H / 2, 0, 0, Math.PI * 2); else q.roundRect(0, 0, W, H, Math.min((st.radius || 0) * W / w, W / 2, H / 2)); };
+  if (st.kind === 'custom') { const t = tinted(st.src, '#000'); if (t) x.drawImage(t, 0, 0, W, H); } else { path(x); x.fill(); }
+  x.globalCompositeOperation = 'source-over';
+  c.drawImage(veilC, 0, 0, dw, dh);
+  if (st.kind !== 'custom') {
+    c.save(); c.scale(dw / W, dh / H); path(c); c.restore();
+    c.save(); c.strokeStyle = 'rgba(0,0,0,.35)'; c.setLineDash([4, 4]); c.lineWidth = 1; c.stroke(); c.restore();
+  }
+}
 function drawEditor() {
   const o = activeObj(), wrap = $('#editorWrap');
   if (!o || !sel.face) { ectx.setTransform(1, 0, 0, 1, 0, 0); ectx.clearRect(0, 0, ed.width, ed.height); return; }
@@ -45,8 +62,12 @@ function drawEditor() {
   if (circle) { c.beginPath(); c.arc(dw / 2, dh / 2, dw / 2, 0, Math.PI * 2); c.clip(); }
   // a cake board: its own outline (round, scalloped, with its tab)
   else if (o.type === 'board') { c.beginPath(); boardFacePath(o, sel.face).forEach(([u, v], i) => c[i ? 'lineTo' : 'moveTo'](u * dw, v * dh)); c.closePath(); c.clip(); }
+  // a foil sticker: its metal under the print, as on the model
+  const stE = stickerOfKey(o, sel.face);
+  if (stE?.finish.startsWith('foil') && !stE.clear) { c.save(); c.translate(dw / 2, dh / 2); c.fillStyle = stickerFoil(c, stE.finish, dw, dh); c.fillRect(-dw / 2, -dh / 2, dw, dh); c.restore(); }
   c.drawImage(f.canvas, 0, 0, dw, dh);
   c.restore();
+  if (stE) stickerVeil(c, stE, dw, dh);
   const accentCss = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
   if (circle) { c.strokeStyle = 'rgba(0,0,0,.25)'; c.setLineDash([4, 4]); c.beginPath(); c.arc(dw / 2, dh / 2, dw / 2 - .5, 0, Math.PI * 2); c.stroke(); c.setLineDash([]); }
   if (sel.face === 'sleeve' && sleeveOn(o)) {
@@ -113,7 +134,7 @@ function drawEditor() {
       if (!st.visible) continue;
       for (const pl of placementsFor(o, st)) if (pl.key === sel.face) {
         const M = pl.M; c.save(); c.setTransform(dpr * sc * M[0], dpr * sc * M[1], dpr * sc * M[2], dpr * sc * M[3], dpr * (sc * M[4] + PAD), dpr * (sc * M[5] + PAD));
-        drawSticker(c, st, sc * dpr, false); c.restore();
+        drawSticker(c, st, sc * dpr, false, rt.faces['st:' + st.id]?.canvas); c.restore();
       }
     }
     base();

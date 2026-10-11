@@ -3,6 +3,7 @@ import { $, $$, esc, fmt, toast } from '../core/util.js';
 import { BLENDS, EFFECTS, ICON, SWATCHES, UV_THICK } from '../core/constants.js';
 import { activeFaceData, activeLayer, activeObj, assets, sel, state } from '../core/state.js';
 import { faceKeys, faceLabel, faceMM, facePx, isClearFace, newImage } from '../core/model.js';
+import { stickerOfKey } from '../stickers/design.js';
 import { getImg, importImageFile } from '../core/assets.js';
 import { library } from '../core/library.js';
 import { extraById, extraName, isPart } from '../core/extras.js';
@@ -23,10 +24,13 @@ import { MASKS, cropped, editMode, hasPanels, resetCrop, setClipBelow, setClipTo
 import { invalidate } from '../scene/camera.js';
 
 function renderFaceTabs() {
-  const o = activeObj();
-  $('#objBadge').textContent = o ? (sel.part ? extraName(o, extraById(o, sel.part) || { kind: sel.part, T: {} }) : o.name) : '';
-  // the faces of the object itself, or the one face of the sleeve or carrier picked
-  const keys = o ? (sel.part ? [sel.part] : faceKeys(o).filter(k => !isPart(k))) : [];
+  const o = activeObj(), st = o && stickerOfKey(o, sel.face);
+  $('#objBadge').textContent = o ? (st ? extraName(o, { kind: 'sticker', T: st }) : sel.part ? extraName(o, extraById(o, sel.part) || { kind: sel.part, T: {} }) : o.name) : '';
+  $('#objBadge').previousElementSibling.textContent = st ? 'Дизайн наклейки' : 'Дизайн грани';
+  // a sticker's design is one face and is not copied onto the object's faces
+  $('#copyTarget').closest('.row').hidden = !!st;
+  // the faces of the object itself, or the one face of the sleeve, carrier or sticker picked
+  const keys = o ? (st ? [sel.face] : sel.part ? [sel.part] : faceKeys(o).filter(k => !isPart(k))) : [];
   $('#faceTabs').hidden = keys.length < 2;
   $('#faceTabs').innerHTML = o ? keys.map(k => `<button class="chip ${k === sel.face ? 'on' : ''}" data-f="${k}">${faceLabel(o, k)}${o.faces[k].layers.length ? `<span class="cnt">${o.faces[k].layers.length}</span>` : ''}</button>`).join('') : '';
   $$('#faceTabs .chip').forEach(b => b.onclick = () => select(sel.obj, b.dataset.f, null, { flash: true }));
@@ -368,31 +372,31 @@ function bgRowHTML(f) {
     <span class="acts"><span class="pin-lock" aria-hidden="true">${ICON.lock}</span></span></div>`;
 }
 function renderBgProps(sec, o, f) {
-  const k = sel.face;
+  const k = sel.face, st = stickerOfKey(o, k);
   sec.innerHTML = `<div class="sec-h"><h2>Фон</h2><span class="badge">${faceLabel(o, k)}</span></div>
-    <p class="hint">Нижний слой грани: цвет бумаги под печатью. Он всегда под остальными слоями и заливает всю грань.</p>
+    <p class="hint">${st ? (st.clear || st.finish.startsWith('foil') ? `Наклейка ${st.clear ? 'без фона' : 'на фольге'}: фон не печатается, под слоями ${st.clear ? 'прозрачная плёнка' : 'металл'} (меняется во вкладке «Форма»).` : 'Нижний слой наклейки: её цвет под печатью. Всё, что выходит за форму наклейки, обрезается.') : 'Нижний слой грани: цвет бумаги под печатью. Он всегда под остальными слоями и заливает всю грань.'}</p>
     <div class="row"><input type="color" data-k="bg" aria-label="Цвет фона"><div class="swatches" id="bgSw">${SWATCHES.map(c => `<button class="sw" style="background:${c}" data-c="${c}" title="${c}" aria-label="Фон ${c}" aria-pressed="${f.bg === c}"></button>`).join('')}</div></div>
     ${gradHTML(f, 'bgGrad')}
-    <div class="grid2"><button class="btn sm" id="bgAll">На все грани</button><button class="btn sm" id="bgPic">Картинка на фон…</button></div>
-    <div class="grid2"><button class="btn sm danger" id="faceClear" ${f.layers.length ? '' : 'disabled'}>Очистить грань</button></div>`;
+    <div class="grid2">${st ? '' : '<button class="btn sm" id="bgAll">На все грани</button>'}<button class="btn sm" id="bgPic">Картинка на фон…</button></div>
+    <div class="grid2"><button class="btn sm danger" id="faceClear" ${f.layers.length ? '' : 'disabled'}>${st ? 'Очистить наклейку' : 'Очистить грань'}</button></div>`;
   const redraw = () => { ui.layers = true; ui.editor = true; };
   bindFields(sec, activeFaceData, key => { if (key === 'bg') setFaceBg(o, k, f.bg); else markFace(o, k); redraw(); });
   $$('#bgSw .sw', sec).forEach(b => b.onclick = () => { setFaceBg(o, k, b.dataset.c); redraw(); renderLayerProps(); commit(); });
   $('#gradKind', sec).onchange = e => { setFaceBgGrad(o, k, e.target.value || null); redraw(); renderLayerProps(); commit(); };
-  $('#bgAll', sec).onclick = () => { bgToAllFaces(o, k); renderFaceTabs(); commit(); toast('Фон применён ко всем внешним граням'); };
+  if ($('#bgAll', sec)) $('#bgAll', sec).onclick = () => { bgToAllFaces(o, k); renderFaceTabs(); commit(); toast('Фон применён ко всем внешним граням'); };
   $('#bgPic', sec).onclick = e => pickAsset(e.currentTarget, 'Картинка на фон грани', r => {
     const L = addBackgroundImage(o, k, r.id, r.aspect); pickLayers([L.id]); renderFaceTabs(); commit();
   });
   $('#faceClear', sec).onclick = () => { clearFace(o, k); selectBg(); renderLayers(); renderLayerProps(); renderFaceTabs(); commit(); };
 }
 function bgMenu(o, x, y) {
-  const k = sel.face, f = o.faces[k];
+  const k = sel.face, f = o.faces[k], st = stickerOfKey(o, k);
   selectBg(); renderLayers(); renderLayerProps();
   openMenu(x, y, [
-    { label: 'Фон на все грани', run: () => { bgToAllFaces(o, k); commit(); toast('Фон применён ко всем внешним граням'); } },
+    ...(st ? [] : [{ label: 'Фон на все грани', run: () => { bgToAllFaces(o, k); commit(); toast('Фон применён ко всем внешним граням'); } }]),
     { label: 'Картинка на фон…', run: () => $('#bgPic')?.click() },
     'sep',
-    { label: 'Очистить грань', disabled: !f.layers.length, run: () => $('#faceClear')?.click() },
+    { label: st ? 'Очистить наклейку' : 'Очистить грань', disabled: !f.layers.length, run: () => $('#faceClear')?.click() },
   ], 'Фон');
 }
 /* the layer's cut: crop frame of a picture, a mask shape, clipping to the layer below, to the face or the panel */

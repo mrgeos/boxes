@@ -7,7 +7,14 @@ const state = { name: 'Без названия', objects: [], scene: { v: 2, pre
 // layers: the layers picked on the face (see core/layers.js); part: the extra with a face of its own (a sleeve, a
 // carrier) shown as an object of its own, sticker / ribbon: the sticker or ribbon shown (core/extras.js); bg: the face's background
 // picked in the layer list
-const sel = { obj: null, face: null, layer: null, layers: [], sticker: null, ribbon: null, part: null, bg: false, group: null, multi: [] };
+const sel = { obj: null, objFace: null, layer: null, layers: [], sticker: null, ribbon: null, part: null, bg: false, group: null, multi: [] };
+/* face: the face whose design the panel works on. While a sticker is picked, its own design (stickers/design.js,
+   key 'st:<id>'); otherwise the object's face (objFace), which a sticker's key never replaces */
+Object.defineProperty(sel, 'face', {
+  enumerable: true,
+  get() { const st = this.sticker && activeObj()?.stickers?.find(t => t.id === this.sticker); return st?.design ? 'st:' + st.id : this.objFace; },
+  set(v) { if (!(typeof v === 'string' && v.startsWith('st:'))) this.objFace = v; },
+});
 const assets = {};
    // id -> dataURL
 const imgCache = {};

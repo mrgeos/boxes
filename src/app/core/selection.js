@@ -11,6 +11,7 @@ import { renderFacePanel, renderFaceTabs, renderLayerProps, renderLayers } from 
 import { renderStickers } from '../ui/stickers-panel.js';
 import { refreshTabs } from '../ui/tabs.js';
 import { extraById, isPart } from './extras.js';
+import { isStickerKey } from '../stickers/design.js';
 
 function select(objId, face = undefined, layerId = null, { flash = false, focus = true } = {}) {
   const changedObj = sel.obj !== objId, leftGroup = !!sel.group, part0 = sel.part;
@@ -39,7 +40,7 @@ function selectLayer(id) { pickLayers(id ? [id] : []); }
 /* picks several layers of the active face (main: the one whose properties are shown) */
 function pickLayers(ids, main = ids.at(-1)) {
   ui.lib = true; setLayerSelection(ids, main);
-  if (ids.length && (sel.sticker || sel.ribbon)) { sel.sticker = sel.ribbon = null; ui.stickers = true; }
+  if (ids.length && (sel.sticker || sel.ribbon) && !isStickerKey(sel.face)) { sel.sticker = sel.ribbon = null; ui.stickers = true; }
   renderLayers(); renderLayerProps(); ui.editor = true; invalidate();
 }
 

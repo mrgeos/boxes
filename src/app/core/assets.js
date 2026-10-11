@@ -7,6 +7,7 @@ import { RT, markFace, markObj, rebuildQueue, ui } from '../scene/renderer.js';
 import { stickerDirty, touchSticker } from '../stickers/placement.js';
 import { tintCache } from '../stickers/film.js';
 import { ribbonAssetLoaded } from '../carriers/ribbon.js';
+import { faceEntries } from '../stickers/design.js';
 
 function addAsset(url) { const id = 'a' + uid(); assets[id] = url; return id; }
 function getImg(id) {
@@ -22,7 +23,7 @@ function getImg(id) {
 function onAssetLoaded(id) {
   for (const o of state.objects) {
     if (o.dieline === id) markObj(o);
-    for (const k in o.faces) if (o.faces[k].layers.some(l => l.src === id)) markFace(o, k);
+    for (const [k, f] of faceEntries(o)) if (f.layers.some(l => l.src === id)) markFace(o, k);
     if (o.product?.src === id) rebuildQueue.add(o.id);
     for (const st of o.stickers || []) if (st.src === id || st.bgSrc === id) {
       tintCache.forEach((_, key) => key.startsWith(id + '|') && tintCache.delete(key));

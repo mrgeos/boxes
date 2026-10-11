@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { $, DEG, S, clamp } from '../core/util.js';
 import { FINISHES, LID_COLORS, WHITE_INSIDE } from '../core/constants.js';
 import { sel } from '../core/state.js';
-import { clearLid, ensureFaces, faceKeys, faceMM, facePx, isClearFace } from '../core/model.js';
+import { clearLid, ensureFaces, faceKeys, faceMM, facePx, isClearFace, paintKeys } from '../core/model.js';
 import { buildCup } from '../carriers/cup.js';
 import { buildBag } from '../carriers/bag.js';
 import { buildTube } from '../carriers/tube.js';
@@ -102,7 +102,7 @@ function markFace(o, k) {
   dirtyFaces.add(o.id + '|' + k);
   if (o.id === sel.obj) { ui.editor = true; ui.net = true; }
 }
-function markObj(o) { for (const k of faceKeys(o)) markFace(o, k); }
+function markObj(o) { for (const k of paintKeys(o)) markFace(o, k); }
 function ensureFaceRT(o, k) {
   const rt = RT.get(o.id); let f = rt.faces[k];
   const [W, H, ppm] = facePx(o, k);

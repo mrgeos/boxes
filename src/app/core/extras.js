@@ -42,8 +42,8 @@ function extraName(o, e) {
   if (e.kind === 'insert') return `Ложемент ${o.insert.cols}×${o.insert.rows}${o.insert.mat === 'foam' ? ', пена' : ''}`;
   if (e.kind === 'ribbon') return ribbonName(e.T);
   if (e.kind === 'fill') return `Начинка: ${modelName(o.fill.model).toLowerCase()} ×${o.fill.count}`;
-  const st = e.T;
-  return st.text?.trim() ? `Наклейка «${st.text.trim().slice(0, 20)}»` : st.bgSrc ? 'Фото-наклейка' : st.kind === 'custom' ? 'Наклейка своей формы' : STICKER_KIND[st.kind].split(' ')[0];
+  const st = e.T, text = st.design ? st.design.layers.find(L => L.type === 'text' && L.text?.trim())?.text : st.text;
+  return text?.trim() ? `Наклейка «${text.trim().split('\n')[0].slice(0, 20)}»` : st.bgSrc ? 'Фото-наклейка' : st.kind === 'custom' ? 'Наклейка своей формы' : STICKER_KIND[st.kind].split(' ')[0];
 }
 const extraHidden = e => e.kind === 'sticker' ? !e.T.visible : !!e.T.hidden;
 /* the ribbon picked (shown as an object of its own) */

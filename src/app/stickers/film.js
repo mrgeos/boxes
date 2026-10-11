@@ -5,8 +5,9 @@ import { FOILS } from '../core/constants.js';
 import { getImg } from '../core/assets.js';
 import { artImg } from '../core/vector.js';
 import { ensureFont, fontStr } from '../core/fonts.js';
-import { RT, maxAniso } from '../scene/renderer.js';
-import { TOUCH } from '../core/model.js';
+import { RT, markFace, maxAniso } from '../scene/renderer.js';
+import { TOUCH, ensureFaces } from '../core/model.js';
+import { migrateSticker, stickerKey } from './design.js';
 import { torteSample } from '../carriers/torte.js';
 import { STICKER_FX, placementsFor, stickerSize } from './placement.js';
 import { dragSt } from '../scene/interaction.js';
@@ -44,13 +45,38 @@ function stickerFoil(c, finish, w, h) {
   cols.forEach((col, i) => g.addColorStop(i / (cols.length - 1), col));
   return g;
 }
-/* draws a sticker in its own mm space (origin at its centre); ppm sizes the shadow in pixels */
-function drawSticker(c, st, ppm, withShadow = true) {
+/* a sticker with its design in layers: the design's picture (art: its face's canvas) cut to the sticker's shape,
+   over the foil when the sticker is foil, the outline on top; a custom shape is the picture's silhouette, with its
+   white margin around */
+let cutC = null;
+function drawDesign(c, st, w, h, foil, art) {
+  if (st.kind === 'custom') {
+    const ol = st.outline || 0, white = tinted(st.src, '#ffffff'), shape = tinted(st.src, '#000000'); if (!shape) return;
+    if (ol > 0 && white) for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.drawImage(white, -w / 2 + Math.cos(a) * ol, -h / 2 + Math.sin(a) * ol, w, h); }
+    cutC ??= document.createElement('canvas');
+    const W = art?.width || shape.width, H = art?.height || shape.height; cutC.width = W; cutC.height = H;
+    const x = cutC.getContext('2d');
+    if (foil) { x.save(); x.scale(W / w, H / h); x.translate(w / 2, h / 2); x.fillStyle = stickerFoil(x, st.finish, w, h); x.fillRect(-w / 2, -h / 2, w, h); x.restore(); }
+    if (art) x.drawImage(art, 0, 0, W, H);
+    x.globalCompositeOperation = 'destination-in'; x.drawImage(shape, 0, 0, W, H); x.globalCompositeOperation = 'source-over';
+    c.drawImage(cutC, -w / 2, -h / 2, w, h);
+    return;
+  }
+  c.save(); stickerPath(c, st, w, h); c.clip();
+  if (foil && !st.clear) { c.fillStyle = stickerFoil(c, st.finish, w, h); c.fillRect(-w / 2, -h / 2, w, h); }
+  if (art) c.drawImage(art, -w / 2, -h / 2, w, h);
+  c.restore();
+  if (st.strokeW > 0) { stickerPath(c, st, w - st.strokeW, h - st.strokeW); c.lineWidth = st.strokeW; c.strokeStyle = st.stroke; c.stroke(); }
+}
+/* draws a sticker in its own mm space (origin at its centre); ppm sizes the shadow in pixels; art: the canvas of its
+   design (see drawDesign) */
+function drawSticker(c, st, ppm, withShadow = true, art = null) {
   const [w, h] = stickerSize(st), foil = st.finish.startsWith('foil');
   if (withShadow && st.finish !== 'clear') {
     c.save(); c.shadowColor = 'rgba(0,0,0,.28)'; c.shadowBlur = Math.max(1, .9 * ppm); c.shadowOffsetY = .35 * ppm;
     stickerMask(c, st, '#ffffff'); c.restore();
   }
+  if (st.design) return drawDesign(c, st, w, h, foil, art);
   if (st.kind === 'custom') {
     const ol = st.outline || 0, im = artImg(st.src, st.recolor, st.keyout);
     if (ol > 0) { const t = tinted(st.src, '#ffffff'); if (t) for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.drawImage(t, -w / 2 + Math.cos(a) * ol, -h / 2 + Math.sin(a) * ol, w, h); } }
@@ -110,7 +136,8 @@ function stickerMaterial(params, offset, layers = 0) {
 const stickerMargin = st => (st.kind === 'custom' ? st.outline || 0 : 0) + .5;
 function stickerLook(rt, st) {
   rt.stickerLook ??= new Map();
-  const key = JSON.stringify({ ...st, x: 0, y: 0, face: 0, rot: 0, visible: 0, loaded: !!(st.src && getImg(st.src)), bgLoaded: !!(st.bgSrc && getImg(st.bgSrc)) });
+  // (its design is painted on its face first, which then draws the look again: see faces/render.js)
+  const key = JSON.stringify({ ...st, x: 0, y: 0, face: 0, rot: 0, visible: 0, design: 0, loaded: !!(st.src && getImg(st.src)), bgLoaded: !!(st.bgSrc && getImg(st.bgSrc)) });
   let L = rt.stickerLook.get(st.id);
   if (L && L.key === key) return L;
   if (L) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edge?.dispose(); }
@@ -119,7 +146,7 @@ function stickerLook(rt, st) {
   const ppm = TOUCH ? Math.min(6, 1024 / Math.max(ew, eh)) : Math.min(12, 2048 / Math.max(ew, eh));
   const paint = (fn, k = 1) => { const c = document.createElement('canvas'); c.width = Math.max(2, Math.round(ew * ppm * k)); c.height = Math.max(2, Math.round(eh * ppm * k));
     const x = c.getContext('2d'); x.setTransform(c.width / ew, 0, 0, c.height / eh, c.width / 2, c.height / 2); fn(x); return c; };
-  const tex = new THREE.CanvasTexture(paint(x => drawSticker(x, st, ppm, false)));
+  const tex = new THREE.CanvasTexture(paint(x => drawSticker(x, st, ppm, false, rt.faces[stickerKey(st)]?.canvas)));
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = maxAniso;
   // the edge colour: paper for opaque stickers, a darker tone of the fill for coloured ones
   const edgeCol = st.finish === 'clear' ? '#dfe7ea' : new THREE.Color(st.kind === 'custom' ? '#ece9e2' : st.fill).multiplyScalar(.82).getStyle();
@@ -138,6 +165,8 @@ function buildStickerFilms(o) {
   const rt = RT.get(o.id); if (!rt) return;
   for (const m of rt.stickerMeshes || []) { m.parent?.remove(m); if (m.userData.own) m.geometry.dispose(); if (m.isInstancedMesh) m.dispose(); }
   rt.stickerMeshes = [];
+  // an older sticker turns into layers once its pictures are there; its design is then painted as a face
+  for (const st of o.stickers || []) if (!st.design && migrateSticker(st)) { ensureFaces(o); markFace(o, stickerKey(st)); }
   if (!rt.frames) return;
   const lift = .1, V = () => new THREE.Vector3();
   for (const st of o.stickers || []) {
@@ -238,4 +267,4 @@ function buildStickerFilms(o) {
   }
 }
 
-export { buildStickerFilms, drawSticker, stickerMargin, stickerMask, stickerShadow, tintCache };
+export { buildStickerFilms, drawSticker, stickerFoil, stickerMargin, stickerMask, stickerShadow, tintCache, tinted };

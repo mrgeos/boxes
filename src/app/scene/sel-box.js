@@ -10,6 +10,7 @@ import { editHandles, editMode, editRects } from '../core/mask.js';
 import { boundsOf, selectedLayers } from '../core/layers.js';
 import { tool } from '../ui/action-bar.js';
 import { recording } from './camera.js';
+import { stickerOfKey } from '../stickers/design.js';
 
 /* The selected layer (or sticker) gets a thin frame with corner marks, so it is clear on the model what the
    panel works on. The frame is drawn on the surface itself: each point of it is found on the meshes printed
@@ -30,7 +31,8 @@ const LIFT = .4 * S, HLIFT = 1.5 * S, STEP = 1.5;   // off the surface; sampling
 /* what is selected: the rectangle (its own mm, centred) and a key that changes whenever the frame would */
 function target() {
   const o = activeObj(), rt = o && RT.get(o.id); if (!rt) return null;
-  const st = !activeLayer() && activeSticker(), L = !st && activeLayer();
+  // a sticker's design open in the panel: the frame goes round the sticker (its layers are edited in the window)
+  const st = stickerOfKey(o, sel.face) || (!activeLayer() && activeSticker()), L = !st && activeLayer();
   // several layers: one frame round them all, square to the face (its own mm)
   const many = !st && selectedLayers();
   if (many?.length > 1) {

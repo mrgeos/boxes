@@ -18,6 +18,8 @@ import { defaultInsert, insertDims, insertOn, insertPanels } from '../carriers/i
 import { bookDims } from '../carriers/book.js';
 import { casketLidH } from '../carriers/rigid.js';
 import { gableDims, hexDims, isShape, pillowDims, pyramidSides } from '../carriers/shapes.js';
+import { isStickerKey, migrateSticker, stickerKey, stickerOfKey } from '../stickers/design.js';
+import { stickerSize } from '../stickers/placement.js';
 
 /* printed faces of an object, in tab order; depends on the lid construction */
 /* faces that close into a ring (a sleeve glued into a loop, the wall of a tube, a cup or a cake lid): what runs
@@ -77,9 +79,9 @@ const wallMM = o => clamp(Math.max(o.wallT ?? o.thickness, o.thickness), o.thick
 const doubleWall = o => o.type === 'box' && wallMM(o) > o.thickness * 1.6 + .2;
 /* a separate lid can be clear PET (cake boxes): its faces carry only print, the rest is plastic */
 const clearLid = o => o.type === 'box' && o.lidType === 'telescope' && o.lidMat === 'clear';
-const isClearFace = (o, k) => (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k))) || (o.type === 'torte' && k !== 'carry') || k === 'collar';
+const isClearFace = (o, k) => isStickerKey(k) ? stickerClear(stickerOfKey(o, k)) : (clearLid(o) && (k === 'top' || LID_WALLS.includes(k))) || (bagFilm(o) && !EXT_KEYS.includes(k)) || (o.type === 'dome' && (k === 'top' || LID_WALLS.includes(k))) || (o.type === 'torte' && k !== 'carry') || k === 'collar';
 const outerKeys = o => faceKeys(o).filter(k => k !== 'inside' && k !== 'insideBottom');
-const faceLabel = (o, k) => k === 'tissue' ? 'Тишью' : k === 'insert' ? 'Ложемент' : /^side\d+$/.test(k) ? `Грань ${k.slice(4)}` : (o.lidType === 'hexagon' && k === 'wrap') ? 'Стенки' : (o.lidType === 'hexagon' && k === 'lidWrap') ? 'Крышка: стенки' : (o.type === 'board' && k === 'top') ? 'Верх подложки' : (o.type === 'board' && k === 'bottom') ? 'Низ подложки' : k === 'collar' ? 'Ацетатная лента' : (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : ((o.type === 'bag' || o.type === 'paperbag') && BAG_LABEL[k]) || FACE_LABEL[k];
+const faceLabel = (o, k) => isStickerKey(k) ? 'Наклейка' : k === 'tissue' ? 'Тишью' : k === 'insert' ? 'Ложемент' : /^side\d+$/.test(k) ? `Грань ${k.slice(4)}` : (o.lidType === 'hexagon' && k === 'wrap') ? 'Стенки' : (o.lidType === 'hexagon' && k === 'lidWrap') ? 'Крышка: стенки' : (o.type === 'board' && k === 'top') ? 'Верх подложки' : (o.type === 'board' && k === 'bottom') ? 'Низ подложки' : k === 'collar' ? 'Ацетатная лента' : (o.type === 'tube' && k === 'top') ? 'Верх' : (o.type === 'dome' && k === 'top') ? 'Крышка сверху' : (o.type === 'torte' && k === 'top') ? 'Крышка сверху' : k === 'lidWrap' ? 'Крышка: стенка' : (o.type === 'cup' && k === 'wrap') ? 'Стенка стакана' : ((o.type === 'bag' || o.type === 'paperbag') && BAG_LABEL[k]) || FACE_LABEL[k];
 function ensureFaces(o) {
   o.stickers ??= [];
   o.netV ??= o.dieline ? 1 : 2;
@@ -124,7 +126,18 @@ function ensureFaces(o) {
   for (const st of o.stickers) if (!faceKeys(o).includes(st.face)) st.face = faceKeys(o)[0];
   for (const k of faceKeys(o)) if (!o.faces[k]) o.faces[k] = { bg: EXT_KEYS.includes(k) || k === 'sleeve' || k === 'carry' || k === 'tissue' ? '#ffffff' : k.startsWith('inside') || HANDLE_KEYS.includes(k) ? (o.whiteInside === false && o.board ? o.board : '#f4f1ea') : (o.board || '#ffffff'), layers: [] };
   if (!o.board) o.board = (o.faces.front || o.faces.wrap)?.bg || '#ffffff';
+  // each sticker's design, reached as a face of its own (a link, not saved: the design is inside the sticker)
+  for (const k of Object.getOwnPropertyNames(o.faces)) if (isStickerKey(k) && !stickerOfKey(o, k)) delete o.faces[k];
+  for (const st of o.stickers) {
+    migrateSticker(st);
+    const k = stickerKey(st);
+    if (!Object.getOwnPropertyDescriptor(o.faces, k)) Object.defineProperty(o.faces, k, { get: () => stickerOfKey(o, k)?.design, configurable: true, enumerable: false });
+  }
 }
+/* a clear sticker, or a foil one (the metal is its ground), has no printed ground of its own */
+const stickerClear = st => !!st && (!!st.clear || !!st.finish?.startsWith('foil'));
+/* the faces to paint: the object's and its stickers' designs */
+const paintKeys = o => [...faceKeys(o), ...(o.stickers || []).filter(st => st.design).map(stickerKey)];
 function newObject(presetId = 'mailer') {
   const p = PRESETS.find(x => x.id === presetId) || PRESETS[0];
   const o = { id: uid(), name: p.label, type: p.type, dims: { ...p.dims }, lid: 0, thickness: p.thick ?? 2, finish: p.finish, edge: p.edge,
@@ -159,6 +172,7 @@ const newImage = (src, aspect = 1) => ({ id: uid(), type: 'image', src, aspect, 
 const newShape = (kind = 'rect') => ({ id: uid(), type: 'shape', kind, w: kind === 'ellipse' ? .3 : .5, h: kind === 'ellipse' ? .3 : .22, fill: '#0a7aa1', radius: 0, stroke: 0, x: .5, y: .5, rot: 0, opacity: 1, blend: 'source-over', effect: 'none', visible: true });
 /* ---------- face geometry (mm → px) ---------- */
 function faceMM(o, k) {
+  if (isStickerKey(k)) { const st = stickerOfKey(o, k); return st ? stickerSize(st) : [40, 40]; }
   const { w, h, d } = o.dims;
   if (o.type === 'tube') return k === 'wrap' ? [Math.PI * w, h] : [w, w];
   if (o.type === 'board') { if (k === 'collar') { const D = collarDims(o); return [D.len, D.h]; } return boardFaceMM(o); }
@@ -255,6 +269,8 @@ function planTextures(objects, selIds) {
   return redo;
 }
 function facePx(o, k) {
+  // a sticker's design: as many px per mm as its look on the model (stickers/film.js), so it lies on it pixel for pixel
+  if (isStickerKey(k)) { const [mw, mh] = faceMM(o, k), s = TOUCH ? Math.min(6, 1024 / Math.max(mw, mh)) : Math.min(12, 2048 / Math.max(mw, mh)); return [Math.max(16, Math.round(mw * s)), Math.max(16, Math.round(mh * s)), s]; }
   const [mw, mh] = faceMM(o, k), max = sharp.has(o.id) ? TEX_MAX : TEX_MAX / 2 ** texTier;
   let s = Math.min(max / Math.sqrt(mw * mh), TEX_SIDE / Math.max(mw, mh), 10);
   if (plainFace(o, k)) s = Math.min(s, o.grain > 0 ? 3 : 64 / Math.max(mw, mh));
@@ -349,4 +365,4 @@ function addSleeve(o, n) {
   return n;
 }
 
-export { loopAxis, clearLid, doubleWall, ensureFaces, faceKeys, faceLabel, faceMM, facePx, isClearFace, netLayout, newImage, newObject, newShape, newText, outerKeys, planTextures, setBoard, squeezeTextures, TOUCH, wallMM };
+export { loopAxis, clearLid, doubleWall, ensureFaces, faceKeys, faceLabel, faceMM, facePx, isClearFace, netLayout, newImage, newObject, newShape, newText, outerKeys, paintKeys, planTextures, setBoard, squeezeTextures, TOUCH, wallMM };

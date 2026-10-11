@@ -6,6 +6,7 @@ import { faceMM, facePx, newImage, outerKeys } from './model.js';
 import { applyObjMaterials, markFace } from '../scene/renderer.js';
 import { layerBox } from '../faces/render.js';
 import { rotateItem, scaleItem, sizeOf } from './transform.js';
+import { isStickerKey } from '../stickers/design.js';
 
 /* The selection of a face's layers: sel.layer is the main one (its properties are shown), sel.layers all of them.
    sel.layers counts only while it holds sel.layer, so code that picks one layer (sel.layer = id) simply ends a
@@ -25,7 +26,8 @@ function setLayerSelection(ids, main = ids.at(-1) ?? null) {
   sel.bg = false;
   sel.layers = ids.length > 1 ? [...ids] : [];
   sel.layer = ids.length ? main : null;
-  if (ids.length) sel.sticker = sel.ribbon = null;
+  // a layer of the object's face leaves the sticker or ribbon picked; one of a sticker's own design keeps it
+  if (ids.length && !isStickerKey(sel.face)) sel.sticker = sel.ribbon = null;
 }
 /* the layers of L's group (or L alone) */
 const groupOf = (face, L) => L?.group ? face.layers.filter(l => l.group === L.group) : L ? [L] : [];

@@ -9,6 +9,7 @@ let off = false, shown = '';
 function hintNow() {
   if (sel.multi.length > 1) return 'Shift+клик добавляет или убирает объект, Alt + рамка выбирает областью';
   if (!activeObj()) return 'Выберите объект на сцене или в списке';
+  if (activeLayer() && activeSticker()) return 'Слой наклейки двигайте в окне дизайна справа, стрелки сдвигают его. Esc — снять выбор';
   if (activeLayer()) return 'Тащите слой прямо по модели, стрелки сдвигают его. Esc — снять выбор';
   if (activeSticker()) return 'Тащите наклейку прямо по модели, стрелки сдвигают её. Esc — к объекту';
   if (sel.part || sel.ribbon) return 'Доп настраивается справа, как отдельный объект. Esc — к объекту';

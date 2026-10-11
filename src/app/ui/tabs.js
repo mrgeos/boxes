@@ -32,10 +32,11 @@ function tabsNow() {
   return RIGHT;
 }
 const shownTab = () => { const t = tabsNow(); return t.includes(right) ? right : t.includes('design') && !paneExtra() ? 'design' : t[0]; };
-/* a sticker, a ribbon or a filling: drawn in the extras' section, its panes (data-pane) follow the tabs */
+/* a sticker, a ribbon or a filling: drawn in the extras' section, its panes (data-pane) follow the tabs; a sticker's
+   «Дизайн» is the faces' own design section, on the sticker's design (stickers/design.js) */
 const paneExtra = () => !sel.group && !!activeObj() && !!(activeSticker() || activeRibbon() || activeFill());
 function paintRight() {
-  const tabs = tabsNow(), cur = shownTab(), pane = paneExtra() ? cur : '';
+  const tabs = tabsNow(), cur = shownTab(), pane = paneExtra() && !(activeSticker()?.design && cur === 'design') ? cur : '';
   show('propPanel', hasSel ? (pane ? 'extras' : cur) : 'none');
   $('#stickerSec').dataset.pane = pane;
   $('#propTabs').hidden = !hasSel || tabs.length < 2;
