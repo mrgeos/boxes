@@ -461,3 +461,28 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 #stickerSec[data-pane=shape] [data-pane=design],#stickerSec[data-pane=design] [data-pane=shape]{display:none}
 /* the label over the object under the pointer (scene/sel-look.js) */
 .sel-label{position:absolute;transform:translate(-50%,-100%);padding:3px 9px;border-radius:999px;background:var(--accent);color:var(--accent-fg);font-size:11.5px;white-space:nowrap;pointer-events:none;z-index:2;box-shadow:var(--shadow)}
+/* the view cube in the stage's corner; on a phone a round button with a sheet of views (ui/view-cube.js) */
+.vcube{--vc:66px;--vc-h:33px;position:absolute;right:16px;bottom:16px;z-index:3;display:flex;flex-direction:column;align-items:center;gap:8px}
+.vc-scene{width:var(--vc);height:var(--vc);perspective:420px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.vc-scene:active{cursor:grabbing}
+.vc-cube{position:relative;width:100%;height:100%;transform-style:preserve-3d}
+.vc-face{position:absolute;inset:0;display:grid;grid-template-columns:20% 60% 20%;grid-template-rows:20% 60% 20%;background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line-2);border-radius:3px;backface-visibility:hidden;-webkit-backface-visibility:hidden;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--field) 60%,transparent)}
+.vc-face button{border:0;background:transparent;padding:0;margin:0;font:600 9.5px/1 var(--ui);letter-spacing:.02em;color:var(--muted);cursor:pointer;border-radius:2px}
+.vc-face button:hover{background:var(--accent-soft);color:var(--accent)}
+.vc-face button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.vc-btns{display:flex;gap:4px}
+.vc-b{width:30px;height:30px;display:grid;place-items:center;padding:0;border:1px solid var(--line);border-radius:7px;background:color-mix(in srgb,var(--panel) 94%,transparent);color:var(--muted);cursor:pointer;box-shadow:var(--shadow)}
+.vc-b:hover{color:var(--fg);border-color:var(--line-2)}
+.vc-b svg{width:16px;height:16px}
+.vc-fab,.vc-sheet{display:none}
+@media (max-width:700px),(pointer:coarse){
+  .vcube{right:10px}
+  .vc-scene,.vc-btns{display:none}
+  .vc-fab{display:grid;place-items:center;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 94%,transparent);backdrop-filter:blur(8px);box-shadow:var(--shadow);color:var(--fg);font:600 11px var(--ui);padding:0}
+  .vc-fab[aria-expanded=true]{border-color:var(--accent);color:var(--accent)}
+  .vc-sheet:not([hidden]){display:grid;position:absolute;right:0;bottom:54px;width:230px;grid-template-columns:1fr 1fr;gap:6px;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:var(--shadow)}
+  .vc-sheet button{height:44px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--fg);font:13px var(--ui)}
+  .vc-sheet button:active{background:var(--accent-soft)}
+  .vc-sheet button[data-v=q]{grid-column:1 / -1}
+  .vc-sheet button[data-v=focus]{border-color:var(--accent);color:var(--accent)}
+}
