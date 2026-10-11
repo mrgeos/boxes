@@ -29,8 +29,12 @@ function check() {
 function shoot(o) {
   stage ??= (() => {
     const s = new THREE.Scene(), cam = new THREE.PerspectiveCamera(28, 1, .01, 100);
+    /* the same kinds of light as the scene (a sky, a key light with a shadow, here unseen, a fill) so the objects' materials draw
+       here with the shader programs they already have: other lights would compile a second set of them, seconds
+       of stalls on a phone */
     s.add(new THREE.HemisphereLight(0xffffff, 0xb8b2a8, 1.6));
-    const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(3, 5, 4); s.add(key);
+    const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(3, 5, 4); key.castShadow = true; key.shadow.intensity = 0; key.shadow.mapSize.set(16, 16); s.add(key);
+    const fill = new THREE.DirectionalLight(0xffffff, 0); fill.position.set(-3, 2, 4); s.add(fill);
     const cv = document.createElement('canvas'); cv.width = cv.height = SIZE;
     return { s, cam, cv };
   })();

@@ -233,9 +233,27 @@ function plainFace(o, k) {
   // a layer elsewhere on the object may run over an edge onto this face
   return !Object.values(o.faces).some(q => q.layers?.some(L => L.wrap));
 }
+/* On a touch screen the faces with a picture also share a budget for the whole scene: when there are many, each
+   gets a quarter, a sixteenth… of the full area (in steps, so adding one object rarely repaints them all). The
+   objects being worked on (selected, up to SHARP_MAX of them) keep full detail. */
+const TEX_BUDGET = 32e6, SHARP_MAX = 6;
+let texTier = 0, sharp = new Set();
+/* recomputes the budget for these objects and the selected ones (ids); returns the objects whose faces now need
+   another resolution (none off a touch screen) */
+function planTextures(objects, selIds) {
+  if (!TOUCH) return [];
+  const want = new Set(selIds.length <= SHARP_MAX ? selIds : []);
+  let n = 0;
+  for (const o of objects) if (!want.has(o.id)) for (const k of faceKeys(o)) if (!plainFace(o, k)) n++;
+  const tier = n ? clamp(Math.ceil(Math.log2(n * TEX_MAX * TEX_MAX / TEX_BUDGET) / 2), 0, 3) : 0;
+  const redo = tier !== texTier ? objects.filter(o => !want.has(o.id) || !sharp.has(o.id))
+    : objects.filter(o => want.has(o.id) !== sharp.has(o.id));
+  texTier = tier; sharp = want;
+  return redo;
+}
 function facePx(o, k) {
-  const [mw, mh] = faceMM(o, k);
-  let s = Math.min(TEX_MAX / Math.sqrt(mw * mh), TEX_SIDE / Math.max(mw, mh), 10);
+  const [mw, mh] = faceMM(o, k), max = sharp.has(o.id) ? TEX_MAX : TEX_MAX / 2 ** texTier;
+  let s = Math.min(max / Math.sqrt(mw * mh), TEX_SIDE / Math.max(mw, mh), 10);
   if (plainFace(o, k)) s = Math.min(s, o.grain > 0 ? 3 : 64 / Math.max(mw, mh));
   return [Math.max(16, Math.round(mw * s)), Math.max(16, Math.round(mh * s)), s];
 }
@@ -328,4 +346,4 @@ function addSleeve(o, n) {
   return n;
 }
 
-export { loopAxis, clearLid, doubleWall, ensureFaces, faceKeys, faceLabel, faceMM, facePx, isClearFace, netLayout, newImage, newObject, newShape, newText, outerKeys, setBoard, wallMM };
+export { loopAxis, clearLid, doubleWall, ensureFaces, faceKeys, faceLabel, faceMM, facePx, isClearFace, netLayout, newImage, newObject, newShape, newText, outerKeys, planTextures, setBoard, TOUCH, wallMM };

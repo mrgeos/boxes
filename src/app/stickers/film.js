@@ -6,6 +6,7 @@ import { getImg } from '../core/assets.js';
 import { artImg } from '../core/vector.js';
 import { ensureFont, fontStr } from '../core/fonts.js';
 import { RT, maxAniso } from '../scene/renderer.js';
+import { TOUCH } from '../core/model.js';
 import { torteSample } from '../carriers/torte.js';
 import { STICKER_FX, placementsFor, stickerSize } from './placement.js';
 import { dragSt } from '../scene/interaction.js';
@@ -111,14 +112,15 @@ function stickerLook(rt, st) {
   if (L && L.key === key) return L;
   if (L) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
   const [w, h] = stickerSize(st), m = stickerMargin(st), ew = w + 2 * m, eh = h + 2 * m;
-  const ppm = Math.min(12, 2048 / Math.max(ew, eh));
-  const paint = fn => { const c = document.createElement('canvas'); c.width = Math.max(2, Math.round(ew * ppm)); c.height = Math.max(2, Math.round(eh * ppm));
+  // a phone gets half the pixels per side (see facePx), and the edge, which only needs the outline, half again
+  const ppm = TOUCH ? Math.min(6, 1024 / Math.max(ew, eh)) : Math.min(12, 2048 / Math.max(ew, eh));
+  const paint = (fn, k = 1) => { const c = document.createElement('canvas'); c.width = Math.max(2, Math.round(ew * ppm * k)); c.height = Math.max(2, Math.round(eh * ppm * k));
     const x = c.getContext('2d'); x.setTransform(c.width / ew, 0, 0, c.height / eh, c.width / 2, c.height / 2); fn(x); return c; };
   const tex = new THREE.CanvasTexture(paint(x => drawSticker(x, st, ppm, false)));
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = maxAniso;
   // the edge colour: paper for opaque stickers, a darker tone of the fill for coloured ones
   const edgeCol = st.finish === 'clear' ? '#dfe7ea' : new THREE.Color(st.kind === 'custom' ? '#ece9e2' : st.fill).multiplyScalar(.82).getStyle();
-  const edgeTex = new THREE.CanvasTexture(paint(x => stickerMask(x, st, edgeCol)));
+  const edgeTex = new THREE.CanvasTexture(paint(x => stickerMask(x, st, edgeCol), TOUCH ? .5 : 1));
   edgeTex.colorSpace = THREE.SRGBColorSpace;
   const [r, mt] = STICKER_FX[st.finish] || STICKER_FX.gloss, thick = Math.max(0, st.thick ?? .2) * S;
   const art = stickerMaterial({ map: tex, transparent: true, alphaTest: .04, roughness: r, metalness: mt, clearcoat: st.finish === 'gloss' ? .6 : 0, clearcoatRoughness: .1,
