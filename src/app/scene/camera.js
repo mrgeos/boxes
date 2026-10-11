@@ -122,7 +122,7 @@ function applyScene() {
   const s = state.scene;
   keyLight.intensity = s.light; fillLight.intensity = s.light * .18;
   scene.environmentIntensity = s.env; floor.material.opacity = s.shadow; applyEnv();
-  renderer.toneMappingExposure = s.exposure; controls.autoRotate = !!s.autoRotate;
+  renderer.toneMappingExposure = s.exposure;
   const st = $('#stage');
   st.classList.toggle('checker', s.bg === 'transparent');
   st.style.background = s.bg === 'gradient' ? `radial-gradient(120% 95% at 50% 32%, ${s.bg1} 0%, ${s.bg2} 100%)` : s.bg === 'solid' ? s.bg1 : '';
@@ -150,7 +150,10 @@ function initCamera() {
   // a handler may change materials or the scene directly: draw after any input
   for (const t of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'click', 'drop', 'paste']) addEventListener(t, () => invalidate(), { capture: true, passive: true });
   renderer.domElement.addEventListener('pointermove', () => invalidate(), { passive: true });
+  let lastNow = 0;
   renderer.setAnimationLoop(now => {
+    // seconds since the last frame: the auto-rotation turns by time, not by frames (a slow machine turns as fast)
+    const dt = lastNow ? Math.min(.25, (now - lastNow) / 1000) : 0; lastNow = now;
     let changed = rebuildQueue.size || dirtyFaces.size || stickerDirty.size || camTween || recording || now < drawUntil;
     for (const id of rebuildQueue) { const o = state.objects.find(x => x.id === id); if (o) buildObject(o); }
     if (rebuildQueue.size) { rebuildQueue.clear(); updateShadowCam(); }
@@ -173,7 +176,7 @@ function initCamera() {
     if (syncSelLook()) changed = true;
     if (spinEnv(now)) changed = true;
     if (recording) recording.step(now);
-    else if (controls.update()) changed = true;
+    else if (controls.update(dt)) changed = true;
     for (const rt of RT.values()) for (const k in rt.faces) {
       const f = rt.faces[k];
       if (f.flash > 0) { changed = true; f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
