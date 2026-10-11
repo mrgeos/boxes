@@ -12,6 +12,7 @@ import { commit, scheduleSave, usedAssets } from '../core/project.js';
 import { renderModel } from './model-panel.js';
 import { addLayer, pickImage, renderLayerProps, renderLayers } from './face-panel.js';
 import { addSticker, setStickerImage } from './stickers-panel.js';
+import { stickerOfKey } from '../stickers/design.js';
 
 /* ---------- library panel ---------- */
 function renderLibrary() {
@@ -49,7 +50,7 @@ function swapImage(it) {
   if (st) return setStickerImage(o, st, it);
 }
 function placeLibImage(it, obj = activeObj(), face = sel.face, at = null) {
-  if (!obj || !face || !faceKeys(obj).includes(face)) return;
+  if (!obj || !face || !(faceKeys(obj).includes(face) || stickerOfKey(obj, face))) return;
   // a kit logo: on a dark face its inverse version, and linked to the kit
   if (it.brand) { const l = logoFor(obj.faces[face], brandLogo(it.brand)); if (l) it = { id: l.src, aspect: l.aspect, brand: l.id }; }
   const L = newImage(it.id, it.aspect), [W, H] = facePx(obj, face);

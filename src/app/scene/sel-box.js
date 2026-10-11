@@ -31,8 +31,8 @@ const LIFT = .4 * S, HLIFT = 1.5 * S, STEP = 1.5;   // off the surface; sampling
 /* what is selected: the rectangle (its own mm, centred) and a key that changes whenever the frame would */
 function target() {
   const o = activeObj(), rt = o && RT.get(o.id); if (!rt) return null;
-  // a sticker's design open in the panel: the frame goes round the sticker (its layers are edited in the window)
-  const st = stickerOfKey(o, sel.face) || (!activeLayer() && activeSticker()), L = !st && activeLayer();
+  // a sticker's design open with no layer picked: the frame goes round the sticker; a layer of it is framed on it
+  const st = (!activeLayer() && (stickerOfKey(o, sel.face) || activeSticker())) || null, L = !st && activeLayer();
   // several layers: one frame round them all, square to the face (its own mm)
   const many = !st && selectedLayers();
   if (many?.length > 1) {
@@ -47,10 +47,20 @@ function target() {
   return { o, rt, st, L, w, h, er, mode, key: JSON.stringify([o.id, sel.face, st || L, w, h, mode]), built: rt.group.children[0] };
 }
 /* where it goes: parts [{ key, M, G }] map it onto the mm of each face it is on */
+/* a layer of a sticker's design (M: its own mm into the design's mm) lies on the faces through the sticker's
+   places: the design's mm are the sticker's own, from its top left corner */
+function throughSticker(o, rt, st, M) {
+  const [w, h] = stickerSize(st), keys = faceKeys(o), local = [M[0], M[1], M[2], M[3], M[4] - w / 2, M[5] - h / 2];
+  return placementsFor(o, st).filter(p => keys.includes(p.key) && rt.faces[p.key]).map(p => ({ key: p.key, M: mul(p.M, local) }));
+}
+/* affine maps [a, b, c, d, e, f]: A after B */
+const mul = (A, B) => [A[0] * B[0] + A[2] * B[1], A[1] * B[0] + A[3] * B[1], A[0] * B[2] + A[2] * B[3], A[1] * B[2] + A[3] * B[3], A[0] * B[4] + A[2] * B[5] + A[4], A[1] * B[4] + A[3] * B[5] + A[5]];
 function partsOf({ o, st, L, rt, multi, M: MM }) {
-  if (multi) return [{ key: sel.face, M: MM }];
+  const ofSt = stickerOfKey(o, sel.face);
+  if (multi) return ofSt ? throughSticker(o, rt, ofSt, MM) : [{ key: sel.face, M: MM }];
   if (st) { const keys = faceKeys(o); return placementsFor(o, st).filter(p => keys.includes(p.key) && rt.faces[p.key]).map(p => ({ key: p.key, M: p.M })); }
   const k = sel.face, [mw, mh] = faceMM(o, k), r = (L.rot || 0) * DEG, cs = Math.cos(r), sn = Math.sin(r), M = [cs, sn, -sn, cs, L.x * mw, L.y * mh];
+  if (ofSt) return throughSticker(o, rt, ofSt, M);
   // a layer running over edges: its own face's mm map on to the faces it reaches
   return [{ key: k, M }, ...layerReach(o, k, L).map(p => ({ key: p.key, M, G: p.G }))];
 }
@@ -239,6 +249,10 @@ function onScreen(h) {
 /* the handle under the pointer, if any: { mode, c: the item's centre on screen, flip: -1 when seen mirrored } */
 function handleAt(x, y) {
   if (!lines.length || !lines.every(attached)) return null;
+  // a small frame (far off, or on a phone) is mostly covered by its handles: inside it, a press moves the item, and
+  // the handles are taken from outside
+  const q = boxOnScreen();
+  if (q && Math.min(...q.map((p, i) => Math.hypot(p[0] - q[(i + 1) % 4][0], p[1] - q[(i + 1) % 4][1]))) < 40 && inQuad(q, x, y)) return null;
   for (const mode of ['rot', 'scale', 'edit']) for (const h of handles) {
     if (h.mode !== mode) continue;
     const q = onScreen(h); if (!q.seen || Math.hypot(q.x - x, q.y - y) > 10) continue;
@@ -249,6 +263,11 @@ function handleAt(x, y) {
   }
   return null;
 }
+/* is the point inside the convex quad q? */
+const inQuad = (q, x, y) => {
+  const sg = q.map((p, i) => { const n = q[(i + 1) % 4]; return Math.sign((n[0] - p[0]) * (y - p[1]) - (n[1] - p[1]) * (x - p[0])); });
+  return sg.every(v => v >= 0) || sg.every(v => v <= 0);
+};
 /* the selected item's box on the screen: its four corners (client px; top-left, top-right, bottom-right,
    bottom-left of the item), or null */
 function boxOnScreen() {

@@ -7,7 +7,8 @@ import { faceKeys, faceMM, facePx, loopAxis, newText } from '../core/model.js';
 import { apply, faceMaps, inv, layerReach, moveLayerOnto } from '../faces/wrap.js';
 import { library } from '../core/library.js';
 import { RT, camera, controls, cvs, markFace, renderer, ui, world } from './renderer.js';
-import { activeSticker, stickerAt, stickerDirty, touchSticker } from '../stickers/placement.js';
+import { activeSticker, placementsFor, stickerAt, stickerDirty, stickerSize, touchSticker } from '../stickers/placement.js';
+import { stickerKey, stickerOfKey } from '../stickers/design.js';
 import { applyViewOffset, focusSelected, lockActive, recording, setCamTween, setView, view } from './camera.js';
 import { multiMode, pickLayers, select, selectExtra, selectLayer, selectObjectItself, togglePicked } from '../core/selection.js';
 import { boundsOf, clickPick, copyData, moveLayers, pasteData, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
@@ -69,6 +70,12 @@ function layerUnder(h, L) {
   const o = activeObj(), A = sel.face;
   if (!h || !o || h.objId !== o.id || !h.face || !h.uv || h.wall) return null;
   const [fw, fh] = faceMM(o, h.face), p = [h.uv.x * fw, (1 - h.uv.y) * fh];
+  // a layer of a sticker's design: the point in the design, where the sticker lies on this face
+  const sto = stickerOfKey(o, A);
+  if (sto) {
+    const d = designAt(o, sto, h.face, p), [W, H] = facePx(o, A), [aw, ah] = faceMM(o, A);
+    return d && hitLayer({ layers: [L] }, W, H, d[0] * W / aw, d[1] * H / ah) ? d : null;
+  }
   const q = h.face === A ? p : (() => { const r = layerReach(o, A, L).find(r => r.key === h.face); return r && apply(inv(r.G), p); })();
   if (!q) return null;
   const [W, H] = facePx(o, A), [aw, ah] = faceMM(o, A), ppm = W / aw, ax = h.face === A && loopAxis(o, A);
@@ -77,10 +84,37 @@ function layerUnder(h, L) {
   const tries = ax ? [q, ...[1, -1].map(s => ax === 'x' ? [q[0] + s * aw, q[1]] : [q[0], q[1] + s * ah])] : [q];
   return tries.find(t => hitLayer({ layers: [L] }, W, H, t[0] * ppm, t[1] * ppm)) || null;
 }
+/* the point p (mm of face k) in the design of sticker st, in the design's mm, where the sticker lies on k (null where
+   it does not); near: also just off its edge (for a drag), the nearest of its places */
+function designAt(o, st, k, p, near = false) {
+  const [w, h] = stickerSize(st); let best = null;
+  for (const pl of placementsFor(o, st)) {
+    if (pl.key !== k) continue;
+    const [a, b, c, d, e, f] = pl.M, det = a * d - b * c, X = p[0] - e, Y = p[1] - f;
+    const sx = (d * X - c * Y) / det, sy = (-b * X + a * Y) / det, out = Math.max(Math.abs(sx) / w, Math.abs(sy) / h);
+    if ((near || out <= .5) && (!best || out < best.out)) best = { out, q: [sx + w / 2, sy + h / 2] };
+  }
+  return best?.q || null;
+}
+/* the layer of sticker st's design under the 3D hit h, or null */
+function designHit(o, st, h) {
+  if (!st?.design || !h?.face || !h.uv || h.wall) return null;
+  const [fw, fh] = faceMM(o, h.face), d = designAt(o, st, h.face, [h.uv.x * fw, (1 - h.uv.y) * fh]); if (!d) return null;
+  const k = stickerKey(st), [W, H] = facePx(o, k), [aw, ah] = faceMM(o, k);
+  return hitLayer(st.design, W, H, d[0] * W / aw, d[1] * H / ah);
+}
 /* drags a layer over the model: across an edge it goes on printing over it (wrap), and once its centre has left
    the face it belongs to the face the centre is on, at the same size in mm */
 function dragLayer(e) {
-  const { o, L } = drag3, h = pick(e.clientX, e.clientY, RT.get(o.id).group);
+  const { o, L } = drag3;
+  // on a sticker: within its design (what goes past its shape is cut off)
+  if (stickerOfKey(o, drag3.face)) {
+    const p = facePoint(e, o, drag3.face); if (!p) return;
+    const [W, H] = facePx(o, drag3.face);
+    L.x = p[0] / W + drag3.grab[0] / faceMM(o, drag3.face)[0]; L.y = p[1] / H + drag3.grab[1] / faceMM(o, drag3.face)[1];
+    markFace(o, drag3.face); refreshFields($('#layerSec'), L); return;
+  }
+  const h = pick(e.clientX, e.clientY, RT.get(o.id).group);
   if (!h || !h.face || !h.uv || h.wall || !faceKeys(o).includes(h.face)) return;
   const A = drag3.face, [aw, ah] = faceMM(o, A), [fw, fh] = faceMM(o, h.face), cur = [h.uv.x * fw, (1 - h.uv.y) * fh];
   let pA = cur;
@@ -113,6 +147,18 @@ function dragLayer(e) {
    past its edge), else on the surface under the pointer */
 const plane = new THREE.Plane(), hitP = new THREE.Vector3(), MW = new THREE.Matrix4();
 function facePoint(e, o, k) {
+  const sto = stickerOfKey(o, k);
+  if (sto) {
+    // a sticker's design: the point on a face the sticker lies on, into the design (the nearest of its places)
+    const [W, H] = facePx(o, k), [mw, mh] = faceMM(o, k);
+    for (const key of new Set(placementsFor(o, sto).map(pl => pl.key))) {
+      if (stickerOfKey(o, key)) continue;
+      const q = facePoint(e, o, key); if (!q) continue;
+      const [fw, fh] = facePx(o, key), [fmw, fmh] = faceMM(o, key), d = designAt(o, sto, key, [q[0] * fmw / fw, q[1] * fmh / fh], true);
+      if (d) return [d[0] * W / mw, d[1] * H / mh];
+    }
+    return null;
+  }
   const [W, H] = facePx(o, k), [mw, mh] = faceMM(o, k), F = RT.get(o.id)?.frames?.[k];
   if (F) {
     const r = renderer.domElement.getBoundingClientRect();
@@ -219,7 +265,13 @@ function initInteraction() {
     const o = state.objects.find(x => x.id === h.objId);
     // a sticker: its text is typed (in its panel, the sticker changes as it goes)
     const st = tool() === 'select' && stickerHit(h);
-    if (st) { editStickerText(o, st.id); return; }
+    if (st) {
+      // into the sticker: its text typed in place, another layer picked; on a bare spot, its text (or a new one)
+      if (st.id !== sel.sticker || o.id !== sel.obj) selectExtra(o.id, st.id);
+      const hl = designHit(o, st, h);
+      if (hl) { pickLayers([hl.id]); setTab('design'); if (hl.type === 'text') startTextEdit(hl, '3d'); return; }
+      editStickerText(o, st.id); return;
+    }
     if (o && h.face === sel.face && h.uv && !h.wall && tool() === 'select') {
       const [W, H] = facePx(o, h.face), hl = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H);
       if (hl?.group && selectedIds().length > 1) { pickLayers([hl.id]); return; }
@@ -250,13 +302,14 @@ function initInteraction() {
       if (at) { xform = { many: true, snap: snapshot(many), o, face: sel.face, at, it: many[0] }; controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'grabbing'; return; }
     }
     const h = pick(e.clientX, e.clientY), L = activeLayer();
+    // the picked layer is dragged (also one of a sticker's design, within it)
+    const at = L && layerUnder(h, L);
     // a selected sticker is dragged across the model, face to face
-    const hs = sel.sticker && h?.objId === sel.obj ? stickerHit(h) : null;
+    const hs = !at && sel.sticker && h?.objId === sel.obj ? stickerHit(h) : null;
     if (hs && hs.id === sel.sticker) {
       dragSt = { st: hs, o: activeObj() }; controls.enabled = false; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'grabbing';
       return;
     }
-    const at = L && layerUnder(h, L);
     if (at) {
       const o = activeObj(), [aw, ah] = faceMM(o, sel.face);
       drag3 = { L, o, face: sel.face, grab: [L.x * aw - at[0], L.y * ah - at[1]] };
@@ -293,7 +346,11 @@ function initInteraction() {
       // a click on one of several picked layers, without moving them, falls through and picks it alone
       if (!(was.many && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) <= 5)) { down = null; return; }
     }
-    if (dragSt) { stickerDirty.add(dragSt.o.id); dragSt = null; controls.enabled = true; cvs.style.cursor = 'move'; ui.stickers = true; commit(); down = null; return; }
+    if (dragSt) {
+      stickerDirty.add(dragSt.o.id); dragSt = null; controls.enabled = true; cvs.style.cursor = 'move';
+      // a click without moving falls through: on a picked sticker it picks a layer of its design
+      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) { ui.stickers = true; commit(); down = null; return; }
+    }
     if (drag3) {
       drag3 = null; controls.enabled = true; cvs.style.cursor = 'move';
       // a click without moving falls through: it picks the top layer there, as before
@@ -312,6 +369,14 @@ function initInteraction() {
     // a ribbon is picked as an extra of its own
     if (h.ribbon) return selectExtra(o.id, h.ribbon);
     const hs = stickerHit(h);
+    // a sticker picked already: a click picks the layer of its design there (as a group is entered), a bare spot
+    // the sticker itself again
+    if (hs && hs.id === sel.sticker && o.id === sel.obj && hs.design) {
+      const hl = designHit(o, hs, h);
+      if (hl) { pickLayers(clickPick(hs.design, hl, e.shiftKey || e.ctrlKey || e.metaKey)); setTab('design'); }
+      else if (activeLayer()) pickLayers([]);
+      return;
+    }
     if (hs) {
       if (o.id !== sel.obj || (h.face && h.face !== sel.face)) select(o.id, h.face || undefined, null, { flash: false });
       sel.sticker = hs.id; sel.ribbon = null; sel.layer = null; renderLayers(); renderLayerProps(); renderStickers(); ui.editor = true;
@@ -336,7 +401,10 @@ function initInteraction() {
     if (e.target === cvs) {
       const h = pick(e.clientX, e.clientY), st = stickerHit(h);
       // onto a sticker: its picture
-      if (st) { const o = state.objects.find(x => x.id === h.objId); select(o.id, st.face); sel.sticker = st.id; sel.ribbon = null; return setStickerImage(o, st, it); }
+      if (st) {
+        const o = state.objects.find(x => x.id === h.objId), [fw, fh] = faceMM(o, h.face), d = designAt(o, st, h.face, [h.uv.x * fw, (1 - h.uv.y) * fh]), [w, hh] = stickerSize(st);
+        select(o.id, st.face); sel.sticker = st.id; sel.ribbon = null; return setStickerImage(o, st, it, d ? [d[0] / w, d[1] / hh] : null);
+      }
       if (h?.face && !h.wall) { const o = state.objects.find(x => x.id === h.objId); select(o.id, h.face); return placeLibImage(it, o, h.face, h.uv ? [h.uv.x, 1 - h.uv.y] : null); }
     }
     if (e.target === ed && activeObj()) { const [mx, my] = edPoint(e); return placeLibImage(it, activeObj(), sel.face, [mx / edState.dw, my / edState.dh]); }
