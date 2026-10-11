@@ -6,6 +6,7 @@ import { keepModel, myModelRow, useMyModel } from './model-library.js';
 import { FOOD } from './food-library.js';
 import { rebuildQueue } from '../scene/renderer.js';
 import { invalidate } from '../scene/camera.js';
+import { cloudChanged } from './cloud.js';
 
 /* A model is referred to as { lib: id } (the food library: box-studio-food/<id>.js beside the page) or
    { asset: id } (a file brought by the user, made light and kept in the project as a GLB). Neither the loader
@@ -36,8 +37,15 @@ function foodGLB(id) {
   return foodWait.get(id).p;
 }
 function b64ToBuf(b64) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
+/* A project saved to the account before models could be stored there lost their files. When another reference to
+   the same file names its copy in this browser's «Мои модели», the file is put back into the project and saved. */
+async function recoverAsset(id, my = state.objects.flatMap(modelRefs).find(r => r.asset === id && r.my)?.my) {
+  const row = my && await myModelRow(my); if (!row || assets[id]) return;
+  assets[id] = row.url; cloudChanged();
+}
 /* a GLB kept in the project (a data: URL, or the address of a stored file) */
 async function assetGLB(id) {
+  if (!assets[id]) await recoverAsset(id);
   const url = assets[id]; if (!url) throw new Error('В проекте нет файла модели');
   if (url.startsWith('data:')) return b64ToBuf(url.slice(url.indexOf(',') + 1));
   return (await fetch(url)).arrayBuffer();
@@ -45,6 +53,7 @@ async function assetGLB(id) {
 const keyOf = ref => ref?.lib ? 'lib:' + ref.lib : ref?.my ? 'my:' + ref.my : ref?.asset ? 'asset:' + ref.asset : '';
 /* a model of «Мои модели»: from the project when it carries it, else from the browser's library */
 async function myGLB(ref) {
+  if (ref.asset && !assets[ref.asset]) await recoverAsset(ref.asset, ref.my);
   if (ref.asset && assets[ref.asset]) return assetGLB(ref.asset);
   const row = await myModelRow(ref.my); if (!row) throw new Error('Модели нет в библиотеке этого браузера');
   return b64ToBuf(row.url.slice(row.url.indexOf(',') + 1));
