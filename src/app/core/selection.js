@@ -12,7 +12,7 @@ import { renderStickers } from '../ui/stickers-panel.js';
 import { refreshTabs } from '../ui/tabs.js';
 import { extraById, isPart } from './extras.js';
 
-function select(objId, face = undefined, layerId = null, { flash = false } = {}) {
+function select(objId, face = undefined, layerId = null, { flash = false, focus = true } = {}) {
   const changedObj = sel.obj !== objId, leftGroup = !!sel.group, part0 = sel.part;
   sel.obj = objId; sel.group = null; sel.multi = objId ? [objId] : [];
   if (changedObj) { sel.sticker = null; sel.ribbon = null; sel.part = null; }
@@ -30,7 +30,7 @@ function select(objId, face = undefined, layerId = null, { flash = false } = {})
   if (flash && o) { const f = RT.get(o.id)?.faces[sel.face]; if (f) { f.flash = 1; accent.set(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0a7aa1'); } }
   // the shape panel shows the object or its sleeve / carrier
   if (changedObj || leftGroup || sel.part !== part0) { renderObjects(); renderModel(); }
-  if (changedObj) { if (orbitLock) focusSelected(); }
+  if (changedObj && focus) { if (orbitLock) focusSelected(); }
   renderStickers(); refreshTabs();
   renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps();
   ui.editor = ui.net = ui.lib = true;
@@ -50,6 +50,30 @@ function selectGroup(gid) {
   sel.group = gid; sel.multi = [gid];
   renderObjects(); renderModel();
 }
+
+/* ---------- several items picked on the scene (the object list does the same with Ctrl / Shift) ----------
+   The scene picks items at the top of the list: an object in a group adds the whole group, as stepItem does. */
+const topItem = id => topOf(id)?.id || id;
+/* picks these items: none — nothing; one — that object or group; more — all of them (the first one's object
+   stays active for the panels) */
+function pickItems(ids) {
+  ids = [...new Set(ids)];
+  if (!ids.length) return select(null);
+  if (ids.length === 1) return groupById(ids[0]) ? selectGroup(ids[0]) : select(ids[0], undefined, null);
+  const first = objectsIn(ids[0])[0];
+  // the camera stays: picking several does not fly to the first of them
+  if (first !== sel.obj) select(first, undefined, null, { focus: false });
+  sel.group = null; sel.multi = ids;
+  renderObjects(); renderModel(); refreshTabs(); invalidate();
+}
+/* adds the item of this object to the picked ones, or takes it off */
+function togglePicked(objId) {
+  const id = topItem(objId), cur = sel.multi.length ? sel.multi.map(topItem) : sel.obj ? [topItem(sel.obj)] : [];
+  pickItems(cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]);
+}
+/* a touch screen has no Shift: with this on, a tap adds or takes off as Shift+click does */
+let multiMode = false;
+const setMultiMode = on => { multiMode = on; };
 
 /* the next (d = 1) or previous (d = −1) item at the top of the object list — an object, or a whole group as one —
    picked and framed from the same side; round the end to the start; items with nothing shown are passed over */
@@ -80,4 +104,4 @@ function selectObjectItself() {
   renderObjects(); renderStickers(); refreshTabs();
 }
 
-export { pickLayers, select, selectExtra, selectGroup, selectLayer, selectObjectItself, stepItem };
+export { multiMode, pickItems, pickLayers, select, selectExtra, selectGroup, selectLayer, selectObjectItself, setMultiMode, stepItem, togglePicked, topItem };

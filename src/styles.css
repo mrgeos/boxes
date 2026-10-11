@@ -197,9 +197,8 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .off-hint{position:absolute;left:50%;top:52px;transform:translateX(-50%);max-width:calc(100% - 24px);padding:6px 12px;border-radius:999px;font-size:12px;color:#a8322a;background:color-mix(in srgb,var(--panel) 90%,transparent);border:1px solid #e3a59f;backdrop-filter:blur(6px);pointer-events:none;z-index:3}
 .off-hint[hidden]{display:none}
 .views #viewBtn{gap:6px}
-.stage-hint{position:absolute;left:50%;top:12px;transform:translateX(-50%);max-width:calc(100% - 120px);white-space:nowrap;display:flex;align-items:center;gap:6px;background:color-mix(in srgb,var(--panel) 90%,transparent);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:999px;padding:5px 6px 5px 14px;font-size:12px;color:var(--muted);line-height:1.35;z-index:3}
+.stage-hint{position:absolute;left:50%;top:12px;transform:translateX(-50%);max-width:calc(100% - 120px);width:max-content;display:flex;align-items:center;gap:6px;text-align:center;text-wrap:balance;background:color-mix(in srgb,var(--panel) 90%,transparent);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:16px;padding:5px 6px 5px 14px;font-size:12px;color:var(--muted);line-height:1.35;z-index:3}
 .stage-hint[hidden],.help-pop[hidden]{display:none}
-#hintText{overflow:hidden;text-overflow:ellipsis}
 .stage-hint button{border:0;background:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:2px 5px;border-radius:999px}
 .stage-hint button:hover{background:var(--field);color:var(--fg)}
 .help-btn{position:absolute;right:12px;top:12px;width:28px;height:28px;border-radius:50%;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 90%,transparent);backdrop-filter:blur(6px);color:var(--muted);font-family:inherit;font-weight:600;font-size:13px;line-height:1;cursor:pointer;z-index:3}
@@ -505,3 +504,8 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .inav button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .inav svg{width:18px;height:18px}
 @media (max-width:700px),(pointer:coarse){.inav{left:10px}.inav button{width:44px;height:44px}}
+/* the Alt selection frame (scene/marquee.js); «several» on touch screens (ui/action-bar.js) */
+.sel-rect{position:absolute;z-index:4;border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);border-radius:2px;pointer-events:none}
+.touch-only{display:none!important}
+@media (max-width:700px),(pointer:coarse){.touch-only{display:flex!important}}
+#abMulti.on{background:var(--accent);color:var(--accent-fg)}

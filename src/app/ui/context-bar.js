@@ -13,7 +13,7 @@ import { sleeveDims } from '../carriers/sleeve.js';
 import { carryDims } from '../carriers/carry.js';
 import { deleteLayer, duplicateLayer, renderLayerProps } from './face-panel.js';
 import { deleteSticker, duplicateSticker, editStickerText, extraAction, renderStickers } from './stickers-panel.js';
-import { deleteIds, duplicateIds, renderObjects } from './object-list.js';
+import { deleteIds, duplicateIds, groupIds, picked, renderObjects } from './object-list.js';
 import { lidAction, toggleLid, turn } from './context-menus.js';
 import { activeFill, activeRibbon } from '../core/extras.js';
 import { buildRibbons } from '../carriers/ribbon.js';
@@ -47,6 +47,7 @@ function partSlide(o, k) {
 }
 function kindNow() {
   const o = activeObj();
+  if (sel.multi.length > 1 && !recording && !textEditing()) return 'multi';
   if (!o || sel.group || recording || textEditing()) return null;
   if (activeSticker()) return 'sticker';
   if (activeRibbon()) return 'ribbon';
@@ -56,8 +57,14 @@ function kindNow() {
   if (sel.bg) return null;
   return 'object';
 }
+const FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l2 2h9A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>';
+/* «3 объекта», «5 объектов» */
+const objectsWord = n => { const t = n % 10, h = n % 100; return `${n} ${t === 1 && h !== 11 ? 'объект' : t >= 2 && t <= 4 && (h < 12 || h > 14) ? 'объекта' : 'объектов'}`; };
 function build(kind) {
   const o = activeObj(), L = activeLayer();
+  // several objects picked (Shift+click, the Alt frame or the object list): what is done to them all
+  if (kind === 'multi') return `<span class="hint cb-l">${objectsWord(sel.multi.length)}</span>${sep}<button class="ab wide" id="cbGroup" title="Сгруппировать (Ctrl+G)">${FOLDER}<span>Сгруппировать</span></button>${sep}`
+    + ib('cbDupAll', ICON.copy, 'Дублировать') + ib('cbDelAll', ICON.trash, 'Удалить (Delete)');
   if (kind === 'object') {
     const lid = lidAction(o), open = o.lid > 0;
     return (lid ? `<button class="ab wide ${open ? 'on' : ''}" id="cbLid" title="${esc(open ? lid[1] : lid[0])}">${ICON.lidOpen}<span>${esc(open ? lid[1] : lid[0])}</span></button>
@@ -89,6 +96,12 @@ function build(kind) {
 function bind(kind) {
   const o = activeObj(), on = (id, ev, fn) => { const el = $('#' + id); if (el) el.addEventListener(ev, fn); };
   bindNum(bar());
+  if (kind === 'multi') {
+    on('cbGroup', 'click', () => groupIds(picked()));
+    on('cbDupAll', 'click', () => duplicateIds(picked()));
+    on('cbDelAll', 'click', () => deleteIds(picked()));
+    return;
+  }
   if (kind === 'object') {
     on('cbLid', 'click', () => toggleLid(o).then(() => { renderActionBar(); renderModel(); refresh(); }));
     on('cbLidR', 'input', e => { o.lid = +e.target.value; applyLid(o); $('#cbLid')?.classList.toggle('on', o.lid > 0); });
@@ -132,7 +145,7 @@ function bind(kind) {
 function syncCtxBar(moved = true) {
   const el = bar(); if (!el) return;
   const kind = busy ? null : kindNow(), o = activeObj();
-  const k = kind && [kind, o.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, o.tissue?.layout, o.insert?.mat, o.fill?.count, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
+  const k = kind && [kind, sel.multi.join(','), o?.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, o.tissue?.layout, o.insert?.mat, o.fill?.count, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
   if (!kind) { el.hidden = true; key = ''; return; }
   // nothing new and the view still: it stays where it is
   if (k === key && !moved) return;

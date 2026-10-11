@@ -9,7 +9,7 @@ import { library } from '../core/library.js';
 import { RT, camera, controls, cvs, markFace, renderer, ui, world } from './renderer.js';
 import { activeSticker, stickerAt, stickerDirty, touchSticker } from '../stickers/placement.js';
 import { applyViewOffset, focusSelected, lockActive, recording, setCamTween, setView, view } from './camera.js';
-import { pickLayers, select, selectExtra, selectLayer, selectObjectItself } from '../core/selection.js';
+import { multiMode, pickLayers, select, selectExtra, selectLayer, selectObjectItself, togglePicked } from '../core/selection.js';
 import { boundsOf, clickPick, copyData, moveLayers, pasteData, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
 import { addFontFile, commit, openProjectFile, redo, undo } from '../core/project.js';
 import { refreshFields } from '../ui/fields.js';
@@ -200,7 +200,7 @@ function initInteraction() {
       return;
     }
     if (!lockActive() || drag3) return;
-    if (e.button === 2 || (e.button === 0 && (e.shiftKey || e.ctrlKey || e.metaKey || tool() === 'hand'))) {
+    if (e.button === 2 || (e.button === 0 && !e.altKey && (e.shiftKey || e.ctrlKey || e.metaKey || tool() === 'hand'))) {
       // a Shift- or Ctrl-click that does not move stays a click (it adds a layer to the picked ones)
       pan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y }; setCamTween(null); if (e.button === 0) down = { x: e.clientX, y: e.clientY }; cvs.setPointerCapture(e.pointerId); cvs.style.cursor = 'move';
     }
@@ -306,6 +306,9 @@ function initInteraction() {
     // a click on empty space drops the selection, as in Figma
     if (!h) { if (sel.obj || sel.group) select(null); return; }
     const o = state.objects.find(x => x.id === h.objId); if (!o) return;
+    // Shift+click on another object (or any tap in the «several» mode, or any Shift+click once several are
+    // picked) adds that object to the picked ones or takes it off; on the picked object itself it adds layers
+    if ((e.shiftKey && (sel.multi.length > 1 || o.id !== sel.obj)) || multiMode) return togglePicked(o.id);
     // a ribbon is picked as an extra of its own
     if (h.ribbon) return selectExtra(o.id, h.ribbon);
     const hs = stickerHit(h);
