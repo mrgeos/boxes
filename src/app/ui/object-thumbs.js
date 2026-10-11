@@ -1,7 +1,7 @@
 // Превью объектов в списке «Объекты в сцене»: маленький снимок самого объекта с его дизайном
 import * as THREE from 'three';
 import { state } from '../core/state.js';
-import { RT, renderer, scene } from '../scene/renderer.js';
+import { RT, glLost, renderer, scene } from '../scene/renderer.js';
 import { invalidate, recording } from '../scene/camera.js';
 import { renderObjects } from './object-list.js';
 
@@ -14,7 +14,7 @@ const thumbOf = id => shots.get(id)?.url || null;
 const sigOf = o => JSON.stringify({ ...o, pos: 0, rotY: 0, hidden: 0, locked: 0, name: 0 });
 
 function check() {
-  if (window.__noThumbs || recording || document.hidden) return;
+  if (window.__noThumbs || recording || document.hidden || glLost()) return;   // (nothing can be drawn now)
   let got = false;
   for (const o of state.objects) {
     const s = shots.get(o.id) || {}, sig = sigOf(o);

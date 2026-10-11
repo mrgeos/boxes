@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { $, slug, toast } from '../core/util.js';
 import { activeObj, state } from '../core/state.js';
-import { RT, camera, controls, cvs, renderer, scene, viewport } from '../scene/renderer.js';
+import { RT, camera, controls, cvs, glLost, renderer, scene, viewport } from '../scene/renderer.js';
 import { resize, setRecording } from '../scene/camera.js';
 import { saveFile } from '../core/project.js';
 import { hideRings } from '../scene/move.js';
@@ -18,7 +18,9 @@ function paintBackground(c, w, h) {
   }
 }
 let pngScale = 2;
+const LOST = 'Сцена восстанавливается после нехватки памяти видеокарты — повторите через несколько секунд';
 async function exportPNG() {
+  if (glLost()) { toast(LOST, 4200); return; }
   const transparent = $('#pngTransparent').checked || state.scene.bg === 'transparent';
   const w0 = viewport.clientWidth, h0 = viewport.clientHeight, k = Math.min(pngScale, 8192 / Math.max(w0, h0));
   const W = Math.round(w0 * k), H = Math.round(h0 * k);
@@ -33,6 +35,7 @@ async function exportPNG() {
   out.toBlob(b => saveFile(`${slug(activeObj()?.name)}-mockup-${W}x${H}.png`, b), 'image/png');
 }
 function exportVideo() {
+  if (glLost()) { toast(LOST, 4200); return; }
   if (!window.MediaRecorder || !cvs.captureStream) { toast('Этот браузер не умеет записывать видео с холста'); return; }
   const type = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4'].find(t => MediaRecorder.isTypeSupported(t));
   if (!type) { toast('Браузер не поддерживает запись видео'); return; }

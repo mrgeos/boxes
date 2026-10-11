@@ -62,10 +62,15 @@ function noteFrame(ms, moving) {
   level = ORDER[ORDER.indexOf(level) - 1]; apply(); onChange();
   toast(`Чтобы камера двигалась плавнее, качество 3D снижено: «${LEVELS[level].name}». Сменить — в меню ☰`, 4200);
 }
+/* «Авто»: a step lower now (the browser ran short of graphics memory); false when it cannot go lower */
+function lowerQuality() {
+  if (choice !== 'auto' || level === 'low') return false;
+  level = ORDER[ORDER.indexOf(level) - 1]; apply(); onChange(); return true;
+}
 function initQuality(cb) {
   onChange = cb || onChange;
   let v = 'auto'; try { v = localStorage.getItem(KEY) || 'auto'; } catch { /* private mode */ }
   setQuality(v === 'auto' || LEVELS[v] ? v : 'auto');
 }
 
-export { frameScale, initQuality, noteFrame, qualityState, setQuality };
+export { frameScale, initQuality, lowerQuality, noteFrame, qualityState, setQuality };

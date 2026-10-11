@@ -85,6 +85,11 @@ function scheduleSave() {
     catch (e) { if (!saveWarned) { saveWarned = true; toast('Проект слишком большой для автосохранения в браузере. Используйте «Сохранить проект».', 4200); } }
   }, 900);
 }
+/* the autosave now, not in a moment (the page is about to reload); false when the project is too big for it */
+function flushSave() {
+  clearTimeout(saveTimer);
+  try { localStorage.setItem(LS_KEY, projectJSON(false)); return true; } catch { return false; }
+}
 function loadProject(d, opts = {}) {
   opening = true;
   try { loadProjectNow(d, opts); } finally { opening = false; }
@@ -172,4 +177,4 @@ async function convertLegacy(p) {
   return { objects: [o], scene: state.scene, fonts: state.fonts, assets: {} };
 }
 
-export { assetsOf, LS_KEY, addFontFile, commit, loadProject, openProjectFile, paintProjectName, projectJSON, redo, renameProject, saveFile, scheduleSave, undo, usedAssets };
+export { assetsOf, LS_KEY, addFontFile, commit, flushSave, loadProject, openProjectFile, paintProjectName, projectJSON, redo, renameProject, saveFile, scheduleSave, undo, usedAssets };
