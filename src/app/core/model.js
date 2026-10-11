@@ -236,16 +236,19 @@ function plainFace(o, k) {
 /* On a touch screen the faces with a picture also share a budget for the whole scene: when there are many, each
    gets a quarter, a sixteenth… of the full area (in steps, so adding one object rarely repaints them all). The
    objects being worked on (selected, up to SHARP_MAX of them) keep full detail. */
-const TEX_BUDGET = 32e6, SHARP_MAX = 6;
-let texTier = 0, sharp = new Set();
+const SHARP_MAX = 6;
+let texTier = 0, sharp = new Set(), texBudget = 32e6, tight = TOUCH;
+/* the browser ran out of graphics memory (see context-loss.js): from now on any screen shares a budget, half the
+   last one */
+function squeezeTextures() { tight = true; texBudget /= 2; }
 /* recomputes the budget for these objects and the selected ones (ids); returns the objects whose faces now need
    another resolution (none off a touch screen) */
 function planTextures(objects, selIds) {
-  if (!TOUCH) return [];
+  if (!tight) return [];
   const want = new Set(selIds.length <= SHARP_MAX ? selIds : []);
   let n = 0;
   for (const o of objects) if (!want.has(o.id)) for (const k of faceKeys(o)) if (!plainFace(o, k)) n++;
-  const tier = n ? clamp(Math.ceil(Math.log2(n * TEX_MAX * TEX_MAX / TEX_BUDGET) / 2), 0, 3) : 0;
+  const tier = n ? clamp(Math.ceil(Math.log2(n * TEX_MAX * TEX_MAX / texBudget) / 2), 0, 3) : 0;
   const redo = tier !== texTier ? objects.filter(o => !want.has(o.id) || !sharp.has(o.id))
     : objects.filter(o => want.has(o.id) !== sharp.has(o.id));
   texTier = tier; sharp = want;
@@ -346,4 +349,4 @@ function addSleeve(o, n) {
   return n;
 }
 
-export { loopAxis, clearLid, doubleWall, ensureFaces, faceKeys, faceLabel, faceMM, facePx, isClearFace, netLayout, newImage, newObject, newShape, newText, outerKeys, planTextures, setBoard, TOUCH, wallMM };
+export { loopAxis, clearLid, doubleWall, ensureFaces, faceKeys, faceLabel, faceMM, facePx, isClearFace, netLayout, newImage, newObject, newShape, newText, outerKeys, planTextures, setBoard, squeezeTextures, TOUCH, wallMM };

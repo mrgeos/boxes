@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { $, $$, esc, toast } from '../core/util.js';
 import { PRESETS } from '../core/constants.js';
 import { faceKeys, newObject } from '../core/model.js';
-import { RT, buildObject, disposeObject, renderer, scene } from '../scene/renderer.js';
+import { RT, buildObject, disposeObject, glLost, renderer, scene } from '../scene/renderer.js';
 import { invalidate } from '../scene/camera.js';
 import { renderFace } from '../faces/render.js';
 import { addModelObject, addObject, importModelFiles, modelQuality } from './wiring.js';
@@ -78,6 +78,7 @@ function renderGallery() {
   if (!busy) setTimeout(nextThumb, 200);
 }
 function nextThumb() {
+  if (glLost()) { setTimeout(nextThumb, 1000); return; }   // the graphics card is away: pictures would come out blank
   const p = queue.shift();
   if (!p || $('#galSec').hidden) { busy = false; return; }
   busy = true;

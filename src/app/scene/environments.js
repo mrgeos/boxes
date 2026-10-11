@@ -80,6 +80,8 @@ function hdrFrom(url) {
     return env;
   } catch (e) { console.warn('hdr', e); return null; }
 }
+/* the prefiltered environments live only on the graphics card: after it was taken from the page they are made anew */
+function resetEnvs() { made.clear(); hdrKey = ''; hdrTex = null; }
 /* puts the scene's environment on: the chosen one, its turn and how strong it is */
 function applyEnv() {
   const s = state.scene;
@@ -107,4 +109,4 @@ async function setHdrFile(file, addAsset) {
   return true;
 }
 
-export { ENVS, applyEnv, setHdrFile, spinEnv };
+export { ENVS, applyEnv, resetEnvs, setHdrFile, spinEnv };

@@ -42,6 +42,8 @@ renderer.setClearColor(0x000000, 0);
 viewport.appendChild(renderer.domElement);
 const cvs = renderer.domElement;
 const maxAniso = renderer.capabilities.getMaxAnisotropy();
+/* the browser has taken the graphics card from the page for now (see context-loss.js): nothing can be drawn */
+const glLost = () => renderer.getContext().isContextLost();
 const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
 const world = new THREE.Group();
@@ -295,4 +297,4 @@ function applyObjMaterials(o) {
   rt.innerMat.bumpScale = o.grain * 1.2; rt.innerMat.needsUpdate = true;
 }
 
-export { RT, pmrem, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, rebuildQueue, renderer, scene, staleShadow, takeShadowStale, ui, viewport, world };
+export { RT, pmrem, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, rebuildQueue, renderer, scene, glLost, staleShadow, takeShadowStale, ui, viewport, world };
