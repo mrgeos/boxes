@@ -509,3 +509,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .touch-only{display:none!important}
 @media (max-width:700px),(pointer:coarse){.touch-only{display:flex!important}}
 #abMulti.on{background:var(--accent);color:var(--accent-fg)}
+/* several objects picked: their list in the right panel (ui/model-panel.js) */
+.mlist{display:flex;flex-direction:column;gap:2px;max-height:180px;overflow:auto}
+.mrow{display:block;width:100%;text-align:left;padding:6px 8px;border:0;border-radius:6px;background:transparent;color:var(--fg);font:12.5px var(--ui);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mrow:hover{background:var(--field)}

@@ -392,9 +392,12 @@ function initInteraction() {
   /* keyboard */
   document.addEventListener('keydown', e => {
     const typing = e.target.closest?.('input,textarea,select');
+    // Ctrl+Z undoes text only where text is being typed; on a tick box, a select or a colour it is the editor's
+    // undo — else the browser's own undo replays the last field typed in (a value from its first digits)
+    const textField = e.target.closest?.('textarea,[contenteditable]') || (e.target.matches?.('input') && !['checkbox', 'radio', 'color', 'range', 'button', 'file'].includes(e.target.type));
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
-    if (mod && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); redo(); return; }
+    if (mod && e.key.toLowerCase() === 'z' && !textField) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+    if (mod && e.key.toLowerCase() === 'y' && !textField) { e.preventDefault(); redo(); return; }
     if (e.key === 'Escape') { $('#exportMenu').hidden = true; $('#exportBtn').setAttribute('aria-expanded', 'false'); }
     if (typing) return;
     // Enter or Esc ends crop or mask mode
