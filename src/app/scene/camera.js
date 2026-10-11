@@ -19,7 +19,7 @@ import { drawSelLook, syncSelLook } from './sel-look.js';
 import { syncViewCube } from '../ui/view-cube.js';
 import { syncItemNav } from '../ui/item-nav.js';
 import { renderBrand } from '../ui/brand-panel.js';
-import { layoutPending } from '../core/groups.js';
+import { layoutPending, objectsIn } from '../core/groups.js';
 import { applyEnv, spinEnv } from './environments.js';
 
 function sceneBounds(onlyActive = false) {
@@ -72,9 +72,20 @@ function frameItems(ids) {
   const off = camera.position.clone().sub(controls.target).setLength(fitDistance(r));
   tweenCamera(c.clone().add(off), c);
 }
-/* move the pivot to the selected object; keep the viewing angle, adjust distance only if it is far off */
+/* what the camera works with: several picked items or a group — all their objects (shown ones); else the active object.
+   Its pivot, framing, views and auto-rotation all go by these */
+const manyPicked = () => sel.multi.length > 1 || !!sel.group;
+function selIds() {
+  if (!manyPicked()) { const o = activeObj(); return o ? [o.id] : []; }
+  return [...new Set((sel.group ? [sel.group] : sel.multi).flatMap(objectsIn))].filter(id => !state.objects.find(o => o.id === id)?.hidden);
+}
+function selBounds() {
+  const b = new THREE.Box3(); for (const id of selIds()) { const q = objBounds(id); if (q) b.union(q); }
+  return b.isEmpty() ? null : b;
+}
+/* move the pivot to the selection (its centre, for several); keep the viewing angle, adjust distance only if it is far off */
 function focusSelected({ frame = false } = {}) {
-  const o = activeObj(), b = o && objBounds(o.id); if (!b) return;
+  const b = selBounds(); if (!b) return;
   const c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
   const off = camera.position.clone().sub(controls.target);
   let dist = off.length();
@@ -93,8 +104,9 @@ function setView(name, instant = false) {
    (its front is +Z), and frames it. ui/view-cube.js picks sides, edges and corners this way */
 function lookFrom(d, { instant = false, onObj = !!activeObj() } = {}) {
   const o = activeObj(), dir = new THREE.Vector3(...d).normalize();
-  if (onObj && o) dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), o.rotY * DEG);   // views follow the object's own front
-  const b = onObj && o ? (objBounds(o.id) || sceneBounds()) : sceneBounds();
+  // views follow the object's own front; several objects are seen in the scene's axes
+  if (onObj && o && !manyPicked()) dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), o.rotY * DEG);
+  const b = onObj && o ? (selBounds() || sceneBounds()) : sceneBounds();
   const c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
   tweenCamera(c.clone().add(dir.multiplyScalar(fitDistance(r))), c, instant);
 }
@@ -201,4 +213,4 @@ function initCamera() {
   });
 }
 
-export { VIEW_DIRS, VIEW_LABEL, frameItems, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
+export { VIEW_DIRS, VIEW_LABEL, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };

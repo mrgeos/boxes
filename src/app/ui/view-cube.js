@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { $, DEG } from '../core/util.js';
 import { activeObj } from '../core/state.js';
 import { camera, controls } from '../scene/renderer.js';
-import { VIEW_LABEL, invalidate, lookFrom, orbitLock, setView, setViewName, viewName } from '../scene/camera.js';
+import { VIEW_LABEL, invalidate, lookFrom, manyPicked, orbitLock, setView, setViewName, viewName } from '../scene/camera.js';
 import { cvs } from '../scene/renderer.js';
 import { openMenu } from './menu.js';
 
@@ -37,7 +37,7 @@ function cellDir(f, i, j) {
 function syncViewCube() {
   placeCube();
   const cube = $('#vcCube'); if (!cube || cube.offsetParent === null) return;
-  const o = activeObj(), yaw = o && orbitLock ? o.rotY * DEG : 0;
+  const o = activeObj(), yaw = o && orbitLock && !manyPicked() ? o.rotY * DEG : 0;   // several: the scene's axes
   V.extractRotation(camera.matrixWorldInverse); Ry.makeRotationY(yaw);
   // straight from above or below the side faces stand edge-on and the browser's hit test of the faces breaks:
   // tip the cube by a degree and a half there (not seen, but every cell takes clicks again)
