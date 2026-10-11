@@ -58,7 +58,7 @@ async function storeAssets(urls) {
     if (!prof.assetMap[h]) {
       try {
         if (!files) throw new Error('файлового хранилища нет');
-        prof.assetMap[h] = (await files.upload(dataBlob(url))).id;
+        prof.assetMap[h] = (await files.upload(storable(url))).id;
       } catch (e) {
         // not stored: a small one rides in the project's body, a big one is reported
         failed.push(e?.code || e?.message || 'upload');
@@ -69,6 +69,14 @@ async function storeAssets(urls) {
     map[id] = prof.assetMap[h];
   }
   return { map, inline, failed };
+}
+/* The file store takes only some types (STORE_TYPES). Anything else (a 3D model, a HDR picture, an AVIF, a font the
+   browser typed oddly) goes as text: its whole data: URL in a text/plain file, unwrapped when the project opens. */
+const STORE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml', 'video/mp4', 'video/webm',
+  'application/pdf', 'font/woff2', 'font/woff', 'font/ttf', 'font/otf']);
+function storable(url) {
+  const b = dataBlob(url);
+  return STORE_TYPES.has(b.type) ? b : new Blob([url], { type: 'text/plain' });
 }
 /* a data: URL as a file, without fetch (the page may fetch nothing but its own files) */
 function dataBlob(url) {
@@ -129,6 +137,7 @@ const blobURL = async id => {
   try {
     const res = await fetch('/_blob/' + id); if (!res.ok) throw new Error(res.status);
     const b = await res.blob();
+    if (b.type.startsWith('text/plain')) { const t = await b.text(); if (t.startsWith('data:')) return t; }   // see storable
     return await new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); });
   } catch { return '/_blob/' + id; }
 };
