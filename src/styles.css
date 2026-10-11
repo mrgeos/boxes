@@ -474,6 +474,12 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .vc-b{width:30px;height:30px;display:grid;place-items:center;padding:0;border:1px solid var(--line);border-radius:7px;background:color-mix(in srgb,var(--panel) 94%,transparent);color:var(--muted);cursor:pointer;box-shadow:var(--shadow)}
 .vc-b:hover{color:var(--fg);border-color:var(--line-2)}
 .vc-b svg{width:16px;height:16px}
+.vc-b.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.vc-split{display:flex}
+.vc-split .vc-b:first-child{border-radius:7px 0 0 7px}
+.vc-split .vc-b.caret{width:16px;border-left:0;border-radius:0 7px 7px 0}
+.vc-split .vc-b.caret svg{width:11px;height:11px}
+.vc-split .vc-b svg{width:13px;height:13px}
 .vc-fab,.vc-sheet{display:none}
 @media (max-width:700px),(pointer:coarse){
   .vcube{right:10px}
@@ -484,5 +490,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
   .vc-sheet button{height:44px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--fg);font:13px var(--ui)}
   .vc-sheet button:active{background:var(--accent-soft)}
   .vc-sheet button[data-v=q]{grid-column:1 / -1}
+  .vc-sheet button.spin{grid-column:1 / -1;background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+  .vc-sheet button.spin.on{background:var(--field);color:var(--fg);border-color:var(--line)}
   .vc-sheet button[data-v=focus]{border-color:var(--accent);color:var(--accent)}
 }
