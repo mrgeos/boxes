@@ -15,6 +15,7 @@ import { openMenu } from './menu.js';
 import { pickLayers, select } from '../core/selection.js';
 import { renderFaceTabs, renderLayerProps, renderLayers } from './face-panel.js';
 import { setTab } from './tabs.js';
+import { stickerOfKey } from '../stickers/design.js';
 
 /* the colour being edited (its fields under the list), and a list of colours offered to add (from a logo, the
    project or a palette), each one ticked or not */
@@ -109,7 +110,7 @@ function bind(sec) {
       if (a === 'swap') pickAsset(e.target.closest('button'), 'Заменить: поменяется во всём дизайне', r => changed(replaceBrandPicture(l.id, r.id, r.aspect)));
       if (a === 'place' || a === 'pattern') {
         const o = activeObj(); if (!o) return toast('Выберите объект и грань');
-        const k = sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0];
+        const k = sel.face && (faceKeys(o).includes(sel.face) || stickerOfKey(o, sel.face)) ? sel.face : faceKeys(o)[0];
         const L = a === 'place' ? placeBrandLogo(o, k, l) : placeBrandPattern(o, k, l);
         if (sel.face !== k) select(o.id, k, null);
         setTab('design'); pickLayers([L.id]); renderFaceTabs(); commit();

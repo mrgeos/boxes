@@ -125,11 +125,17 @@ function placementsAt(o, face, x, y, rot, R, edge = false) {
 const stickerDirty = new Set();
 /* re-render only the faces a sticker touched before or touches now */
 const stickerKeys = new Map();
+/* what a sticker's design picture depends on: its size, shape and ground (not where it sits) */
+const designSig = new Map();
 function touchSticker(o, st) {
   stickerDirty.add(o.id);
   const now = st ? placementsFor(o, st).map(p => p.key) : [];
   for (const k of new Set([...(stickerKeys.get(st?.id) || []), ...now])) markFace(o, k);
   if (st) stickerKeys.set(st.id, now);
+  if (st?.design) {
+    const sig = JSON.stringify([stickerSize(st), st.kind, st.radius, st.clear, st.finish, st.src]);
+    if (designSig.get(st.id) !== sig) { designSig.set(st.id, sig); markFace(o, 'st:' + st.id); }
+  }
 }
 /* hit test in a face: which sticker sits under the point (face-canvas mm) */
 function stickerAt(o, key, px, py) {

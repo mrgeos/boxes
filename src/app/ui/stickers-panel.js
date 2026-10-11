@@ -2,14 +2,14 @@
 import { $, $$, esc, fmt, uid } from '../core/util.js';
 import { ICON } from '../core/constants.js';
 import { activeObj, sel } from '../core/state.js';
-import { clearLid, faceKeys, faceLabel } from '../core/model.js';
-import { allFonts } from '../core/fonts.js';
-import { RT, markFace, ui } from '../scene/renderer.js';
+import { clearLid, ensureFaces, faceKeys, faceLabel, newImage } from '../core/model.js';
+import { migrateSticker, stickerKey } from '../stickers/design.js';
+import { markFace, ui } from '../scene/renderer.js';
 import { hbOpen } from '../carriers/handle-box.js';
 import { STICKER_FINISH, STICKER_KIND, activeSticker, newSticker, stickerKeys, stickerSize, touchSticker } from '../stickers/placement.js';
 import { commit } from '../core/project.js';
 import { bindFields, placeField, presetField, rangeField } from './fields.js';
-import { bindVecColors, vecColorsHTML } from './face-panel.js';
+import { renderFacePanel, renderFaceTabs, renderLayerProps, renderLayers } from './face-panel.js';
 import { pickAsset } from './asset-picker.js';
 import { activeFill, activeRibbon, addFill, addPart, addRibbon, deleteExtra, duplicateExtra, extraById, extraHidden, extraName, extrasOf, isPart, renameExtra, setExtraHidden, setExtraLocked } from '../core/extras.js';
 import { sleeveOn } from '../carriers/sleeve.js';
@@ -72,6 +72,9 @@ function renderStickers() {
   if (fl) return renderFillPanel(sec, o);
   // the object's extras and what can be added; a picked sticker shows its own settings instead
   if (!st) { sec.innerHTML = extrasHTML(o); return bindExtras(sec, o); }
+  // an older sticker turns into layers here at the latest; its design shows in the design section (its «Дизайн»)
+  if (!st.design && migrateSticker(st)) { ensureFaces(o); markFace(o, stickerKey(st)); refreshTabs(); }
+  if (st.design) { renderFaceTabs(); renderFacePanel(); renderLayers(); renderLayerProps(); ui.editor = true; }
   // a sticker: like every extra, «Форма» (shape, film, place) and «Дизайн» (what is printed on it)
   const custom = st.kind === 'custom';
   sec.innerHTML = `<div data-pane="shape">
@@ -82,30 +85,19 @@ function renderStickers() {
       ${custom ? '' : rangeField('Высота, мм', 'h', 5, 400, .5)}
       ${st.kind === 'rect' ? rangeField('Скругление, мм', 'radius', 0, 60, .5) : ''}
       ${custom ? `<div class="row"><button class="btn sm" id="stShape">${st.src ? 'Заменить форму…' : 'Загрузить форму…'}</button></div>${rangeField('Белая окантовка, мм', 'outline', 0, 10, .1)}` : ''}
+      ${custom ? '' : `<div class="row"><span class="hint">Обводка</span><input type="color" data-k="stroke" aria-label="Цвет обводки"><span class="grow"></span></div>${rangeField('Толщина обводки, мм', 'strokeW', 0, 10, .1)}`}
       <div class="sec-h"><h2>Плёнка</h2></div>
       ${rangeField('Толщина, мм', 'thick', 0, 3, .05)}
       ${presetField('Натяжение', 'tension', [[0, 'Облегает', 'Плотно облегает внутренние углы и ступеньки'], [.5, 'Средне'], [1, 'Натянута', 'Натянута и перекидывается через углы и ступеньки (радиус до 15 мм)']], 0, 100, 1, 100)}
       <div class="field wide"><span class="fl">Покрытие</span><select data-k="finish">${Object.entries(STICKER_FINISH).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      ${custom ? '' : '<label class="check"><input type="checkbox" data-k="clear"> Без фона — печать на прозрачной плёнке</label>'}
       <div class="sec-h"><h2>Место</h2></div>
       <div class="field wide"><span class="fl">Грань</span><select data-k="face">${faceKeys(o).map(k => `<option value="${k}">${faceLabel(o, k)}</option>`).join('')}</select></div>
       ${placeField('Центр', 'x', 'y', -20, 120, .1, 100)}${rangeField('Поворот, °', 'rot', -180, 180, 1)}
       <div class="row"><button class="btn sm" id="stSealPos">Пломбой на линию открытия</button></div>
       ${extraFoot(st.visible === false)}
     </div>
-    <div data-pane="design">
-      <div class="sec-h"><h2>Дизайн наклейки</h2><span class="badge">${esc(STICKER_KIND[st.kind].split(' ')[0])}</span></div>
-      ${custom ? vecColorsHTML(st)
-        : `<div class="row"><span class="hint">Фон</span><input type="color" data-k="fill" aria-label="Цвет наклейки"><label class="check"><input type="checkbox" data-k="clear"> Без фона</label></div>
-           <div class="row"><button class="btn sm" id="stBg">${st.bgSrc ? 'Заменить картинку фона…' : 'Картинка на фон…'}</button>${st.bgSrc ? '<button class="btn sm" id="stBgOff">Убрать</button>' : ''}</div>
-           ${st.bgSrc ? rangeField('Зум фона, %', 'bgScale', 100, 400, 1, 100) + rangeField('Фон по X, %', 'bgX', -50, 50, 1, 100) + rangeField('Фон по Y, %', 'bgY', -50, 50, 1, 100) : ''}
-           <div class="row"><span class="hint">Обводка</span><input type="color" data-k="stroke" aria-label="Цвет обводки"><span class="grow"></span></div>${rangeField('Толщина обводки, мм', 'strokeW', 0, 10, .1)}
-           <div class="row"><button class="btn sm" id="stImg">${st.src ? 'Заменить логотип…' : 'Логотип поверх фона…'}</button>${st.src ? '<button class="btn sm" id="stImgOff">Убрать</button>' : ''}</div>
-           ${st.src ? rangeField('Логотип, %', 'imgScale', 10, 100, 1, 100) + vecColorsHTML(st) : ''}`}
-      <div class="sec-h"><h2>Текст</h2></div>
-      <textarea data-k="text" rows="1" aria-label="Текст наклейки" placeholder="Текст на наклейке"></textarea>
-      <div class="grid2"><select data-k="font" aria-label="Шрифт">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
-        <div class="row"><input type="color" data-k="textColor" aria-label="Цвет текста"><span class="hint">цвет текста</span></div></div>
-      ${rangeField('Кегль, мм', 'textSize', 1, 60, .5)}
+    <div data-pane="design"><p class="hint">Загружаю картинки наклейки, затем здесь откроется её дизайн…</p>
     </div>`;
   bindFields(sec, activeSticker, k => {
     const t = activeSticker(); if (!t) return;
@@ -118,15 +110,17 @@ function renderStickers() {
   });
   bindExtraFoot(sec, o, st.id);
   $('#stSealPos').onclick = () => { Object.assign(st, sealSpot(o)); touchSticker(o, st); renderStickers(); commit(); };
-  const pickInto = (btn, title, key) => btn && (btn.onclick = () => pickAsset(btn, title, r => { st[key] = r.id; if (key === 'src') { st.recolor = {}; if (st.kind === 'custom') st.aspect = r.aspect; } touchSticker(o, st); renderStickers(); commit(); }));
+  const pickInto = (btn, title, key) => btn && (btn.onclick = () => pickAsset(btn, title, r => { const was = st[key]; st[key] = r.id; if (key === 'src') { st.recolor = {}; if (st.kind === 'custom') { st.aspect = r.aspect; reshape(st, was, r); } } touchSticker(o, st); renderStickers(); commit(); }));
   pickInto($('#stShape'), 'Форма наклейки', 'src');
-  pickInto($('#stImg'), 'Логотип на наклейке', 'src');
-  pickInto($('#stBg'), 'Картинка на фон наклейки', 'bgSrc');
-  $('#stImgOff') && ($('#stImgOff').onclick = () => { st.src = null; touchSticker(o, st); renderStickers(); commit(); });
-  $('#stBgOff') && ($('#stBgOff').onclick = () => { st.bgSrc = null; touchSticker(o, st); renderStickers(); commit(); });
-  bindVecColors(sec, activeSticker, t => { const look = RT.get(o.id)?.stickerLook?.get(t.id); if (look) look.key = ''; touchSticker(o, t); }, renderStickers);
 }
 
+/* a custom sticker given another shape: the picture it showed (its bottom layer) becomes the new one */
+function reshape(st, was, r) {
+  if (!st.design) return;
+  const L = st.design.layers.find(x => x.type === 'image' && x.src === was);
+  if (L) Object.assign(L, { src: r.id, aspect: r.aspect, recolor: undefined, keyout: undefined });
+  else if (!st.design.layers.length) st.design.layers.push({ ...newImage(r.id, r.aspect), w: 1 });
+}
 /* the foot of an extra's «Форма»: hide and delete, the same for every extra */
 const extraFoot = hidden => `<div class="grid2 xfoot"><button class="btn sm" data-x="vis">${hidden ? 'Показать' : 'Скрыть'}</button><button class="btn sm danger" data-x="del">Удалить</button></div>`;
 function bindExtraFoot(sec, o, id) {

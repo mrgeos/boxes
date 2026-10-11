@@ -17,6 +17,7 @@ import { pickAsset } from './asset-picker.js';
 import { setTab } from './tabs.js';
 import { startTextEdit } from './text-edit.js';
 import { setMultiMode } from '../core/selection.js';
+import { stickerOfKey } from '../stickers/design.js';
 
 /* Tools decide what a drag on the model does:
    select (V) — picks faces, layers and stickers and drags the graphics over the model; objects stay put;
@@ -53,7 +54,8 @@ function addShape(kind) {
   shapeKind = kind; try { localStorage.setItem('bs3d-shape', kind); } catch { /* private mode */ }
   setTab('design'); addLayer(newShape(kind), face(o), o); renderActionBar();
 }
-const face = o => sel.face && faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0];
+// (a sticker's design while it is open)
+const face = o => sel.face && (faceKeys(o).includes(sel.face) || stickerOfKey(o, sel.face)) ? sel.face : faceKeys(o)[0];
 function initActionBar() {
   // a touch screen: «several» — while it is on, a tap on an object adds it to the picked ones or takes it off
   const multi = $('#abMulti');

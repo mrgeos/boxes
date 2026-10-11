@@ -4,6 +4,7 @@ import { FONTS } from './constants.js';
 import { assets, state } from './state.js';
 import { RT, markFace, ui } from '../scene/renderer.js';
 import { stickerDirty } from '../stickers/placement.js';
+import { faceEntries } from '../stickers/design.js';
 
 const loadedFonts = new Set();
 function fontStr(L, px) { return `${L.italic ? 'italic ' : ''}${L.weight} ${px}px "${L.font}", "Onest", sans-serif`; }
@@ -14,7 +15,7 @@ function ensureFont(L) {
   document.fonts.load(fontStr(L, 48), L.text || 'АБВabc').then(() => markAllText()).catch(() => {});
 }
 function markAllText() {
-  for (const o of state.objects) for (const k in o.faces) if (o.faces[k].layers.some(l => l.type === 'text')) markFace(o, k);
+  for (const o of state.objects) for (const [k, f] of faceEntries(o)) if (f.layers.some(l => l.type === 'text')) markFace(o, k);
   // sticker artwork with text is redrawn once the font has arrived
   for (const o of state.objects) if (o.stickers?.some(t => t.text)) {
     const rt = RT.get(o.id); rt?.stickerLook?.forEach(L => { L.key = ''; }); stickerDirty.add(o.id);

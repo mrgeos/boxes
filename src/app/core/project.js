@@ -18,6 +18,7 @@ import { applyScene, setLastView, setView } from '../scene/camera.js';
 import { layoutAll, normalizeTree } from './groups.js';
 import { renderFonts, renderLayerProps } from '../ui/face-panel.js';
 import { renderAll } from '../ui/wiring.js';
+import { faceEntries } from '../stickers/design.js';
 
 const hist = { stack: [], i: -1 };
 const snapshot = () => JSON.stringify({ name: state.name, brand: state.brand, objects: state.objects, scene: state.scene, fonts: state.fonts, groups: state.groups, tree: state.tree });
@@ -52,7 +53,7 @@ function usedAssets() {
   const used = new Set();
   for (const o of state.objects) {
     if (o.dieline) used.add(o.dieline);
-    for (const k in o.faces) for (const l of o.faces[k].layers) if (l.src) used.add(l.src);
+    for (const [, f] of faceEntries(o)) for (const l of f.layers) if (l.src) used.add(l.src);
     for (const st of o.stickers || []) for (const id of [st.src, st.bgSrc]) if (id) used.add(id);
     if (o.product?.src) used.add(o.product.src);
     for (const r of o.ribbons || []) if (r.src) used.add(r.src);

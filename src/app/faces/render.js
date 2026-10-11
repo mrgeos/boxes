@@ -9,7 +9,8 @@ import { RT, aux, ensureFaceRT, grainCanvas } from '../scene/renderer.js';
 import { fanImage, fanToRect } from '../carriers/cup.js';
 import { BAG_FILM, bagSeals, bagWindows } from '../carriers/bag.js';
 import { faceGrain } from '../carriers/sleeve.js';
-import { STICKER_FX, placementsFor } from '../stickers/placement.js';
+import { STICKER_FX, placementsFor, stickerDirty } from '../stickers/placement.js';
+import { stickerOfKey } from '../stickers/design.js';
 import { drawSticker, stickerMask, stickerShadow } from '../stickers/film.js';
 import { drawWrapped, wrapsOnto } from './wrap.js';
 import { clipBase, clipRect, cropOf, cropped, maskPath } from '../core/mask.js';
@@ -255,14 +256,15 @@ function textIndexAt(L, W, H, px, py) {
   return m.lines.slice(0, l).reduce((t, s) => t + s.length + 1, 0) + best;
 }
 function renderFace(o, k) {
-  const rt = RT.get(o.id); if (!rt || !faceKeys(o).includes(k)) return;
+  const rt = RT.get(o.id), st = stickerOfKey(o, k); if (!rt || !(st?.design || faceKeys(o).includes(k))) return;
   const f = ensureFaceRT(o, k), face = o.faces[k], ctx = f.ctx;
   f.mat.visible = true;   // (a clear face waits hidden for its picture)
   const W = f.canvas.width, H = f.canvas.height;
   // print on a clear PET lid: no board colour, paper grain or kraft, only the layers
   const clear = f.clear = isClearFace(o, k);
-  const bf = clear && o.type === 'bag' ? BAG_FILM[o.bagMat] : null;
-  const fin = clear ? bf?.fin || PET_PRINT : o.type === 'board' ? boardFin(o, k) : k === 'tissue' ? TISSUE_FIN : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : k === 'carry' ? FINISHES[o.carry?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = faceGrain(o, k);
+  const bf = clear && o.type === 'bag' && !st ? BAG_FILM[o.bagMat] : null;
+  // a sticker's own design: its ground and layers only (no board, grain or kraft: the sticker is its own paper)
+  const fin = st ? FINISHES.matte : clear ? bf?.fin || PET_PRINT : o.type === 'board' ? boardFin(o, k) : k === 'tissue' ? TISSUE_FIN : k === 'sleeve' ? FINISHES[o.sleeve?.fin] || FINISHES.matte : k === 'carry' ? FINISHES[o.carry?.fin] || FINISHES.matte : FINISHES[o.finish] || FINISHES.matte, grain = st ? 0 : faceGrain(o, k);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   if (clear) { ctx.clearRect(0, 0, W, H); if (bf?.ground) { ctx.fillStyle = bf.ground; ctx.fillRect(0, 0, W, H); } }
   else {
@@ -348,10 +350,12 @@ function renderFace(o, k) {
   const ppx = W / faceMM(o, k)[0], film = !!RT.get(o.id)?.frames;
   for (const { st, M } of ops) {
     ctx.setTransform(M[0] * ppx, M[1] * ppx, M[2] * ppx, M[3] * ppx, M[4] * ppx, M[5] * ppx);
-    if (film) stickerShadow(ctx, st, ppx); else drawSticker(ctx, st, ppx);
+    if (film) stickerShadow(ctx, st, ppx); else drawSticker(ctx, st, ppx, true, rt.faces['st:' + st.id]?.canvas);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   f.tex.needsUpdate = true;
+  // a sticker's design is cut to its shape and laid on the model as its film (stickers/film.js), drawn again now
+  if (st) { const L = rt.stickerLook?.get(st.id); if (L) L.key = ''; stickerDirty.add(o.id); return; }
   updateFaceMaterial(o, k, f, fxl, fin, film ? [] : ops, draw);
 }
 let skipStickers = false;
