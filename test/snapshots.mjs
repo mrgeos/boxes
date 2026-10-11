@@ -4,7 +4,7 @@
 //   node test/snapshots.mjs снимки/после (на новой)
 //   node test/snapshots.mjs --compare снимки/до снимки/после
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { launch, openEditor, addPreset, download, presetIds } from './browser.mjs';
+import { launch, openEditor, addPreset, download, facesPainted, presetIds } from './browser.mjs';
 
 const args = process.argv.slice(2);
 if (args[0] === '--compare') {
@@ -21,7 +21,7 @@ for (const id of ids) {
   // a fresh page per preset, so earlier ones cannot change later pictures
   const { ctx, page, errors } = await openEditor(browser);
   await addPreset(page, id); await page.click('#propTabs [data-tab="extras"]'); await page.click('#addSticker'); await page.click('.ctx-it:has-text("Пломба")'); await page.waitForTimeout(200); await page.click('#propCrumb .up');
-  await page.evaluate(() => window.__boxStudio.setView('q', true)); await page.waitForTimeout(900);
+  await page.evaluate(() => window.__boxStudio.setView('q', true)); await facesPainted(page); await page.waitForTimeout(900);
   await (await page.$('#stage')).screenshot({ path: `${out}/${id}-3d.png` });
   await page.click('#propTabs [data-tab="net"]'); await page.waitForTimeout(300); await (await page.$('#net')).screenshot({ path: `${out}/${id}-net.png` });
   writeFileSync(`${out}/${id}.svg`, readFileSync(await (await download(page, '#tplBtn')).path()));

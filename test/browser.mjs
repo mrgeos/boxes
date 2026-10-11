@@ -23,8 +23,11 @@ export async function openEditor(browser, { offline = false } = {}) {
   page.on('console', m => { if (m.type() === 'error' && !/ERR_CERT|ERR_INTERNET_DISCONNECTED|net::ERR/.test(m.text())) errors.push(m.text()); });
   await page.goto(PAGE);
   await page.waitForFunction(() => window.__boxStudio?.state.objects.length > 0, null, { timeout: 30000 });
+  await facesPainted(page);
   return { ctx, page, errors };
 }
+/* the faces are painted a few a frame: waits until none is left (pictures then show the whole design) */
+export const facesPainted = page => page.waitForFunction(() => !window.__boxStudio.pendingFaces?.(), null, { timeout: 60000 });
 /* the ids of all presets, from the gallery */
 export const presetIds = async page => { await page.click('.rail-btn[data-tab="add"]'); return page.$$eval('#galSec .gal-it', a => a.map(x => x.dataset.preset)); };
 /* clears the sample scene and adds one object from a preset (through the gallery) */
@@ -32,7 +35,7 @@ export async function addPreset(page, id) {
   await page.click('.rail-btn[data-tab="models"]');
   while (await page.locator('#objList .obj').count()) { await page.click('#objList .obj >> nth=0'); await page.keyboard.press('Delete'); }
   await page.click('.rail-btn[data-tab="add"]');
-  await page.click(`#galSec .gal-it[data-preset="${id}"]`); await page.waitForTimeout(400);
+  await page.click(`#galSec .gal-it[data-preset="${id}"]`); await page.waitForTimeout(400); await facesPainted(page);
 }
 export async function download(page, button) {
   await page.click('#exportBtn');

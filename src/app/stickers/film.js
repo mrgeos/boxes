@@ -94,14 +94,17 @@ function stickerShadow(c, st, ppm) {
 /* the sticker as a film in 3D. A grid follows the faces (folded over edges, projected over flaps
    and lids); where the surface underneath steps down the film bridges the step instead of
    following it, and it splits along the opening line, each piece riding with its own part. */
-function stickerMaterial(params, offset) {
+/* `layers` > 0: the sticker's edge, its thickness as that many copies of the film stacked along the normal, drawn as
+   one instanced mesh (one draw instead of one per layer, as games draw fur or grass): copy i lifts offset·i/layers */
+function stickerMaterial(params, offset, layers = 0) {
   const m = new THREE.MeshPhysicalMaterial(params);
-  m.userData.off = { value: offset };
+  m.userData.off = { value: offset }; m.userData.n = { value: layers || 1 };
   m.onBeforeCompile = sh => {
-    sh.uniforms.uStOff = m.userData.off;
-    sh.vertexShader = 'uniform float uStOff;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed += normalize(objectNormal) * uStOff;');
+    sh.uniforms.uStOff = m.userData.off; sh.uniforms.uStN = m.userData.n;
+    const lift = layers ? 'uStOff * float(gl_InstanceID) / uStN' : 'uStOff';
+    sh.vertexShader = 'uniform float uStOff;\nuniform float uStN;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\n  transformed += normalize(objectNormal) * ${lift};`);
   };
-  m.customProgramCacheKey = () => 'sticker-film-v1';
+  m.customProgramCacheKey = () => layers ? 'sticker-edge-v2' : 'sticker-film-v1';
   return m;
 }
 const stickerMargin = st => (st.kind === 'custom' ? st.outline || 0 : 0) + .5;
@@ -110,7 +113,7 @@ function stickerLook(rt, st) {
   const key = JSON.stringify({ ...st, x: 0, y: 0, face: 0, rot: 0, visible: 0, loaded: !!(st.src && getImg(st.src)), bgLoaded: !!(st.bgSrc && getImg(st.bgSrc)) });
   let L = rt.stickerLook.get(st.id);
   if (L && L.key === key) return L;
-  if (L) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
+  if (L) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edge?.dispose(); }
   const [w, h] = stickerSize(st), m = stickerMargin(st), ew = w + 2 * m, eh = h + 2 * m;
   // a phone gets half the pixels per side (see facePx), and the edge, which only needs the outline, half again
   const ppm = TOUCH ? Math.min(6, 1024 / Math.max(ew, eh)) : Math.min(12, 2048 / Math.max(ew, eh));
@@ -125,15 +128,15 @@ function stickerLook(rt, st) {
   const [r, mt] = STICKER_FX[st.finish] || STICKER_FX.gloss, thick = Math.max(0, st.thick ?? .2) * S;
   const art = stickerMaterial({ map: tex, transparent: true, alphaTest: .04, roughness: r, metalness: mt, clearcoat: st.finish === 'gloss' ? .6 : 0, clearcoatRoughness: .1,
     side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }, thick);
-  const layers = thick > .03 * S ? clamp(Math.ceil(thick / (.04 * S)), 2, 40) : 0, edges = [];
-  for (let i = 0; i < layers; i++) edges.push(stickerMaterial({ map: edgeTex, alphaTest: .5, roughness: .85, side: THREE.DoubleSide,
-    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }, thick * i / layers));
-  L = { key, tex, edgeTex, art, edges, ext: [ew, eh] }; rt.stickerLook.set(st.id, L);
+  const layers = thick > .03 * S ? clamp(Math.ceil(thick / (.04 * S)), 2, 40) : 0;
+  const edge = layers ? stickerMaterial({ map: edgeTex, alphaTest: .5, roughness: .85, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }, thick, layers) : null;
+  L = { key, tex, edgeTex, art, edge, layers, ext: [ew, eh] }; rt.stickerLook.set(st.id, L);
   return L;
 }
 function buildStickerFilms(o) {
   const rt = RT.get(o.id); if (!rt) return;
-  for (const m of rt.stickerMeshes || []) { m.parent?.remove(m); if (m.userData.own) m.geometry.dispose(); }
+  for (const m of rt.stickerMeshes || []) { m.parent?.remove(m); if (m.userData.own) m.geometry.dispose(); if (m.isInstancedMesh) m.dispose(); }
   rt.stickerMeshes = [];
   if (!rt.frames) return;
   const lift = .1, V = () => new THREE.Vector3();
@@ -228,9 +231,9 @@ function buildStickerFilms(o) {
       // make normals face outward (along the face normal in the part's space)
       const nPart = F.n.clone().transformDirection(F.pinv), nrm = geo.attributes.normal;
       if (nrm.count && new THREE.Vector3().fromBufferAttribute(nrm, idx[0]).dot(nPart) < 0) { geo.setIndex(idx.map((_, t) => idx[t - (t % 3) + [0, 2, 1][t % 3]])); geo.computeVertexNormals(); }
-      const mk = (mat, own, order) => { const m = new THREE.Mesh(geo, mat); m.raycast = () => {}; m.receiveShadow = true; m.renderOrder = order; m.userData.own = own; parent.add(m); rt.stickerMeshes.push(m); };
-      look.edges.forEach((mat, i) => mk(mat, false, 2));
-      mk(look.art, true, 3);
+      const mk = (m, own, order) => { m.raycast = () => {}; m.receiveShadow = true; m.renderOrder = order; m.userData.own = own; parent.add(m); rt.stickerMeshes.push(m); };
+      if (look.edge) mk(new THREE.InstancedMesh(geo, look.edge, look.layers), false, 2);
+      mk(new THREE.Mesh(geo, look.art), true, 3);
     }
   }
 }

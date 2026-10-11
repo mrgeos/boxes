@@ -1,7 +1,7 @@
 // Превью объектов в списке «Объекты в сцене»: маленький снимок самого объекта с его дизайном
 import * as THREE from 'three';
 import { state } from '../core/state.js';
-import { RT, glLost, renderer, scene } from '../scene/renderer.js';
+import { RT, dirtyFaces, glLost, renderer, scene } from '../scene/renderer.js';
 import { invalidate, recording } from '../scene/camera.js';
 import { renderObjects } from './object-list.js';
 
@@ -20,7 +20,7 @@ function check() {
     const s = shots.get(o.id) || {}, sig = sigOf(o);
     // still changing: wait for it to settle
     if (sig !== s.seen) { shots.set(o.id, { ...s, seen: sig }); continue; }
-    if (sig === s.sig || !RT.get(o.id)) continue;
+    if (sig === s.sig || !RT.get(o.id) || [...dirtyFaces].some(k => k.startsWith(o.id + '|'))) continue;   // (its faces not all painted yet)
     try { shots.set(o.id, { sig, seen: sig, url: shoot(o) }); got = true; } catch (e) { console.warn('object picture', o.id, e); }
   }
   for (const id of shots.keys()) if (!state.objects.some(o => o.id === id)) shots.delete(id);

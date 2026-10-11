@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { $, DEG, S, clamp } from '../core/util.js';
 import { FINISHES, LID_COLORS, WHITE_INSIDE } from '../core/constants.js';
 import { sel } from '../core/state.js';
-import { clearLid, ensureFaces, faceKeys, faceMM, facePx } from '../core/model.js';
+import { clearLid, ensureFaces, faceKeys, faceMM, facePx, isClearFace } from '../core/model.js';
 import { buildCup } from '../carriers/cup.js';
 import { buildBag } from '../carriers/bag.js';
 import { buildTube } from '../carriers/tube.js';
@@ -27,6 +27,7 @@ import { layoutSoon, parentOf, placeOf } from '../core/groups.js';
 import { moving } from './move.js';
 import { wrapTouch } from '../faces/wrap.js';
 import { corrugateEdges } from '../carriers/corrugated.js';
+import { mergeStatic } from './geometry.js';
 import { applyInsert, buildInsert } from '../carriers/insert.js';
 import { drawerOut } from '../carriers/rigid.js';
 
@@ -117,6 +118,10 @@ function ensureFaceRT(o, k) {
     f.mat.map = f.tex;
     for (const n of ['fx', 'bump', 'coat', 'iri']) if (f[n]) { f[n + 'Tex'].dispose(); release(f[n]); f[n] = null; }
     f.mat.needsUpdate = true;
+    // until its picture is painted (a few faces a frame, see paintFaces) a face shows its ground colour; a clear
+    // one is not shown at all
+    if (isClearFace(o, k)) f.mat.visible = false;
+    else { f.ctx.fillStyle = o.faces[k]?.bg || '#ffffff'; f.ctx.fillRect(0, 0, W, H); }
   }
   const [mw, mh] = faceMM(o, k);
   if (!f.grain) { f.grain = grainTex.clone(); }
@@ -163,7 +168,7 @@ function buildObject(o) {
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else if (o.type === 'board') buildBoard(o, rt); else if (o.type === 'model') buildModelObject(o, rt); else buildTube(o, rt);
-  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); buildTissue(o, rt); buildInsert(o, rt); buildFill(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); corrugateEdges(o, rt); applyObjMaterials(o); markObj(o);
+  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); buildTissue(o, rt); buildInsert(o, rt); buildFill(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); corrugateEdges(o, rt); applyObjMaterials(o); markObj(o); mergeStatic(rt);
   rt.stickerMeshes = []; buildStickerFilms(o);
   if (parentOf(o.id) && JSON.stringify(foot) !== JSON.stringify(rt.foot)) layoutSoon();   // the row makes room for its new size
 }
@@ -186,7 +191,7 @@ function disposeObject(id) {
   rt.group.traverse(m => { if ((m.isMesh || m.isLine) && !m.userData.shared) m.geometry.dispose(); });
   world.remove(rt.group);
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.coatTex?.dispose(); f.iriTex?.dispose(); f.grain?.dispose(); for (const n of ['canvas', 'fx', 'bump', 'coat', 'iri']) release(f[n]); }
-  for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edges.forEach(e => e.dispose()); }
+  for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edge?.dispose(); }
   rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); rt.cupLidMat.dispose(); rt.holeMat.dispose();
   rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); rt.baseMat?.dispose(); rt.trayMat?.dispose(); rt.cakeMats?.forEach(m => m.dispose()); rt.cbSideMat?.dispose(); rt.sleeveIn?.dispose(); rt.sleeveEdge?.dispose(); RT.delete(id);
 }

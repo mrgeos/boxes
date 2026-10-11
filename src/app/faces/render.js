@@ -257,6 +257,7 @@ function textIndexAt(L, W, H, px, py) {
 function renderFace(o, k) {
   const rt = RT.get(o.id); if (!rt || !faceKeys(o).includes(k)) return;
   const f = ensureFaceRT(o, k), face = o.faces[k], ctx = f.ctx;
+  f.mat.visible = true;   // (a clear face waits hidden for its picture)
   const W = f.canvas.width, H = f.canvas.height;
   // print on a clear PET lid: no board colour, paper grain or kraft, only the layers
   const clear = f.clear = isClearFace(o, k);
