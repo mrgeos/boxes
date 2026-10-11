@@ -25,7 +25,7 @@ async function exportPNG() {
   const pr = renderer.getPixelRatio();
   renderer.setPixelRatio(1); renderer.setSize(W, H, false);
   for (const rt of RT.values()) for (const f of Object.values(rt.faces)) { f.flash = 0; f.mat.emissive.setRGB(0, 0, 0); }
-  const showRings = hideRings(), showSel = hideSelBox(), showLook = hideSelLook(); renderer.render(scene, camera); showRings(); showSel(); showLook();
+  const showRings = hideRings(), showSel = hideSelBox(), showLook = hideSelLook(); renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); showRings(); showSel(); showLook();
   const out = document.createElement('canvas'); out.width = W; out.height = H; const c = out.getContext('2d');
   if (!transparent) paintBackground(c, W, H);
   c.drawImage(renderer.domElement, 0, 0);

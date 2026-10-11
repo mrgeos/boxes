@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { $, DEG, clamp } from '../core/util.js';
 import { activeObj, sel, state } from '../core/state.js';
-import { RT, buildObject, camera, controls, dirtyFaces, fillLight, floor, keyLight, markObj, rebuildQueue, renderer, scene, ui, viewport } from './renderer.js';
+import { RT, buildObject, camera, controls, dirtyFaces, fillLight, floor, keyLight, markObj, rebuildQueue, renderer, scene, staleShadow, takeShadowStale, ui, viewport } from './renderer.js';
+import { frameScale, noteFrame } from './quality.js';
 import { planTextures } from '../core/model.js';
 import { renderFace } from '../faces/render.js';
 import { stickerDirty } from '../stickers/placement.js';
@@ -170,13 +171,16 @@ function initCamera() {
   controls.addEventListener('end', () => { userDrag = false; });
   controls.addEventListener('change', () => { if (userDrag) setViewName('custom'); });
   // a handler may change materials or the scene directly: draw after any input
-  for (const t of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'click', 'drop', 'paste']) addEventListener(t, () => invalidate(), { capture: true, passive: true });
+  // (input outside the 3D view may change the scene in ways the parts do not report: its shadow is drawn anew)
+  for (const t of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'click', 'drop', 'paste']) addEventListener(t, e => { invalidate(); if (e.target !== renderer.domElement) staleShadow(); }, { capture: true, passive: true });
   renderer.domElement.addEventListener('pointermove', () => invalidate(), { passive: true });
   let lastNow = 0;
   renderer.setAnimationLoop(now => {
     // seconds since the last frame: the auto-rotation turns by time, not by frames (a slow machine turns as fast)
-    const dt = lastNow ? Math.min(.25, (now - lastNow) / 1000) : 0; lastNow = now;
+    const gap = lastNow ? now - lastNow : 0, dt = Math.min(.25, gap / 1000); lastNow = now;
     let changed = rebuildQueue.size || dirtyFaces.size || stickerDirty.size || camTween || recording || now < drawUntil;
+    if (dirtyFaces.size || stickerDirty.size) staleShadow();   // a face's picture may cut it (alpha) and so its shadow
+    let turning = !!camTween;
     for (const id of rebuildQueue) { const o = state.objects.find(x => x.id === id); if (o) buildObject(o); }
     if (rebuildQueue.size) { rebuildQueue.clear(); updateShadowCam(); }
     if (layoutPending()) changed = true;
@@ -200,12 +204,17 @@ function initCamera() {
     if (syncSelLook()) changed = true;
     if (spinEnv(now)) changed = true;
     if (recording) recording.step(now);
-    else if (controls.update(dt)) changed = true;
+    else if (controls.update(dt)) { changed = true; turning = true; }
+    // while the camera moves the frame is drawn with fewer pixels and keeps its shadow (see quality.js); a click that
+    // does not move it stays sharp, and a video is always drawn in full
+    const moving = !recording && turning;
+    if (frameScale(moving)) changed = true;
+    noteFrame(gap, moving && changed);
     for (const rt of RT.values()) for (const k in rt.faces) {
       const f = rt.faces[k];
       if (f.flash > 0) { changed = true; f.flash = Math.max(0, f.flash - .035); f.mat.emissive.copy(accent).multiplyScalar(f.flash * .45); }
     }
-    if (changed) { fitClipPlanes(); renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
+    if (changed) { fitClipPlanes(); if (takeShadowStale() || !moving) renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
     syncCtxBar(changed); syncStageHint();
     if (ui.editor) { ui.editor = false; drawEditor(); }
     if (ui.net) { ui.net = false; drawNet(); }
