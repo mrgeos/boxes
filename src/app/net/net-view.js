@@ -8,6 +8,10 @@ import { cutNetWindow, netWindowPath, netWindows } from '../carriers/box.js';
 import { cropPx, drawNetPanel } from '../faces/render.js';
 import { select } from '../core/selection.js';
 import { isPart } from '../core/extras.js';
+import { activeSticker } from '../stickers/placement.js';
+import { cutPath, shapePath, stickerSheet, stickerSheetCanvas } from '../stickers/sheet.js';
+import { stickerFoil } from '../stickers/film.js';
+import { fmt } from '../core/util.js';
 
 const netC = $('#net'), nctx = netC.getContext('2d');
 let netGeom = null;
@@ -43,10 +47,43 @@ function viewNet(o) {
     ...(p.creases ? { creases: p.creases.map(([a, b, c, d]) => [a - x0, b - y0, c - x0, d - y0]) } : {}) }));
   return { W: Math.max(...panels.map(p => p.x + p.w)), H: Math.max(...panels.map(p => p.y + p.h)), panels, part: true };
 }
+/* the section's texts and buttons: a sticker's sheet or an object's net */
+const NET_TEXT = {
+  obj: ['Клик по панели развёртки выбирает грань. Готовый макет всей развёртки можно наложить целиком: он сам разрежется по граням.', 'Шаблон SVG', 'PNG с дизайном'],
+  sticker: ['Голубой — контур реза. За ним вылет 2 мм: фон и картинки у края продолжаются туда, чтобы при неточной резке не осталось каймы. Серый пунктир — безопасная зона: текст и важное держите внутри.', 'Контур SVG', 'PNG с вылетом'],
+};
+function netTexts(st) {
+  const [hint, svg, png] = NET_TEXT[st ? 'sticker' : 'obj'];
+  $('#netHint').textContent = st?.kind === 'custom' ? hint.replace(/ Серый пунктир.*$/, ' Текст и важное держите в 2 мм от края картинки.') : hint;
+  $('#tplBtn2').textContent = svg; $('#flatBtn2').textContent = png;
+  $('#dielineBtn').hidden = !!st; if (st) $('#dielineOffBtn').hidden = true;
+}
+/* a sticker's sheet: its print with the bleed (paler past the cut), the cut and the safe zone */
+function drawStickerNet(o, st, cw, dpr) {
+  const S = stickerSheet(st), pad = 8;
+  $('#netSize').textContent = S ? `${fmt(S.W - 2 * S.bleed, 1)} × ${fmt(S.H - 2 * S.bleed, 1)} мм + вылет ${S.bleed}` : '';
+  if (!S) { nctx.clearRect(0, 0, netC.width, netC.height); return; }
+  // as large as the panel allows, a tall sticker no taller than the panel is wide
+  const k = Math.min((cw - pad * 2) / S.W, (cw - pad * 2) / S.H), ch = Math.round(S.H * k + pad * 2), ox = (cw - S.W * k) / 2;
+  if (netC.width !== cw * dpr || netC.height !== ch * dpr) { netC.width = cw * dpr; netC.height = ch * dpr; netC.style.height = ch + 'px'; }
+  const c = nctx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, cw, ch);
+  const pic = stickerSheetCanvas(o, st, k * dpr, S);
+  // on foil, what is not printed is the metal (as in the design's window)
+  if (st.finish?.startsWith('foil')) { c.save(); c.beginPath(); cutPath(c, S, k, ox, pad); c.translate(ox + S.W * k / 2, pad + S.H * k / 2); c.fillStyle = stickerFoil(c, st.finish, S.W * k, S.H * k); c.fill('evenodd'); c.restore(); }
+  if (pic) c.drawImage(pic, ox, pad, S.W * k, S.H * k);
+  // past the cut: veiled, it is cut away
+  c.save(); c.beginPath(); c.rect(ox, pad, S.W * k, S.H * k); cutPath(c, S, k, ox, pad); c.fillStyle = 'rgba(255,255,255,.55)'; c.fill('evenodd'); c.restore();
+  c.beginPath(); cutPath(c, S, k, ox, pad); c.strokeStyle = 'rgba(0,160,227,.95)'; c.lineWidth = 1.5; c.stroke();
+  if (S.kind !== 'poly') { c.beginPath(); if (shapePath(c, S, -S.safe, k, ox, pad)) { c.setLineDash([4, 3]); c.strokeStyle = 'rgba(120,110,95,.85)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]); } }
+  netGeom = null;
+}
 function drawNet() {
   const o = activeObj(); const dpr = Math.min(devicePixelRatio || 1, 2);
-  const cw = netC.clientWidth || 300;
+  const cw = netC.clientWidth || 300, st = o && activeSticker();
+  netTexts(st);
   if (!o) { nctx.clearRect(0, 0, netC.width, netC.height); return; }
+  // (a sticker's sheet only while it is shown: it is drawn again when the section opens)
+  if (st) return netC.clientWidth ? drawStickerNet(o, st, cw, dpr) : undefined;
   const n = viewNet(o), pad = 8, k = (cw - pad * 2) / n.W, ch = Math.round(n.H * k + pad * 2);
   if (netC.width !== cw * dpr || netC.height !== ch * dpr) { netC.width = cw * dpr; netC.height = ch * dpr; netC.style.height = ch + 'px'; }
   const c = nctx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, cw, ch);

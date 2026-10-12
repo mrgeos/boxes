@@ -25,7 +25,8 @@ function tabsNow() {
   if (sel.multi.length > 1) return ['shape'];   // several picked: their shared settings only (ui/model-panel.js)
   if (sel.group || !activeObj()) return RIGHT;
   // an extra without a face of its own: its settings split into the same tabs as a part's (in the extras' section)
-  if (activeSticker() || activeRibbon()) return ['shape', 'design'];
+  if (activeSticker()) return ['shape', 'design', 'net'];   // its net: the sheet with the cut (stickers/sheet.js)
+  if (activeRibbon()) return ['shape', 'design'];
   if (activeFill()) return ['shape'];   // a 3D model: no print
   if (activeObj().type === 'model') return ['shape'];   // a 3D model: no print, no extras
   if (sel.part) return ['shape', 'design', 'net'];
@@ -36,7 +37,7 @@ const shownTab = () => { const t = tabsNow(); return t.includes(right) ? right :
    «Дизайн» is the faces' own design section, on the sticker's design (stickers/design.js) */
 const paneExtra = () => !sel.group && !!activeObj() && !!(activeSticker() || activeRibbon() || activeFill());
 function paintRight() {
-  const tabs = tabsNow(), cur = shownTab(), pane = paneExtra() && !(activeSticker()?.design && cur === 'design') ? cur : '';
+  const tabs = tabsNow(), cur = shownTab(), pane = paneExtra() && !(activeSticker() && (cur === 'net' || (activeSticker().design && cur === 'design'))) ? cur : '';
   show('propPanel', hasSel ? (pane ? 'extras' : cur) : 'none');
   $('#stickerSec').dataset.pane = pane;
   $('#propTabs').hidden = !hasSel || tabs.length < 2;

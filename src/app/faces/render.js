@@ -432,4 +432,4 @@ function updateFaceMaterial(o, k, f, fxl, fin, ops, draw) {
 }
 function setSkipStickers(v) { skipStickers = v; }
 
-export { cropPx, drawLayer, drawNetPanel, layerBox, renderFace, setSkipStickers, setTextCaret, textIndexAt, tmp };
+export { cropPx, drawLayer, drawNetPanel, foilPaint, layerBox, layerPaint, renderFace, setSkipStickers, setTextCaret, textIndexAt, tmp };

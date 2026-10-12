@@ -16,6 +16,8 @@ import { saveFile } from '../core/project.js';
 import { panelPath } from './net-view.js';
 import { fluteName } from '../carriers/corrugated.js';
 import { BOX_STYLES } from '../carriers/carton-net.js';
+import { activeSticker } from '../stickers/placement.js';
+import { exportStickerPNG, exportStickerSVG } from '../stickers/sheet.js';
 
 function templateSVG(o) {
   const n = netLayout(o), f = v => +v.toFixed(2);
@@ -170,12 +172,16 @@ function splitByWindows(lines, wins) {
 }
 /* the leaf of a handle that is glued to the other one, on its back */
 const glueZone = (p, f) => `<polygon points="${p.glue.map(v => v.map(f).join(',')).join(' ')}" fill="#f39200" fill-opacity="0.12" stroke="#f39200" stroke-width="0.3" stroke-dasharray="1 1"/><text x="${f(p.x + p.w / 2)}" y="${f(p.glue.reduce((a, v) => a + v[1], 0) / p.glue.length)}" font-family="Arial, sans-serif" font-size="3" fill="#c46f00" text-anchor="middle" dominant-baseline="middle">клей с оборота</text>`;
+const notYet = () => toast('Картинка наклейки ещё загружается');
 function exportTemplate() {
   const o = activeObj(); if (!o) return toast('Выберите объект');
+  // a sticker picked: its cut
+  const st = activeSticker(); if (st) return exportStickerSVG(o, st) || notYet();
   saveFile(`${slug(o.name)}-razvertka-${fmt(netLayout(o).W)}x${fmt(netLayout(o).H)}mm.svg`, new Blob([templateSVG(o)], { type: 'image/svg+xml' }));
 }
 function exportFlat() {
   const o = activeObj(); if (!o) return toast('Выберите объект');
+  const st = activeSticker(); if (st) return exportStickerPNG(o, st) || notYet();
   const n = netLayout(o), k = Math.min(6000 / Math.max(n.W, n.H), 300 / 25.4);
   const out = document.createElement('canvas'); out.width = Math.round(n.W * k); out.height = Math.round(n.H * k);
   const c = out.getContext('2d'), rt = RT.get(o.id);
