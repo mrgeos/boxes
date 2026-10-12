@@ -6,6 +6,7 @@ import { activeSticker } from '../stickers/placement.js';
 import { selectObjectItself } from '../core/selection.js';
 import { ui } from '../scene/renderer.js';
 import { renderGallery } from './preset-gallery.js';
+import { setSideOpen } from './panels.js';
 
 /* As in Figma: the left panel holds what belongs to the whole project (its rail picks a section: add from presets, the objects, the brand kit, uploads), the right one
    works on the selection (its tabs pick a section; with nothing selected it holds the scene: light, reflections, background). A section is a .sec with
@@ -72,7 +73,8 @@ function setTab(t) {
 /* the right panel follows the selection: something selected or nothing */
 function syncProps(has) { if (has === hasSel) return; hasSel = has; paintRight(); }
 function initTabs() {
-  $$('#rail .rail-btn').forEach(b => { b.onclick = () => setTab(b.dataset.tab); });
+  // a section of the rail shows the left panel again when it was hidden
+  $$('#rail .rail-btn').forEach(b => { b.onclick = () => { setSideOpen(true); setTab(b.dataset.tab); }; });
   $$('#propTabs button').forEach(b => { b.onclick = () => setTab(b.dataset.tab); });
   let saved = {}; try { saved = JSON.parse(localStorage.getItem('bs3d-tabs') || '{}'); } catch {}
   setTab(LEFT.includes(saved.left) ? saved.left : 'models');
