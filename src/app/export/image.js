@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { $, slug, toast } from '../core/util.js';
 import { activeObj, state } from '../core/state.js';
 import { RT, camera, controls, cvs, glLost, renderer, scene, viewport } from '../scene/renderer.js';
-import { flushFaces, resize, setRecording } from '../scene/camera.js';
+import { fitShadowToView, flushFaces, resize, setRecording } from '../scene/camera.js';
 import { saveFile } from '../core/project.js';
 import { hideRings } from '../scene/move.js';
 import { hideSelBox } from '../scene/sel-box.js';
@@ -28,7 +28,7 @@ async function exportPNG() {
   const pr = renderer.getPixelRatio();
   renderer.setPixelRatio(1); renderer.setSize(W, H, false);
   for (const rt of RT.values()) for (const f of Object.values(rt.faces)) { f.flash = 0; f.mat.emissive.setRGB(0, 0, 0); }
-  const showRings = hideRings(), showSel = hideSelBox(), showLook = hideSelLook(); renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); showRings(); showSel(); showLook();
+  const showRings = hideRings(), showSel = hideSelBox(), showLook = hideSelLook(); fitShadowToView(); renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); showRings(); showSel(); showLook();
   const out = document.createElement('canvas'); out.width = W; out.height = H; const c = out.getContext('2d');
   if (!transparent) paintBackground(c, W, H);
   c.drawImage(renderer.domElement, 0, 0);

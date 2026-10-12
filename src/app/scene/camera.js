@@ -143,6 +143,36 @@ function updateShadowCam() {
   keyLight.position.copy(c).addScaledVector(dir, r * 4); keyLight.target.position.copy(c);
   fillLight.position.copy(c).addScaledVector(new THREE.Vector3(-dir.x, .5, -dir.z), r * 4); fillLight.target.position.copy(c);
   const sc = keyLight.shadow.camera; sc.left = sc.bottom = -r * 1.6; sc.right = sc.top = r * 1.6; sc.near = .01; sc.far = r * 10; sc.updateProjectionMatrix();
+  shadowBox = b; fitShadowBias();
+}
+/* Like a game, the key light's shadow covers what the camera sees rather than the whole scene: close up on a small
+   box beside a large carton, its pixels go to that box and its shadows' edges stay clean instead of stepped. It is
+   fitted where the shadow is drawn anew (the camera at rest, or the scene changed), so a moving camera keeps the
+   shadow it has. Seen from the light, the area is where the scene and the camera's view overlap, with a margin; in
+   depth it still takes the whole scene, so what casts a shadow into the view from outside it still does. */
+let shadowBox = null;
+const lightCam = new THREE.Object3D(), lp = new THREE.Vector3(), lq = new THREE.Vector3();
+function fitShadowToView() {
+  if (!shadowBox) return;
+  keyLight.updateMatrixWorld(); keyLight.target.updateMatrixWorld(); camera.updateMatrixWorld();
+  lightCam.position.setFromMatrixPosition(keyLight.matrixWorld); lightCam.lookAt(lq.setFromMatrixPosition(keyLight.target.matrixWorld)); lightCam.updateMatrixWorld();
+  const toLight = lightCam.matrixWorld.clone().invert(), span = () => [Infinity, Infinity, -Infinity, -Infinity];
+  const grow = (a, v) => { v.applyMatrix4(toLight); a[0] = Math.min(a[0], v.x); a[1] = Math.min(a[1], v.y); a[2] = Math.max(a[2], v.x); a[3] = Math.max(a[3], v.y); };
+  // the scene's box, and the camera's view as far as the scene's farthest corner
+  const A = span(), F = span(), { min, max } = shadowBox; let reach = 0;
+  for (let i = 0; i < 8; i++) {
+    lp.set(i & 1 ? max.x : min.x, i & 2 ? max.y : min.y, i & 4 ? max.z : min.z);
+    reach = Math.max(reach, lp.distanceTo(camera.position)); grow(A, lp);
+  }
+  for (const x of [-1, 1]) for (const y of [-1, 1]) {
+    const n = new THREE.Vector3(x, y, -1).unproject(camera), dir = new THREE.Vector3(x, y, .5).unproject(camera).sub(n).normalize();
+    grow(F, n.clone()); grow(F, n.addScaledVector(dir, reach));
+  }
+  let [x0, y0, x1, y1] = [Math.max(A[0], F[0]), Math.max(A[1], F[1]), Math.min(A[2], F[2]), Math.min(A[3], F[3])];
+  if (!(x1 > x0 && y1 > y0)) [x0, y0, x1, y1] = A;
+  // a margin, so a turn of the camera does not at once leave the shadowed area; never under 5 cm
+  const pad = Math.max(.05, (x1 - x0) * .12, (y1 - y0) * .12), sc = keyLight.shadow.camera;
+  sc.left = x0 - pad; sc.right = x1 + pad; sc.bottom = y0 - pad; sc.top = y1 + pad; sc.updateProjectionMatrix();
   fitShadowBias();
 }
 /* the shadow covers the whole scene, so in a big one (a large carton next to small boxes) or on a smaller shadow map
@@ -150,7 +180,7 @@ function updateShadowCam() {
    lookup is pushed off the surface by a pixel and a half of the map, never less than 2 mm */
 function fitShadowBias() {
   const sc = keyLight.shadow.camera;
-  keyLight.shadow.normalBias = Math.max(.02, 1.5 * (sc.right - sc.left) / keyLight.shadow.mapSize.x);
+  keyLight.shadow.normalBias = Math.max(.02, 1.5 * Math.max(sc.right - sc.left, sc.top - sc.bottom) / keyLight.shadow.mapSize.x);
 }
 function applyScene() {
   invalidate();
@@ -254,7 +284,7 @@ function initCamera() {
     wasMoving = moving;
     // the frame waits (the last one stays on screen) while the programs it needs are built in the background
     if (changed && !shadersReady(now)) { changed = false; invalidate(); }
-    if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
+    if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) { fitShadowToView(); renderer.shadowMap.needsUpdate = true; } renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
     syncCtxBar(changed); syncStageHint();
     if (ui.editor) { ui.editor = false; drawEditor(); }
     if (ui.net) { ui.net = false; drawNet(); }
@@ -265,4 +295,4 @@ function initCamera() {
   });
 }
 
-export { VIEW_DIRS, VIEW_LABEL, fitShadowBias, flushFaces, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
+export { VIEW_DIRS, VIEW_LABEL, fitShadowBias, fitShadowToView, flushFaces, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
