@@ -2,7 +2,7 @@
 import { toast } from '../core/util.js';
 import { TOUCH } from '../core/model.js';
 import { keyLight, renderer } from './renderer.js';
-import { invalidate, resize } from './camera.js';
+import { fitShadowBias, invalidate, resize } from './camera.js';
 
 /* Like a game's quality presets. A level sets how sharp the picture is at rest (pixels per CSS pixel), how far that
    drops while the camera moves (dynamic resolution: a moving picture looks as sharp with far fewer pixels, and the
@@ -33,7 +33,7 @@ function guessLevel() {
 function apply() {
   const L = LEVELS[level];
   basePR = Math.min(devicePixelRatio || 1, L.pr);
-  if (keyLight.shadow.mapSize.x !== L.shadow) { keyLight.shadow.mapSize.set(L.shadow, L.shadow); keyLight.shadow.map?.dispose(); keyLight.shadow.map = null; }
+  if (keyLight.shadow.mapSize.x !== L.shadow) { keyLight.shadow.mapSize.set(L.shadow, L.shadow); keyLight.shadow.map?.dispose(); keyLight.shadow.map = null; fitShadowBias(); }
   renderer.shadowMap.needsUpdate = true;
   renderer.setPixelRatio(basePR); resize(); invalidate();
 }

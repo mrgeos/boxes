@@ -143,6 +143,14 @@ function updateShadowCam() {
   keyLight.position.copy(c).addScaledVector(dir, r * 4); keyLight.target.position.copy(c);
   fillLight.position.copy(c).addScaledVector(new THREE.Vector3(-dir.x, .5, -dir.z), r * 4); fillLight.target.position.copy(c);
   const sc = keyLight.shadow.camera; sc.left = sc.bottom = -r * 1.6; sc.right = sc.top = r * 1.6; sc.near = .01; sc.far = r * 10; sc.updateProjectionMatrix();
+  fitShadowBias();
+}
+/* the shadow covers the whole scene, so in a big one (a large carton next to small boxes) or on a smaller shadow map
+   each of its pixels covers more of the surface; a surface's own shadow then falls on it in stripes ("acne"). The
+   lookup is pushed off the surface by a pixel and a half of the map, never less than 2 mm */
+function fitShadowBias() {
+  const sc = keyLight.shadow.camera;
+  keyLight.shadow.normalBias = Math.max(.02, 1.5 * (sc.right - sc.left) / keyLight.shadow.mapSize.x);
 }
 function applyScene() {
   invalidate();
@@ -257,4 +265,4 @@ function initCamera() {
   });
 }
 
-export { VIEW_DIRS, VIEW_LABEL, flushFaces, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
+export { VIEW_DIRS, VIEW_LABEL, fitShadowBias, flushFaces, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
