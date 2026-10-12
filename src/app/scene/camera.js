@@ -143,44 +143,65 @@ function updateShadowCam() {
   keyLight.position.copy(c).addScaledVector(dir, r * 4); keyLight.target.position.copy(c);
   fillLight.position.copy(c).addScaledVector(new THREE.Vector3(-dir.x, .5, -dir.z), r * 4); fillLight.target.position.copy(c);
   const sc = keyLight.shadow.camera; sc.left = sc.bottom = -r * 1.6; sc.right = sc.top = r * 1.6; sc.near = .01; sc.far = r * 10; sc.updateProjectionMatrix();
-  shadowBox = b; fitShadowBias();
+  fitShadowBias();
 }
 /* Like a game, the key light's shadow covers what the camera sees rather than the whole scene: close up on a small
-   box beside a large carton, its pixels go to that box and its shadows' edges stay clean instead of stepped. It is
-   fitted where the shadow is drawn anew (the camera at rest, or the scene changed), so a moving camera keeps the
-   shadow it has. Seen from the light, the area is where the scene and the camera's view overlap, with a margin; in
-   depth it still takes the whole scene, so what casts a shadow into the view from outside it still does. */
-let shadowBox = null;
-const lightCam = new THREE.Object3D(), lp = new THREE.Vector3(), lq = new THREE.Vector3();
+   box beside a large carton, its pixels go to that box. It is fitted where the shadow is drawn anew (the camera at
+   rest, or the scene changed), from the scene as it is then (an opened lid or a loaded model reaches past where the
+   objects were built), so a moving camera keeps the shadow it has. Seen from the light, the area is where the scene
+   and the camera's view overlap, with a margin, and not so small that the map's pixel is finer than SHADOW_TEXEL; in
+   depth it takes the whole scene and past it, so what casts a shadow into the view from outside it still does. */
+const SHADOW_TEXEL = .0015;   // 0.15 mm (a millimetre is 0.01 here): finer pixels would only be wasted
+const PENUMBRA = .025;   // half the width of a shadow's soft edge: 2.5 mm, as from a large soft light
+// a camera, as three's shadow camera is (an Object3D's lookAt turns its +z to the target, a camera's -z)
+const lightCam = new THREE.OrthographicCamera(), lp = new THREE.Vector3(), lq = new THREE.Vector3();
 function fitShadowToView() {
-  if (!shadowBox) return;
+  const b = sceneBounds(), c = b.getCenter(new THREE.Vector3()), r = Math.max(.5, b.getBoundingSphere(new THREE.Sphere()).radius);
+  const s = state.scene, az = s.az * DEG, el = s.el * DEG;
+  keyLight.position.copy(c).addScaledVector(lp.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)), r * 4); keyLight.target.position.copy(c);
   keyLight.updateMatrixWorld(); keyLight.target.updateMatrixWorld(); camera.updateMatrixWorld();
-  lightCam.position.setFromMatrixPosition(keyLight.matrixWorld); lightCam.lookAt(lq.setFromMatrixPosition(keyLight.target.matrixWorld)); lightCam.updateMatrixWorld();
-  const toLight = lightCam.matrixWorld.clone().invert(), span = () => [Infinity, Infinity, -Infinity, -Infinity];
-  const grow = (a, v) => { v.applyMatrix4(toLight); a[0] = Math.min(a[0], v.x); a[1] = Math.min(a[1], v.y); a[2] = Math.max(a[2], v.x); a[3] = Math.max(a[3], v.y); };
+  lightCam.position.copy(keyLight.position); lightCam.lookAt(c); lightCam.updateMatrixWorld();
+  const toLight = lightCam.matrixWorld.clone().invert(), span = () => [Infinity, Infinity, -Infinity, -Infinity, Infinity, -Infinity];
+  const grow = (a, v) => { v.applyMatrix4(toLight); a[0] = Math.min(a[0], v.x); a[1] = Math.min(a[1], v.y); a[2] = Math.max(a[2], v.x); a[3] = Math.max(a[3], v.y); a[4] = Math.min(a[4], v.z); a[5] = Math.max(a[5], v.z); };
   // the scene's box, and the camera's view as far as the scene's farthest corner
-  const A = span(), F = span(), { min, max } = shadowBox; let reach = 0;
+  const A = span(), F = span(); let reach = 0;
   for (let i = 0; i < 8; i++) {
-    lp.set(i & 1 ? max.x : min.x, i & 2 ? max.y : min.y, i & 4 ? max.z : min.z);
-    reach = Math.max(reach, lp.distanceTo(camera.position)); grow(A, lp);
+    lq.set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z);
+    reach = Math.max(reach, lq.distanceTo(camera.position)); grow(A, lq);
   }
   for (const x of [-1, 1]) for (const y of [-1, 1]) {
-    const n = new THREE.Vector3(x, y, -1).unproject(camera), dir = new THREE.Vector3(x, y, .5).unproject(camera).sub(n).normalize();
-    grow(F, n.clone()); grow(F, n.addScaledVector(dir, reach));
+    const n = new THREE.Vector3(x, y, -1).unproject(camera), d = new THREE.Vector3(x, y, .5).unproject(camera).sub(n).normalize();
+    grow(F, n.clone()); grow(F, n.addScaledVector(d, reach));
   }
   let [x0, y0, x1, y1] = [Math.max(A[0], F[0]), Math.max(A[1], F[1]), Math.min(A[2], F[2]), Math.min(A[3], F[3])];
   if (!(x1 > x0 && y1 > y0)) [x0, y0, x1, y1] = A;
-  // a margin, so a turn of the camera does not at once leave the shadowed area; never under 5 cm
-  const pad = Math.max(.05, (x1 - x0) * .12, (y1 - y0) * .12), sc = keyLight.shadow.camera;
-  sc.left = x0 - pad; sc.right = x1 + pad; sc.bottom = y0 - pad; sc.top = y1 + pad; sc.updateProjectionMatrix();
+  // a margin, so a turn of the camera does not at once leave the shadowed area; then at least the size whose pixels
+  // are SHADOW_TEXEL (no finer than the soft edge needs), kept within the scene where it can
+  const pad = Math.max(.05, (x1 - x0) * .12, (y1 - y0) * .12), least = SHADOW_TEXEL * keyLight.shadow.mapSize.x;
+  const fit = (a0, a1, lo, hi) => {
+    a0 -= pad; a1 += pad; lo -= pad; hi += pad;
+    const w = Math.max(least, a1 - a0); if (w === a1 - a0) return [a0, a1];
+    if (w >= hi - lo) return [(lo + hi - w) / 2, (lo + hi + w) / 2];   // larger than the scene: round it
+    a0 = (a0 + a1 - w) / 2; a1 = a0 + w;
+    if (a0 < lo) { a1 += lo - a0; a0 = lo; } else if (a1 > hi) { a0 -= a1 - hi; a1 = hi; }
+    return [a0, a1];
+  };
+  [x0, x1] = fit(x0, x1, A[0], A[2]); [y0, y1] = fit(y0, y1, A[1], A[3]);
+  const sc = keyLight.shadow.camera;
+  sc.left = x0; sc.right = x1; sc.bottom = y0; sc.top = y1;
+  // the light looks down its -z: the whole scene in depth, and well past it, where shadows fall on the floor beyond
+  // the objects (a shadow past the far end would be cut off)
+  sc.near = Math.max(.01, -A[5] - .1); sc.far = -A[4] + r * 3; sc.updateProjectionMatrix();
   fitShadowBias();
 }
-/* the shadow covers the whole scene, so in a big one (a large carton next to small boxes) or on a smaller shadow map
-   each of its pixels covers more of the surface; a surface's own shadow then falls on it in stripes ("acne"). The
-   lookup is pushed off the surface by a pixel and a half of the map, never less than 2 mm */
+/* the shadow covers the whole scene, so in a big one or on a smaller map each of its pixels covers more of the
+   surface; a surface's own shadow then falls on it in stripes ("acne"). The lookup is pushed off the surface by a
+   pixel and a half of the map, never less than 2 mm. The soft edge is PENUMBRA wide in the scene (radius in pixels of
+   the map, for the shadow filter: scene/soft-shadows.js), at most 6 of them: close up it is narrower, never noisy */
 function fitShadowBias() {
-  const sc = keyLight.shadow.camera;
-  keyLight.shadow.normalBias = Math.max(.02, 1.5 * Math.max(sc.right - sc.left, sc.top - sc.bottom) / keyLight.shadow.mapSize.x);
+  const sc = keyLight.shadow.camera, texel = Math.max(sc.right - sc.left, sc.top - sc.bottom) / keyLight.shadow.mapSize.x;
+  keyLight.shadow.normalBias = Math.max(.02, 1.5 * texel);
+  keyLight.shadow.radius = Math.min(6, Math.max(1, PENUMBRA / texel));
 }
 function applyScene() {
   invalidate();

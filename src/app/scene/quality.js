@@ -1,18 +1,21 @@
 // Качество 3D на этом устройстве: уровни, как в играх, выбор «Авто» и упрощение картинки, пока движется камера
 import { toast } from '../core/util.js';
 import { TOUCH } from '../core/model.js';
-import { keyLight, renderer } from './renderer.js';
+import * as THREE from 'three';
+import { keyLight, renderer, scene } from './renderer.js';
+import { warmShaders } from './warmup.js';
 import { fitShadowBias, invalidate, resize } from './camera.js';
 
 /* Like a game's quality presets. A level sets how sharp the picture is at rest (pixels per CSS pixel), how far that
    drops while the camera moves (dynamic resolution: a moving picture looks as sharp with far fewer pixels, and the
    frame after the move is drawn in full), and the key light's shadow map. The viewer picks a level in the file menu
    or leaves «Авто»: a first guess from the device, lowered a step when turning the camera runs under ~18 frames a
-   second. The choice is this browser's, not the project's. */
+   second. The shadow: «Плавно» three's quick filter on a small map; the others a soft edge without steps
+   (scene/soft-shadows.js) on a larger map, the largest on «Чётко». The choice is this browser's, not the project's. */
 const LEVELS = {
-  low: { name: 'Плавно', pr: 1.25, motion: .5, shadow: 1024 },
-  mid: { name: 'Баланс', pr: 2, motion: .6, shadow: 1024 },
-  high: { name: 'Чётко', pr: 2, motion: .75, shadow: 2048 },
+  low: { name: 'Плавно', pr: 1.25, motion: .5, shadow: 1024, soft: false },
+  mid: { name: 'Баланс', pr: 2, motion: .6, shadow: 2048, soft: true },
+  high: { name: 'Чётко', pr: 2, motion: .75, shadow: 4096, soft: true },
 };
 const ORDER = ['low', 'mid', 'high'], KEY = 'bs3d-quality', SLOW_MS = 55, SAMPLE = 40;
 let choice = 'auto', level = 'high', basePR = 1, onChange = () => {};
@@ -33,7 +36,11 @@ function guessLevel() {
 function apply() {
   const L = LEVELS[level];
   basePR = Math.min(devicePixelRatio || 1, L.pr);
-  if (keyLight.shadow.mapSize.x !== L.shadow) { keyLight.shadow.mapSize.set(L.shadow, L.shadow); keyLight.shadow.map?.dispose(); keyLight.shadow.map = null; fitShadowBias(); }
+  const size = Math.min(L.shadow, renderer.capabilities.maxTextureSize);
+  if (keyLight.shadow.mapSize.x !== size) { keyLight.shadow.mapSize.set(size, size); keyLight.shadow.map?.dispose(); keyLight.shadow.map = null; fitShadowBias(); }
+  // the filter is part of every lit material's program: they are built again (in the background, scene/warmup.js)
+  const type = L.soft ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+  if (renderer.shadowMap.type !== type) { renderer.shadowMap.type = type; scene.traverse(o => { for (const m of [o.material].flat()) if (m) m.needsUpdate = true; }); warmShaders(); }
   renderer.shadowMap.needsUpdate = true;
   renderer.setPixelRatio(basePR); resize(); invalidate();
 }

@@ -1,6 +1,7 @@
 // Запуск
 import { initTabs } from './ui/tabs.js';
 import { initPanels } from './ui/panels.js';
+import { initSoftShadows } from './scene/soft-shadows.js';
 import { initActionBar } from './ui/action-bar.js';
 import { initCtxBar } from './ui/context-bar.js';
 import { initStageHint } from './ui/stage-hint.js';
@@ -40,7 +41,9 @@ import { initObjectList } from './ui/object-list.js';
 import { initObjectThumbs } from './ui/object-thumbs.js';
 import { initColorPicker } from './ui/color-picker.js';
 
-/* boot: hook up the parts in the order they were built, then load the project */
+/* boot: hook up the parts in the order they were built, then load the project (the shadow filter first: before any
+   material is built) */
+initSoftShadows();
 initCamera();
 initFacePanel();
 initFaceEditor();
