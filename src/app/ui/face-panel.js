@@ -4,6 +4,7 @@ import { BLENDS, EFFECTS, ICON, SWATCHES, UV_THICK } from '../core/constants.js'
 import { activeFaceData, activeLayer, activeObj, assets, sel, state } from '../core/state.js';
 import { faceKeys, faceLabel, faceMM, facePx, isClearFace, newImage } from '../core/model.js';
 import { stickerOfKey } from '../stickers/design.js';
+import { activeSticker } from '../stickers/placement.js';
 import { getImg, importImageFile } from '../core/assets.js';
 import { library } from '../core/library.js';
 import { extraById, extraName, isPart } from '../core/extras.js';
@@ -41,10 +42,11 @@ function updateFaceMeta() {
   const o = activeObj(); if (!o || !sel.face) { $('#faceMeta').textContent = ''; return; }
   const [mw, mh] = faceMM(o, sel.face), [pw, ph] = facePx(o, sel.face);
   $('#faceMeta').innerHTML = `<span>${faceLabel(o, sel.face)} · ${fmt(mw, 1)} × ${fmt(mh, 1)} мм</span><span>превью ${pw}×${ph} px</span>`;
-  const n = viewNet(o); $('#netSize').textContent = `${fmt(n.W)} × ${fmt(n.H)} мм`;
+  // (a sticker's sheet writes its own size: net/net-view.js)
+  if (!activeSticker()) { const n = viewNet(o); $('#netSize').textContent = `${fmt(n.W)} × ${fmt(n.H)} мм`; }
 }
 function renderFacePanel() {
-  $('#dielineOffBtn').hidden = !activeObj()?.dieline;
+  $('#dielineOffBtn').hidden = !activeObj()?.dieline || !!activeSticker();
   updateFaceMeta();
 }
 function layerName(L) {
