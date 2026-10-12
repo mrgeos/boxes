@@ -1,5 +1,6 @@
 // Запуск
 import { initTabs } from './ui/tabs.js';
+import { initPanels } from './ui/panels.js';
 import { initActionBar } from './ui/action-bar.js';
 import { initCtxBar } from './ui/context-bar.js';
 import { initStageHint } from './ui/stage-hint.js';
@@ -50,6 +51,7 @@ initContextMenus();
 initObjectList(); initObjectThumbs();
 initWiring();
 initColorPicker();
+initPanels();
 initTabs();
 initActionBar(); initCtxBar(); initStageHint(); initSelLook(); initViewCube(); initItemNav(); initMarquee();
 initTextEdit();

@@ -11,6 +11,7 @@
 <div class="app" id="app">
   <header class="topbar">
     <button class="btn icon ghost" id="fileBtn" title="Файл" aria-label="Меню файла" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <button class="btn icon ghost" id="sideToggle" title="Скрыть левую панель" aria-label="Левая панель" aria-pressed="true" aria-controls="sidePanel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M9 5v14"/></svg></button>
     <div class="menu file" id="fileMenu" hidden>
       <button class="btn ghost" id="myProjBtn" hidden>Мои проекты…</button>
       <button class="btn ghost" id="newBtn">Новый проект</button>
@@ -81,6 +82,8 @@
     </section>
   </aside>
 
+  <div class="pane-grip side" id="sideGrip" role="separator" aria-orientation="vertical" aria-controls="sidePanel" aria-label="Ширина левой панели" tabindex="0" title="Тяните, чтобы изменить ширину; двойной клик — как было"></div>
+
   <main class="stage" id="stage">
     <div id="viewport"></div>
     <div class="off-hint" id="offHint" role="status" hidden></div>
@@ -117,6 +120,7 @@
   </main>
   <textarea id="textEdit" class="text-edit" spellcheck="false" aria-label="Текст слоя" hidden></textarea>
 
+  <div class="pane-grip props" id="propGrip" role="separator" aria-orientation="vertical" aria-controls="propPanel" aria-label="Ширина правой панели" tabindex="0" title="Тяните, чтобы изменить ширину; двойной клик — как было"></div>
   <aside class="panel props" id="propPanel" data-tab="design" aria-label="Выбранный объект">
     <nav class="crumb" id="propCrumb" aria-label="Где выбранное" hidden></nav>
     <div class="ptabs" id="propTabs" role="tablist"><button role="tab" data-tab="shape">Форма</button><button role="tab" data-tab="design">Дизайн</button><button role="tab" data-tab="extras">Допы</button><button role="tab" data-tab="net">Развёртка</button></div>

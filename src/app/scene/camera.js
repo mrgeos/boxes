@@ -43,8 +43,11 @@ const view = { x: 0, y: 0 };
 /* the 3D view is drawn only while something changes, so a still scene costs no GPU time:
    the loop draws when a queue has work, the camera moves or a face flashes, and for a moment after
    anything that may change the scene in place (input, a new view, scene settings) */
-let drawUntil = 0;
-function invalidate(ms = 200) { drawUntil = Math.max(drawUntil, performance.now() + ms); }
+/* the scene is drawn for ms more, and at least once more: a frame that took longer than ms (a slow machine, a big
+   change) would otherwise let the time run out before the next one, and a change asked for meanwhile (the view
+   resized: its picture cleared) would never be drawn */
+let drawUntil = 0, drawOnce = false;
+function invalidate(ms = 200) { drawUntil = Math.max(drawUntil, performance.now() + ms); drawOnce = true; }
    // screen-space pan, CSS px
 const lockActive = () => orbitLock && !!activeObj();
 function applyViewOffset() {
@@ -203,7 +206,8 @@ function initCamera() {
   renderer.setAnimationLoop(now => {
     // seconds since the last frame: the auto-rotation turns by time, not by frames (a slow machine turns as fast)
     const gap = lastNow ? now - lastNow : 0, dt = Math.min(.25, gap / 1000); lastNow = now;
-    let changed = rebuildQueue.size || stickerDirty.size || camTween || recording || now < drawUntil;
+    let changed = rebuildQueue.size || stickerDirty.size || camTween || recording || now < drawUntil || drawOnce;
+    drawOnce = false;
     if (dirtyFaces.size || stickerDirty.size) staleShadow();   // a face's picture may cut it (alpha) and so its shadow
     let turning = !!camTween;
     for (const id of rebuildQueue) { const o = state.objects.find(x => x.id === id); if (o) buildObject(o); }
