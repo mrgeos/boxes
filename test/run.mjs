@@ -1,6 +1,7 @@
 // Тесты редактора в браузере: npm test (сначала собирается box-studio-3d.html).
 // Редактор целиком клиентский, серверной части нет, поэтому оставлены только короткие e2e для критичного:
-// открытие, все заготовки без ошибок, сохранение и открытие проекта (в том числе старого), выгрузка файлов.
+// открытие, все заготовки без ошибок, сохранение и открытие проекта (в том числе старого и в аккаунте claude.ai),
+// выгрузка файлов.
 // Только часть тестов: node test/run.mjs заготовки   (по подстроке названия)
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -31,6 +32,34 @@ await test('открывается без интернета, пример из 
   const before = await snap();
   await saveAndReopen(page);
   assert.equal(await snap(), before, 'после сохранения и открытия те же объекты');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+await test('проект в аккаунте claude.ai: картинки сохраняются и находятся, даже если страница не смогла их прочитать', async () => {
+  const { ctx, page, errors } = await openEditor(browser, { cloud: true });
+  const body = () => page.evaluate(() => { const S = window.__stub(); return S.docs[Object.keys(S.docs).find(k => k.includes('/bodies/'))]; });
+  const uploads = () => page.evaluate(() => window.__stub().uploads);
+  const rename = async name => { await page.dblclick('#projName'); await page.keyboard.press('Control+a'); await page.keyboard.type(name); await page.keyboard.press('Enter'); await page.waitForTimeout(4000); };
+  const reopen = async () => { await page.reload(); await page.waitForFunction(() => window.__boxStudio?.state.objects.length > 0); await page.waitForTimeout(3000); };
+  await rename('Облако');
+  const orig = { ...(await body()).assets }, [a, b] = Object.keys(orig), up0 = await uploads();
+  assert.ok(a && b, 'картинки примера сохранены');
+  // what older versions left in a picture's place: its address as text, and that text wrapped once more
+  await page.evaluate(([a, b, oa, ob]) => window.__stubSet(S => {
+    const put = t => { const id = (++S.n).toString(16).padStart(32, '0'); S.files[id] = { type: 'text/plain', data: btoa(t) }; return id; };
+    const d = S.docs[Object.keys(S.docs).find(k => k.includes('/bodies/'))];
+    d.assets[a] = put('/_blob/' + oa); d.assets[b] = put('data:text/plain;base64,' + btoa('/_blob/' + ob));
+  }), [a, b, orig[a], orig[b]]);
+  await reopen();
+  // the project is written again pointing at the pictures (a moment after it opens)
+  await page.waitForFunction(([a, oa]) => { const S = window.__stub(); return S.docs[Object.keys(S.docs).find(k => k.includes('/bodies/'))].assets[a] === oa; }, [a, orig[a]], { timeout: 15000 }).catch(() => {});
+  assert.deepEqual([(await body()).assets[a], (await body()).assets[b]], [orig[a], orig[b]], 'после открытия проект снова указывает на сами картинки');
+  // a picture the page cannot read back stays that same file on save, not its address stored as text
+  await page.evaluate(id => window.__stubSet(S => { S.fail = [id]; }), orig[a]);
+  await reopen(); await rename('Облако 2');
+  assert.equal((await body()).assets[a], orig[a], 'непрочитанная картинка — ссылка на тот же файл');
+  assert.equal(await uploads(), up0, 'заглушек в хранилище не появилось');
   assert.deepEqual(errors, []);
   await ctx.close();
 });

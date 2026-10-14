@@ -54,6 +54,8 @@ const sha1 = async s => [...new Uint8Array(await crypto.subtle.digest('SHA-1', n
 async function storeAssets(urls) {
   const map = {}, inline = {}, failed = [];
   for (const [id, url] of Object.entries(urls)) {
+    // a picture that could not be read back stands in the project as its own address: it is in the store already
+    const ref = blobRefOf(url); if (ref) { map[id] = ref; continue; }
     const h = await sha1(url);
     if (!prof.assetMap[h]) {
       try {
@@ -85,6 +87,20 @@ function dataBlob(url) {
   const bin = atob(body), bytes = new Uint8Array(bin.length);
   for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
   return new Blob([bytes], { type });
+}
+/* The stored file an asset's address or text points to, or null. A picture the page could not read back when a
+   project opened stays in it as its address (/_blob/<id>, see blobURL); projects saved by older versions stored
+   that address as a text file in the picture's place, and the next save wrapped that text once more as a data: URL
+   (data:text/plain;base64,…). Both lead back to the picture, which was never lost. */
+const BLOB_REF = /^\/_blob\/([0-9a-f]{16,64})$/;
+function blobRefOf(t) {
+  if (typeof t !== 'string' || t.length > 400) return null;
+  if (t.startsWith('data:text/plain')) {
+    const i = t.indexOf(','), body = t.slice(i + 1);
+    try { t = t.slice(0, i).includes(';base64') ? new TextDecoder().decode(Uint8Array.from(atob(body), c => c.charCodeAt(0))) : decodeURIComponent(body); } catch { return null; }
+  }
+  const m = BLOB_REF.exec(t.trim());
+  return m ? m[1] : null;
 }
 /* the project as it is now, taken at once (the upload that follows may outlive it: another project can be opened) */
 function snapshotNow() {
@@ -132,12 +148,18 @@ async function listProjects() {
   const s = await ref().collection('projects').orderBy('updated', 'desc').limit(200).get();
   return s.docs.map(d => ({ id: d.id, ...d.data() }));
 }
-/* a stored file as a data: URL (the editor keeps its pictures so); if it cannot be read, its own address */
-const blobURL = async id => {
+/* a stored file as a data: URL (the editor keeps its pictures so); if it cannot be read, its own address (a picture
+   still shows from it, and a save keeps it as that file: storeAssets). A text that only points to another stored
+   file is followed to it (blobRefOf); `note.healed` then says the project's map should be written anew */
+const blobURL = async (id, note = {}, depth = 0) => {
   try {
     const res = await fetch('/_blob/' + id); if (!res.ok) throw new Error(res.status);
     const b = await res.blob();
-    if (b.type.startsWith('text/plain')) { const t = await b.text(); if (t.startsWith('data:')) return t; }   // see storable
+    if (b.type.startsWith('text/plain')) {
+      const t = await b.text(), ref = depth < 4 && blobRefOf(t);
+      if (ref) { note.healed = true; note.to = ref; return blobURL(ref, note, depth + 1); }
+      if (t.startsWith('data:')) return t;   // see storable
+    }
     return await new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); });
   } catch { return '/_blob/' + id; }
 };
@@ -146,9 +168,12 @@ async function openCloudProject(id) {
   const b = await bodyRef(id).get(); if (!b.exists) throw new Error('missing');
   const { json, assets: map, inline } = b.data(), d = JSON.parse(json);
   d.assets = { ...(inline || {}) };
-  await Promise.all(Object.entries(map || {}).map(async ([local, stored]) => { d.assets[local] = await blobURL(stored); }));
+  let healed = false;
+  await Promise.all(Object.entries(map || {}).map(async ([local, stored]) => { const note = {}; d.assets[local] = await blobURL(stored, note); healed ||= !!note.healed; }));
   loadProject(d);
   pid = id; dirty = false; remember(); clearTimeout(timer); setStatus('saved');
+  // pictures found through a stand-in: the project is saved again, pointing at them
+  if (healed) { dirty = true; remember(); setStatus('pending'); saveSoon(0); }
 }
 /* the project being worked on starts anew in the store (a new project, a sample, a file opened): what it had
    unsaved goes first (taken now, sent after) */
