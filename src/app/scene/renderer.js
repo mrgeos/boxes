@@ -9,6 +9,7 @@ import { buildCup } from '../carriers/cup.js';
 import { buildBag } from '../carriers/bag.js';
 import { buildTube } from '../carriers/tube.js';
 import { buildDome, domeGeom } from '../carriers/dome.js';
+import { buildTray, trayLidAt, trayMaterial } from '../carriers/tray.js';
 import { TORTE_COLORS, buildTorte } from '../carriers/torte.js';
 import { buildBox } from '../carriers/box.js';
 import { applyRsc } from '../carriers/rsc.js';
@@ -164,10 +165,10 @@ function buildObject(o) {
   }
   disposeRibbons(rt);
   rt.group.traverse(m => { if ((m.isMesh || m.isLine) && !m.userData.shared) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.insert = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null; rt.rsc = null; rt.rscTape = null; rt.drawer = null;
+  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.insert = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.trayLid = null; rt.bowl = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null; rt.rsc = null; rt.rscTape = null; rt.drawer = null;
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
-  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else if (o.type === 'board') buildBoard(o, rt); else if (o.type === 'model') buildModelObject(o, rt); else buildTube(o, rt);
+  if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'tray') buildTray(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else if (o.type === 'board') buildBoard(o, rt); else if (o.type === 'model') buildModelObject(o, rt); else buildTube(o, rt);
   applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); buildTissue(o, rt); buildInsert(o, rt); buildFill(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); corrugateEdges(o, rt); applyObjMaterials(o); markObj(o); mergeStatic(rt);
   rt.stickerMeshes = []; buildStickerFilms(o);
   if (parentOf(o.id) && JSON.stringify(foot) !== JSON.stringify(rt.foot)) layoutSoon();   // the row makes room for its new size
@@ -193,7 +194,7 @@ function disposeObject(id) {
   for (const k in rt.faces) { const f = rt.faces[k]; f.mat.dispose(); f.tex?.dispose(); f.fxTex?.dispose(); f.bumpTex?.dispose(); f.coatTex?.dispose(); f.iriTex?.dispose(); f.grain?.dispose(); for (const n of ['canvas', 'fx', 'bump', 'coat', 'iri']) release(f[n]); }
   for (const L of rt.stickerLook?.values() || []) { L.tex.dispose(); L.edgeTex.dispose(); L.art.dispose(); L.edge?.dispose(); }
   rt.edgeMat.dispose(); rt.innerMat.dispose(); rt.filmMat.dispose(); rt.petMat.dispose(); rt.petEdgeMat.dispose(); rt.foldMat.dispose(); rt.cupLidMat.dispose(); rt.holeMat.dispose();
-  rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); rt.baseMat?.dispose(); rt.trayMat?.dispose(); rt.cakeMats?.forEach(m => m.dispose()); rt.cbSideMat?.dispose(); rt.sleeveIn?.dispose(); rt.sleeveEdge?.dispose(); RT.delete(id);
+  rt.tapeMat.dispose(); rt.cardMat.dispose(); rt.metalMat.dispose(); rt.productMat.dispose(); rt.productTex?.dispose(); rt.baseMat?.dispose(); rt.bowlMat?.dispose(); rt.tabMat?.dispose(); rt.tabBackMat?.dispose(); rt.trayMat?.dispose(); rt.cakeMats?.forEach(m => m.dispose()); rt.cbSideMat?.dispose(); rt.sleeveIn?.dispose(); rt.sleeveEdge?.dispose(); RT.delete(id);
 }
 /* clear PET: black diffuse, so only reflections remain (stronger at grazing angles). The shader turns
    their brightness into coverage, so plain plastic stays see-through even over the page background
@@ -250,6 +251,7 @@ function applyLid(o) {
     const f = clamp(o.lid / 125, 0, 1), G = domeGeom(o);
     rt.domeLid.position.set(0, (G.trayH + f * (G.hd + 25)) * S, -f * G.d * .18 * S); rt.domeLid.rotation.x = -f * .32;
   }
+  if (rt.trayLid) trayLidAt(o, rt);
   if (rt.hb) {
     // handle box end: the upper flap swings up, the lower one down onto the table, then the dust flaps open
     const f = clamp(o.lid / 125, 0, 1), a = clamp(f / .6, 0, 1), b = clamp((f - .5) / .5, 0, 1), T = clamp(o.thickness, .3, 40) * S;
@@ -290,6 +292,7 @@ function applyObjMaterials(o) {
   if (o.type === 'paperbag') paperBagColors(o, rt);
   if (o.type === 'board') boardColors(o, rt);
   if (rt.trayMat) { const gold = o.tray?.fin === 'gold'; rt.trayMat.color.set(gold ? '#d6b25e' : '#c9cdd3'); rt.trayMat.metalness = .9; rt.trayMat.roughness = .3; }
+  trayMaterial(o, rt);
   if (rt.baseMat) {
     const metal = o.baseFin === 'metal';
     Object.assign(rt.baseMat, { metalness: metal ? .85 : 0, roughness: metal ? .32 : .22, clearcoat: metal ? .3 : .8, clearcoatRoughness: .08 });

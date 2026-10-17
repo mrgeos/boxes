@@ -4,6 +4,7 @@ import { modelShape, placeMany } from '../core/models3d.js';
 import { boxInside, tissueOn } from './tissue.js';
 import { domeGeom } from './dome.js';
 import { torteGeom } from './torte.js';
+import { trayFloor } from './tray.js';
 import { insertOn, insertSpots } from './insert.js';
 import { isShape } from './shapes.js';
 
@@ -12,12 +13,13 @@ import { isShape } from './shapes.js';
    floor of the box (on the tissue, if there is one), of the dome's tray or of the cake container's base, spread
    evenly over it. However many there are, each mesh of the model is drawn once for all (instancing). */
 const FILL_LAYOUT = { rows: 'Ровными рядами', loose: 'Свободно, как руками' };
-const fillFits = o => (o.type === 'box' && o.lidType !== 'handle' && o.lidType !== 'drawer' && !isShape(o)) || o.type === 'dome' || o.type === 'torte';
+const fillFits = o => (o.type === 'box' && o.lidType !== 'handle' && o.lidType !== 'drawer' && !isShape(o)) || o.type === 'dome' || o.type === 'torte' || o.type === 'tray';
 const fillOn = o => fillFits(o) && !!o.fill?.on;
 const defaultFill = () => ({ on: false, model: { lib: 'croissant' }, count: 4, size: 0, layout: 'loose', rot: 0, gap: 6 });
 /* where things lie: half sizes of the floor (mm), its height, round or not */
 function floorOf(o) {
   if (o.type === 'dome') { const G = domeGeom(o); return { A: G.wb / 2 - 3, B: G.db / 2 - 3, y: G.T + .2, round: false }; }
+  if (o.type === 'tray') return trayFloor(o);
   if (o.type === 'torte') { const G = torteGeom(o); return { A: G.Rl - 8, B: G.Rl - 8, y: 4.6, round: true }; }
   const I = boxInside(o);
   return { A: I.A - 2, B: I.B - 2, y: I.y0 + (tissueOn(o) ? 2.5 : 0), round: false };

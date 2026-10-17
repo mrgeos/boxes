@@ -10,9 +10,9 @@ import { applyObjMaterials, markObj, rebuildQueue } from '../scene/renderer.js';
 const SETTINGS = {
   board: { fits: o => o.type !== 'model' },
   flute: { fits: o => o.type === 'box' },
-  whiteInside: { fits: o => o.type !== 'model' && o.type !== 'board' },
+  whiteInside: { fits: o => o.type !== 'model' && o.type !== 'board' && o.type !== 'tray' },
   finish: { fits: o => o.type !== 'model' },
-  grain: { fits: o => o.type !== 'model' && o.type !== 'board' },
+  grain: { fits: o => o.type !== 'model' && o.type !== 'board' && o.type !== 'tray' },
   edge: { fits: o => ['box', 'dome', 'board'].includes(o.type) },
 };
 /* the objects of these items (a group brings all of its own), each once */

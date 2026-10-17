@@ -13,8 +13,8 @@ import { myModels, removeMyModel, setModelThumb, useMyModel } from '../core/mode
 /* Presets by kind of packaging. A tile's picture is the preset itself, built off-screen and drawn once by the
    scene's own renderer (in a corner of its canvas, in the same task, so it never shows), then kept in the
    browser. Pictures are made one at a time in the background while the gallery is open. */
-const CATS = [['all', 'Все'], ['box', 'Коробки'], ['cake', 'Для тортов'], ['bag', 'Пакеты'], ['cup', 'Стаканы и тубусы'], ['model', '3D-модели']];
-const catOf = p => p.type === 'torte' || p.type === 'dome' || p.type === 'board' || p.id.startsWith('cake') ? 'cake'
+const CATS = [['all', 'Все'], ['box', 'Коробки'], ['cake', 'Для тортов'], ['trays', 'Лотки и контейнеры'], ['bag', 'Пакеты'], ['cup', 'Стаканы и тубусы'], ['model', '3D-модели']];
+const catOf = p => p.type === 'tray' ? 'trays' : p.type === 'torte' || p.type === 'dome' || p.type === 'board' || p.id.startsWith('cake') ? 'cake'
   : p.type === 'bag' || p.type === 'paperbag' ? 'bag' : p.type === 'cup' || p.type === 'tube' ? 'cup' : 'box';
 const THUMB_V = 1, SIZE = 160, STORE = 'bs3d-thumbs';
 let cat = 'all', thumbs = null, queue = [], busy = false, stage = null;

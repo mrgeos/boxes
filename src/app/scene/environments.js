@@ -110,4 +110,4 @@ async function setHdrFile(file, addAsset) {
   return true;
 }
 
-export { ENVS, applyEnv, resetEnvs, setHdrFile, spinEnv };
+export { ENVS, applyEnv, envTexture, resetEnvs, setHdrFile, spinEnv };

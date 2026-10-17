@@ -23,7 +23,7 @@ import { deleteIds, duplicateIds, groupIds, leaveGroup, renameRow, renderObjects
 import { openMenu } from './menu.js';
 
 const MOD = /Mac|iP(hone|ad)/.test(navigator.platform) ? '⌘' : 'Ctrl+';
-const TYPES = { box: 'Коробки', dome: 'Лотки с крышкой-призмой', torte: 'Тортницы', board: 'Подложки под торт', cup: 'Бумажные стаканы', bag: 'Пакеты', tube: 'Тубусы и банки' };
+const TYPES = { box: 'Коробки', dome: 'Лотки с крышкой-призмой', tray: 'Лотки и контейнеры', torte: 'Тортницы', board: 'Подложки под торт', cup: 'Бумажные стаканы', bag: 'Пакеты', tube: 'Тубусы и банки' };
 const norm = a => ((a + 180) % 360 + 360) % 360 - 180;
 const objById = id => state.objects.find(o => o.id === id) || null;
 const layerTitle = L => L.type === 'text' ? `Текст «${(L.text || '').split('\n')[0].slice(0, 24)}»` : L.type === 'image' ? 'Картинка' : L.kind === 'ellipse' ? 'Круг' : 'Плашка';
@@ -37,7 +37,7 @@ function lidAction(o) {
   if (o.type === 'box') return o.lidType === 'none' ? null : o.lidType === 'handle' ? ['Открыть торец', 'Закрыть торец', 100]
     : o.lidType === 'telescope' ? ['Поднять крышку', 'Опустить крышку', 80] : ['Открыть крышку', 'Закрыть крышку', 110];
   if (o.type === 'cup') return o.cupLid ? ['Снять крышку', 'Надеть крышку', 80] : null;
-  if (o.type === 'dome' || o.type === 'torte') return ['Поднять крышку', 'Опустить крышку', 80];
+  if (o.type === 'dome' || o.type === 'torte' || o.type === 'tray') return ['Поднять крышку', 'Опустить крышку', 80];
   if (o.type === 'bag') return o.bagTop === 'flap' ? ['Открыть клапан', 'Закрыть клапан', 150] : o.bagTop === 'fold' && !(o.rollTurns > 1) ? ['Развернуть отворот', 'Свернуть отворот', 150] : null;
   return null;
 }
