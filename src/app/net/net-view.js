@@ -104,6 +104,8 @@ function drawNet() {
     c.setLineDash(p.key === sel.face ? [] : [3, 3]); c.lineWidth = p.key === sel.face ? 2.5 : 1; c.strokeStyle = p.key === sel.face ? accentCss : 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]);
   }
   if (!n.part) cutNetWindow(c, o, pad, k);
+  // a film's safe zone: 4 mm in from the cut
+  if (n.tray?.safe) { c.beginPath(); n.tray.safe.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.closePath(); c.setLineDash([3, 3]); c.lineWidth = 1; c.strokeStyle = 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]); }
   for (const p of n.panels) for (const l of p.creases || []) { c.beginPath(); c.moveTo(pad + l[0] * k, pad + l[1] * k); c.lineTo(pad + l[2] * k, pad + l[3] * k); c.setLineDash([4, 3]); c.strokeStyle = 'rgba(230,0,126,.7)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]); }
   for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.fillStyle = o.board || '#ffffff'; c.fill(); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke();
     if (t.glue) { c.beginPath(); t.glue.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.fillStyle = 'rgba(243,146,0,.25)'; c.fill(); }

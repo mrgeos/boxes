@@ -9,6 +9,7 @@ import { pickAsset } from './asset-picker.js';
 import { applyLid, applyObjMaterials, markFace, markObj, rebuildQueue, ui } from '../scene/renderer.js';
 import { BAG_MATS, BAG_TOPS, applyBagPreset, bagFilm } from '../carriers/bag.js';
 import { applyDomePreset } from '../carriers/dome.js';
+import { TRAY_LID, TRAY_MATS, TRAY_RIM, applyTrayPreset, trayVolumeMl } from '../carriers/tray.js';
 import { TORTE_COLORS, TORTE_FIN, applyTortePreset } from '../carriers/torte.js';
 import { TISSUE_LAYOUT, fitTissue } from '../carriers/tissue.js';
 import { FOOD, foodById, importModel, modelName } from '../core/models3d.js';
@@ -75,6 +76,14 @@ function modelInput(k) {
   if (k === 'sleeve.name' || k === 'carry.name') { renderObjects(); renderStickers(); refreshTabs(); return; }
   if (k === 'name') { renderObjects(); $('#objBadge').textContent = o.name; return; }
   if (k === 'type') { o.dims = { ...PRESETS.find(p => p.type === o.type).dims }; ensureFaces(o); if (o.type === 'board') setBoardCover(o); rebuildQueue.add(o.id); select(o.id, faceKeys(o)[0]); renderModel(); renderObjects(); return; }
+  if (o.type === 'tray' && /^(dims|cornerR$|draft$|rim$|ribs\.|bot\.|lidType$|lidSteps$|lidStepH$|tab|mat$)/.test(k)) {
+    // the lid's top (the printed face) changes its size and, between a formed lid and a film, its kind
+    rebuildQueue.add(o.id); markObj(o); ui.net = ui.editor = true; updateFaceMeta();
+    if (k.startsWith('dims')) renderObjects();
+    const v = $('#trayVol'); if (v) v.textContent = v.textContent.replace(/≈ \d+/, `≈ ${Math.round(trayVolumeMl(o) / 10) * 10}`);
+    if (k === 'lidType' || k === 'tab') renderModel();
+    return;
+  }
   if (k === 'style') { ui.net = true; updateFaceMeta(); return; }
   if (k === 'sides' || k === 'roofH' || k === 'gripH') { ensureFaces(o); rebuildQueue.add(o.id); ui.net = true; select(o.id, faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]); updateFaceMeta(); if (k === 'sides') renderModel(); return; }
   if (k === 'lidType') { if (o.lidType === 'pyramid' || o.lidType === 'hexagon') o.sides = o.lidType === 'pyramid' ? 4 : 6; if (o.lidType === 'gable') { o.roofH ??= Math.round(o.dims.d * .45); o.gripH ??= Math.round(Math.min(80, o.dims.w * .3)); } ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
@@ -292,11 +301,11 @@ function renderModel() {
   if (!o) { sec.innerHTML = '<div class="sec-h"><h2>Форма</h2></div><div class="empty">Нет выбранного объекта</div>'; return; }
   if (sel.part) return renderPartModel(sec, o);
   if (o.type === 'model') return renderModelObject(sec, o, group);
-  const box = o.type === 'box', cboard = o.type === 'board', foilCover = cboard && isFoil(o.cbCover), pbag = o.type === 'paperbag', cup = o.type === 'cup', bag = o.type === 'bag', dome = o.type === 'dome', torte = o.type === 'torte', film = bagFilm(o);
+  const box = o.type === 'box', cboard = o.type === 'board', foilCover = cboard && isFoil(o.cbCover), pbag = o.type === 'paperbag', cup = o.type === 'cup', bag = o.type === 'bag', dome = o.type === 'dome', tray = o.type === 'tray', torte = o.type === 'torte', film = bagFilm(o);
   sec.innerHTML = `
     <div class="sec-h"><h2>${box ? 'Размеры' : 'Форма и размеры'}</h2></div>
     <div class="field wide"><span class="fl">Название</span><input class="txt" data-k="name" aria-label="Название"></div>
-    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="dome">Лоток с прозрачной крышкой-призмой</option><option value="torte">Тортница (ПЭТ)</option><option value="board">Подложка под торт</option><option value="cup">Бумажный стакан</option><option value="bag">Пакет</option><option value="paperbag">Бумажный пакет с ручками</option><option value="tube">Тубус / банка</option></select></div>
+    <div class="field wide"><span class="fl">Тип</span><select data-k="type"><option value="box">Коробка с крышкой</option><option value="dome">Лоток с прозрачной крышкой-призмой</option><option value="tray">Рифлёный лоток (пищевой контейнер, фольга)</option><option value="torte">Тортница (ПЭТ)</option><option value="board">Подложка под торт</option><option value="cup">Бумажный стакан</option><option value="bag">Пакет</option><option value="paperbag">Бумажный пакет с ручками</option><option value="tube">Тубус / банка</option></select></div>
     <div class="field wide"><span class="fl">Заготовка</span><select id="presetSel"><option value="">— выбрать размер —</option>${PRESETS.filter(p => p.type === o.type).map(p => `<option value="${p.id}">${p.label}</option>`).join('')}</select></div>
     ${pbag ? rangeField('Ширина, мм', 'dims.w', 60, 800, 1) + rangeField('Глубина (фальц), мм', 'dims.d', 30, 400, 1) + rangeField('Высота, мм', 'dims.h', 80, 900, 1)
         + `<label class="check"><input type="checkbox" data-k="pb.handles"> Плоские бумажные ручки</label>`
@@ -316,6 +325,20 @@ function renderModel() {
           + rangeField('Крышка: плоский верх, % борта', 'domeTop', 20, 92, 1, 100) + rangeField('Крышка: фланец, мм', 'flangeW', 0, 30, .5) + rangeField('Крышка: скругление углов, мм', 'cornerR', 0, 60, .5)
           + rangeField('Поднять крышку', 'lid', 0, 125, 1)
           + `<p class="hint">Стенки лотка расходятся от дна к борту; печать — на четырёх стенках и на дне, внутри — «Дно изнутри». Крышка — прозрачный ПЭТ: на плоский верх можно нанести печать, остальное остаётся прозрачным. Дизайн стенки — прямоугольник по ширине борта, на дне видна его средняя часть, как на штанцформе.</p>`
+      : tray ? rangeField('Длина по борту, мм', 'dims.w', 80, 400, 1) + rangeField('Ширина по борту, мм', 'dims.d', 60, 300, 1) + rangeField('Высота лотка, мм', 'dims.h', 20, 150, 1)
+          + rangeField('Скругление углов, мм', 'cornerR', 4, 40, 1) + rangeField('Уклон стенок, °', 'draft', 0, 15, .5)
+          + `<div class="field wide"><span class="fl">Край</span><select data-k="rim">${Object.entries(TRAY_RIM).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+          + `<p class="hint" id="trayVol">Объём ≈ ${Math.round(trayVolumeMl(o) / 10) * 10} мл. Размеры — полные, с фланцем (закаткой) 8 мм с каждой стороны.</p>`
+          + rangeField('Рифление: шаг, мм', 'ribs.pitch', 4, 40, 1) + rangeField('Рифление: глубина, мм', 'ribs.depth', 0, 6, .1) + rangeField('Рифление: ширина канавки, %', 'ribs.width', 15, 90, 1, 100)
+          + rangeField('Рифление: плоское дно канавки, %', 'ribs.flat', 0, 80, 1, 100) + rangeField('Рифление: гладкие углы, мм', 'ribs.margin', 0, 40, 1)
+          + `<label class="check"><input type="checkbox" data-k="ribs.onBottom"> Рифление переходит на дно</label><label class="check"><input type="checkbox" data-k="ribs.corners"> Рифление на углах</label>`
+          + rangeField('Дно: скругление, мм', 'bot.r', 2, 20, .5) + rangeField('Дно: кайма, мм', 'bot.band', 4, 30, 1) + rangeField('Дно: площадка вверх, мм', 'bot.inset', 0, 8, .5)
+          + `<div class="field wide"><span class="fl">Крышка</span><select data-k="lidType">${Object.entries(TRAY_LID).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+          + (o.lidType === 'film' ? `<label class="check"><input type="checkbox" data-k="tab"> Язычок для вскрытия</label>`
+              + (o.tab ? rangeField('Язычок: длина, мм', 'tabL', 6, 30, 1) + rangeField('Язычок: ширина, мм', 'tabW', 8, 30, 1) + rangeField('Язычок: отогнуть, °', 'tabPeel', 0, 170, 1) : '')
+            : rangeField('Крышка: ступеней', 'lidSteps', 1, 3, 1) + rangeField('Крышка: высота ступени, мм', 'lidStepH', 2, 14, .5))
+          + rangeField('Поднять крышку', 'lid', 0, 125, 1)
+          + `<p class="hint">Печать — на верхе крышки (грань «${o.lidType === 'film' ? 'Плёнка' : 'Крышка сверху'}»). ${o.lidType === 'film' ? 'Плёнка запаяна по краю: печать доходит до её края, важное держите в 4 мм от него. Язычок не печатается.' : 'Крышка из прозрачного ПЭТ: всё, что не запечатано, остаётся прозрачным.'} Развёртки у формованной детали нет: в шаблоне — только зона печати.</p>`
       : torte ? rangeField('Диаметр дна, мм', 'dims.w', 80, 450, 1) + rangeField('Диаметр крышки, мм', 'lidD', 40, 440, 1) + rangeField('Высота с крышкой, мм', 'dims.h', 40, 400, 1)
           + rangeField('Высота дна, мм', 'baseH', 8, 40, .5) + rangeField('Конусность стенки, %', 'lidDraft', 0, 15, .5, 100) + rangeField('Скругление плеча, мм', 'lidR', 2, 40, .5)
           + rangeField('Поднять крышку', 'lid', 0, 125, 1)
@@ -393,6 +416,11 @@ function renderModel() {
       <div class="field wide"><span class="fl">Ламинация</span><select data-k="finish">${Object.entries(FINISHES).filter(([k]) => k !== 'metal' && k !== 'kraft').map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('')}</select></div>`)
       + `<label class="check"><input type="checkbox" data-k="cbWrap"> Покрытие заворачивается на борт</label>`
       + `<div class="field wide"><span class="fl">Низ</span><select data-k="cbBottom">${Object.entries(BOARD_BOTTOM).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+      : tray ? `<div class="field wide"><span class="fl">Материал ванночки</span><select data-k="mat">${Object.entries(TRAY_MATS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+        + (o.lidType === 'film' ? `<div class="field wide"><span class="fl">Цвет плёнки</span><div class="row">
+      <div class="swatches" id="boardSw">${BOARD.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.board === c}"></button>`).join('')}</div>
+      <input type="color" id="boardColor" value="${o.board || '#ffffff'}" aria-label="Свой цвет плёнки"></div></div>
+    <div class="field wide"><span class="fl">Покрытие плёнки</span><select data-k="finish">${Object.entries(FINISHES).filter(([k]) => ['matte', 'soft', 'gloss'].includes(k)).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join('')}</select></div>` : '')
       : torte ? `<div class="field wide"><span class="fl">Дно</span><div class="row">
       <div class="swatches" id="torteSw">${TORTE_COLORS.map(([c, n]) => `<button class="sw" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${o.baseColor === c}"></button>`).join('')}</div>
       <input type="color" data-k="baseColor" aria-label="Свой цвет дна"></div></div>
@@ -455,6 +483,7 @@ function renderModel() {
       applyDomePreset(o, p); if (p.whiteInside != null) o.whiteInside = p.whiteInside;
       ensureFaces(o); if (p.board) setBoard(o, p.board); applyObjMaterials(o); select(o.id, sel.face);
     }
+    if (o.type === 'tray') { applyTrayPreset(o, p); ensureFaces(o); if (p.board) setBoard(o, p.board); applyObjMaterials(o); select(o.id, sel.face); }
     if (o.type === 'bag') { applyBagPreset(o, p); ensureFaces(o); if (p.board) setBoard(o, p.board); applyObjMaterials(o); select(o.id, sel.face); }
     rebuildQueue.add(o.id); renderModel(); renderObjects(); commit(); setTimeout(() => setView(lastView), 50);
   };

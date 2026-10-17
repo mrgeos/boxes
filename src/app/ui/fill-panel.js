@@ -41,7 +41,7 @@ function renderFillPanel(sec, o) {
     <label class="check"><input type="checkbox" id="fillAuto" ${auto ? 'checked' : ''}> Размер — как помещается на дно</label>
     ${auto ? '' : rangeField('Размер (длинная сторона), мм', 'size', 5, 600, 1)}
     ${rangeField('Промежуток, мм', 'gap', 0, 60, 1)}${rangeField('Поворот, °', 'rot', -180, 180, 1)}
-    <p class="hint">Модели лежат на дне${o.type === 'box' ? ' коробки (поверх тишью, если она есть)' : o.type === 'dome' ? ' лотка' : ' тортницы'}, равномерно по нему. Сколько бы их ни было, каждая часть модели рисуется один раз — это быстро и на слабом компьютере.</p>
+    <p class="hint">Модели лежат на дне${o.type === 'box' ? ' коробки (поверх тишью, если она есть)' : o.type === 'dome' || o.type === 'tray' ? ' лотка' : ' тортницы'}, равномерно по нему. Сколько бы их ни было, каждая часть модели рисуется один раз — это быстро и на слабом компьютере.</p>
     ${extraFoot(!!F.hidden)}`;
   const again = () => { rebuildQueue.add(o.id); renderObjects(); refreshTabs(); };
   bindFields(sec, activeFill, () => again());
