@@ -1,6 +1,6 @@
 // Как выбранный объект виден на сцене: контур по силуэту и подложка на полу; ярлык с названием над объектом под курсором
 import * as THREE from 'three';
-import { $, S } from '../core/util.js';
+import { $, OVERLAY_LAYER, S } from '../core/util.js';
 import { activeLayer, sel, state } from '../core/state.js';
 import { objectsIn } from '../core/groups.js';
 import { activeSticker } from '../stickers/placement.js';
@@ -85,7 +85,7 @@ function drawOutline() {
 const holder = new THREE.Group(); holder.matrixAutoUpdate = false; holder.visible = false;
 const plateFill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: ACC, transparent: true, opacity: .07, depthWrite: false }));
 const plateLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: ACC, transparent: true, opacity: .45 }));
-plateFill.renderOrder = -1;
+plateFill.renderOrder = -1; plateFill.layers.enable(OVERLAY_LAYER); plateLine.layers.enable(OVERLAY_LAYER);
 holder.add(plateFill, plateLine);
 /* the object's box in its own frame (three.js units) */
 function localBox(rt) {
@@ -160,4 +160,6 @@ function initSelLook() {
   cvs.addEventListener('pointerleave', () => setHover(null));
 }
 
-export { drawSelLook, hideSelLook, initSelLook, syncSelLook };
+const selLookShown = () => holder.visible;
+
+export { drawSelLook, hideSelLook, initSelLook, selLookShown, syncSelLook };

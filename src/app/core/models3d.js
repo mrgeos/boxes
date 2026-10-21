@@ -143,4 +143,4 @@ const foodById = id => FOOD.find(f => f.id === id) || null;
 const modelName = ref => ref?.lib ? foodById(ref.lib)?.name || 'Модель' : ref?.name || 'Своя модель';
 const clampSize = v => clamp(+v || 100, 5, 3000);
 
-export { FOOD, QUALITY, clampSize, foodById, importModel, isModelFile, modelName, modelOf, modelRefs, modelShape, placeMany, placeModel };
+export { script, FOOD, QUALITY, clampSize, foodById, importModel, isModelFile, modelName, modelOf, modelRefs, modelShape, placeMany, placeModel };
