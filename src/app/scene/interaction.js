@@ -46,6 +46,9 @@ function pick(clientX, clientY, only = null) {
   return { objId: ud.objId, face, ribbon: ud.ribbon || null, wall: !!ud.wall, uv: h.uv, mesh: h.object, mi: h.face.materialIndex };
 }
 let down = null, drag3 = null, dragSt = null, xform = null, hoverT = 0;
+/* a finger or pen press that missed the handles and the frame in crop or mask mode: only a short tap that stays put ends the mode */
+let editTap = null;
+const isFinger = e => e.pointerType === 'touch' || e.pointerType === 'pen';
 /* the sticker under a 3D hit, if any */
 function stickerHit(h) {
   const o = state.objects.find(x => x.id === h?.objId);
@@ -239,9 +242,13 @@ function endXform() {
 
 /* hooks up the mouse, touch, drag-and-drop and keyboard */
 function initInteraction() {
+  const TOUCH_ONE = controls.touches.ONE;
   cvs.addEventListener('pointerdown', e => {
     if (e.pointerType === 'touch') {
       touches.set(e.pointerId, [e.clientX, e.clientY]);
+      // in crop or mask mode one finger turns nothing (OrbitControls reads this next); two still pinch and turn
+      controls.touches.ONE = editMode() ? -1 : TOUCH_ONE;
+      if (touches.size > 1) editTap = null;
       if (touches.size === 2 && lockActive()) { const [x, y] = touchMid(); pan = { x, y, vx: view.x, vy: view.y, touch: true }; }
       return;
     }
@@ -288,11 +295,13 @@ function initInteraction() {
     if (recording || e.button !== 0 || pan) return;
     down = { x: e.clientX, y: e.clientY };
     if (tool() !== 'select') return;   // graphics are dragged with the select tool only
-    const g = handleAt(e.clientX, e.clientY);
+    const g = handleAt(e.clientX, e.clientY, isFinger(e));
     if (editMode()) {
-      // crop or mask mode: corners and the inside edit; a press elsewhere ends the mode
+      // crop or mask mode: corners and the inside edit; a mouse press elsewhere ends the mode, a finger's only as a short tap
+      if (touches.size > 1) { editTap = null; return; }   // a second finger: a pinch
       if (g?.mode === 'edit' && startEdit(e, g.idx)) return;
       if (inEditFrame(e) && startEdit(e, 'move')) return;
+      if (isFinger(e)) { editTap = { x: e.clientX, y: e.clientY, t: e.timeStamp, moved: false }; return; }
       setEditMode(null); renderLayerProps(); ui.editor = true;
     } else if (g) return startXform(e, g);
     // several picked layers: a press on any of them moves them all (over their face)
@@ -317,6 +326,7 @@ function initInteraction() {
     }
   });
   cvs.addEventListener('pointermove', e => {
+    if (editTap && Math.hypot(e.clientX - editTap.x, e.clientY - editTap.y) > 6) editTap.moved = true;
     if (dragSt) {
       const { st, o } = dragSt, h = pick(e.clientX, e.clientY, RT.get(o.id).group);
       if (h && h.face && h.uv && !h.wall && faceKeys(o).includes(h.face)) {
@@ -341,6 +351,11 @@ function initInteraction() {
     cvs.style.cursor = cur;
   });
   cvs.addEventListener('pointerup', e => {
+    if (editTap) {
+      const t = editTap; editTap = null; down = null;
+      if (!t.moved && e.timeStamp - t.t < 300 && editMode()) { setEditMode(null); renderLayerProps(); ui.editor = true; }
+      return;
+    }
     if (xform) {
       const was = xform; endXform(); cvs.style.cursor = '';
       // a click on one of several picked layers, without moving them, falls through and picks it alone
@@ -393,7 +408,7 @@ function initInteraction() {
     // a click on a layer opens its design; a click on a bare face keeps the section that is open
     if (layerId) setTab('design');
   });
-  cvs.addEventListener('pointercancel', () => { if (xform) endXform(); if (drag3) { drag3 = null; controls.enabled = true; } if (dragSt) { dragSt = null; controls.enabled = true; } down = null; });
+  cvs.addEventListener('pointercancel', () => { editTap = null; if (xform) endXform(); if (drag3) { drag3 = null; controls.enabled = true; } if (dragSt) { dragSt = null; controls.enabled = true; } down = null; });
   window.addEventListener('dragover', e => { if (isLibDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
   window.addEventListener('drop', e => {
     if (!isLibDrag(e)) return; e.preventDefault();

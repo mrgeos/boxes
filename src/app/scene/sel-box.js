@@ -120,7 +120,7 @@ function dotMat(mode) {
   const x = c.getContext('2d'); x.fillStyle = mode === 'edit' ? '#0a7aa1' : '#fff'; x.strokeStyle = '#0a7aa1'; x.lineWidth = 4; x.beginPath();
   if (mode === 'rot') x.arc(16, 16, 12, 0, Math.PI * 2); else x.rect(5, 5, 22, 22);
   x.fill(); x.stroke();
-  return dots[mode] = new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), size: mode === 'rot' ? 13 : 11, sizeAttenuation: false, transparent: true, alphaTest: .3 });
+  return dots[mode] = new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), size: (mode === 'rot' ? 13 : 11) * (matchMedia('(pointer: coarse)').matches ? 1.4 : 1), sizeAttenuation: false, transparent: true, alphaTest: .3 });
 }
 /* keeps the frame in step with the selection; true when it changed and the scene needs drawing */
 function syncSelBox() {
@@ -246,8 +246,10 @@ function onScreen(h) {
   const hit = ray.intersectObjects(world.children, true)[0];
   return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height, seen: v.z < 1 && (!hit || hit.distance > d - 2.5 * S) };
 }
+/* how far from a handle a finger (or a pen) still takes it, in px; a mouse takes it within 10 */
+const FINGER_R = 24;
 /* the handle under the pointer, if any: { mode, c: the item's centre on screen, flip: -1 when seen mirrored } */
-function handleAt(x, y) {
+function handleAt(x, y, finger = false) {
   if (!lines.length || !lines.every(attached)) return null;
   // a small frame (far off, or on a phone) is mostly covered by its handles: inside it, a press moves the item, and
   // the handles are taken from outside
@@ -255,7 +257,7 @@ function handleAt(x, y) {
   if (q && Math.min(...q.map((p, i) => Math.hypot(p[0] - q[(i + 1) % 4][0], p[1] - q[(i + 1) % 4][1]))) < 40 && inQuad(q, x, y)) return null;
   for (const mode of ['rot', 'scale', 'edit']) for (const h of handles) {
     if (h.mode !== mode) continue;
-    const q = onScreen(h); if (!q.seen || Math.hypot(q.x - x, q.y - y) > 10) continue;
+    const q = onScreen(h); if (!q.seen || Math.hypot(q.x - x, q.y - y) > (finger ? FINGER_R : 10)) continue;
     const c = handles.find(g => g.mode === 'center'), cs = handles.filter(g => g.mode === 'corner').slice(0, 3).map(onScreen);
     const cc = c ? onScreen(c) : q;
     const flip = cs.length === 3 && (cs[1].x - cs[0].x) * (cs[2].y - cs[1].y) - (cs[1].y - cs[0].y) * (cs[2].x - cs[1].x) < 0 ? -1 : 1;
