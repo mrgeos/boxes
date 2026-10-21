@@ -307,6 +307,8 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .menu.file h3{padding:8px 8px 4px}
 .menu.file .seg{margin:0 4px}
 .menu-note{margin:6px 8px 4px;font-size:11.5px;line-height:1.35;color:var(--muted)}
+.menu-note:empty{display:none}
+.menu.file .menu-check{margin:8px 8px 0}
 .menu h3{margin:0;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .menu .btn{justify-content:flex-start;width:100%}
 .menu hr{border:0;border-top:1px solid var(--line);margin:0}

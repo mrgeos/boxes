@@ -1,6 +1,6 @@
 // Кольцо на полу под выбранным объектом или группой: за него объект двигают по сцене или по ряду группы
 import * as THREE from 'three';
-import { $, DEG, S, clamp } from '../core/util.js';
+import { $, DEG, OVERLAY_LAYER, S, clamp } from '../core/util.js';
 import { sel } from '../core/state.js';
 import { itemFrame, layoutAll, objectsIn, own, parentOf, rotXZ, slotsOf, topOf } from '../core/groups.js';
 import { RT, camera, controls, cvs, scene } from './renderer.js';
@@ -25,7 +25,7 @@ function makeRing(i) {
   const mat = new THREE.MeshBasicMaterial({ color: 0x0a7aa1, transparent: true, opacity: i ? .32 : .85, depthWrite: false, side: THREE.DoubleSide });
   const hitMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
   const m = new THREE.Mesh(new THREE.BufferGeometry(), mat), hit = new THREE.Mesh(new THREE.BufferGeometry(), hitMat);
-  m.renderOrder = 5; m.add(hit); m.visible = false; m.userData.hit = hit;
+  m.renderOrder = 5; m.layers.enable(OVERLAY_LAYER); m.add(hit); m.visible = false; m.userData.hit = hit;
   return m;
 }
 
@@ -192,4 +192,6 @@ function initMove() {
 /* hides the rings for a picture of the scene; returns a function that brings them back */
 function hideRings() { const v = rings.map(m => m.visible); rings.forEach(m => { m.visible = false; }); return () => rings.forEach((m, i) => { m.visible = v[i]; }); }
 
-export { hideRings, initMove, moving, syncRings };
+const ringsShown = () => rings.some(m => m.visible);
+
+export { hideRings, initMove, moving, ringsShown, syncRings };

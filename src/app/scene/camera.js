@@ -24,6 +24,7 @@ import { syncItemNav } from '../ui/item-nav.js';
 import { renderBrand } from '../ui/brand-panel.js';
 import { layoutPending, objectsIn } from '../core/groups.js';
 import { applyEnv, spinEnv } from './environments.js';
+import { active as studioActive } from './render-mode.js';
 
 function sceneBounds(onlyActive = false) {
   const b = new THREE.Box3();
@@ -305,7 +306,10 @@ function initCamera() {
     wasMoving = moving;
     // the frame waits (the last one stays on screen) while the programs it needs are built in the background
     if (changed && !shadersReady(now)) { changed = false; invalidate(); }
-    if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) { fitShadowToView(); renderer.shadowMap.needsUpdate = true; } renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
+    // «Рендер» (scene/render-mode.js): a frame that changed is drawn quickly; a still one adds a sample to the refined picture
+    const studio = studioActive(), refining = !!studio && !changed && studio.pending();
+    if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) { fitShadowToView(); renderer.shadowMap.needsUpdate = true; } if (studio) studio.frame(true); else renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
+    else if (refining) { studio.frame(false); drawSelLook(); }
     syncCtxBar(changed); syncStageHint();
     if (ui.editor) { ui.editor = false; drawEditor(); }
     if (ui.net) { ui.net = false; drawNet(); }

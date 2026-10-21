@@ -199,17 +199,22 @@ function disposeObject(id) {
 /* clear PET: black diffuse, so only reflections remain (stronger at grazing angles). The shader turns
    their brightness into coverage, so plain plastic stays see-through even over the page background
    (the canvas is transparent) and highlights still read as light on top. */
+/* the «Рендер» mode draws into a linear float target, not to the screen: the coverage is then taken from the value as the
+   screen would show it (encoded), or the plastic would nearly vanish (scene/render-mode.js sets it while it draws) */
+const petLinear = { value: 0 };
 function makePetMaterial() {
   const m = new THREE.MeshPhysicalMaterial({ color: 0x000000, metalness: 0, roughness: .06, ior: 1.57, specularIntensity: 1,
     transparent: true, depthWrite: false, side: THREE.DoubleSide });
   m.onBeforeCompile = sh => {
-    sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
+    sh.uniforms.uLin = petLinear;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uLin;').replace('#include <dithering_fragment>', `#include <dithering_fragment>
       float petHaze = 0.045;
       vec3 petLight = gl_FragColor.rgb + vec3(petHaze);
-      float petA = clamp(max(max(petLight.r, petLight.g), petLight.b), 0.0, 1.0);
+      vec3 petSeen = uLin > 0.5 ? sRGBTransferOETF(vec4(min(petLight, vec3(8.0)), 1.0)).rgb : petLight;
+      float petA = clamp(max(max(petSeen.r, petSeen.g), petSeen.b), 0.0, 1.0);
       gl_FragColor = vec4(petLight / max(petA, 1e-3), petA);`);
   };
-  m.customProgramCacheKey = () => 'pet-v1';
+  m.customProgramCacheKey = () => 'pet-v2';
   return m;
 }
 const contactMat = (() => {
@@ -305,4 +310,4 @@ function applyObjMaterials(o) {
   rt.innerMat.bumpScale = o.grain * 1.2; rt.innerMat.needsUpdate = true;
 }
 
-export { RT, pmrem, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, rebuildQueue, renderer, scene, glLost, staleShadow, takeShadowStale, ui, viewport, world };
+export { RT, pmrem, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, petLinear, rebuildQueue, renderer, scene, glLost, staleShadow, takeShadowStale, ui, viewport, world };

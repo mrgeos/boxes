@@ -1,6 +1,6 @@
 // Рамка выбранного слоя или наклейки прямо на модели
 import * as THREE from 'three';
-import { $, DEG, S } from '../core/util.js';
+import { $, DEG, OVERLAY_LAYER, S } from '../core/util.js';
 import { activeLayer, activeObj, sel } from '../core/state.js';
 import { faceKeys, faceMM, facePx, loopAxis } from '../core/model.js';
 import { activeSticker, placementsFor, stickerSize } from '../stickers/placement.js';
@@ -231,7 +231,7 @@ function syncSelBox() {
       arr.push(onGhost(g, pts[i - 1]), onGhost(g, pts[i]));
     }
   });
-  const keep = l => { l.renderOrder = 6; l.raycast = () => {}; l.userData = { objId: t.o.id, face: null }; lines.push(l); return l; };
+  const keep = l => { l.renderOrder = 6; l.layers.enable(OVERLAY_LAYER); l.raycast = () => {}; l.userData = { objId: t.o.id, face: null }; lines.push(l); return l; };
   for (const [m, pts] of segs) m.add(keep(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), mat)));
   for (const [m, pts] of ghosts) m.add(keep(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), ghostMat)));
   showOff(off && (t.st ? 'sticker' : sel.face === 'sleeve' || sel.face === 'carry' ? 'band' : 'layer'));
@@ -281,4 +281,6 @@ function boxOnScreen() {
 /* hides the frame for a picture of the scene; returns a function that brings it back */
 function hideSelBox() { const was = lines.map(l => l.visible); lines.forEach(l => { l.visible = false; }); return () => lines.forEach((l, i) => { l.visible = was[i] ?? true; }); }
 
-export { boxOnScreen, handleAt, hideSelBox, syncSelBox };
+const selBoxShown = () => lines.some(l => l.visible);
+
+export { boxOnScreen, handleAt, hideSelBox, selBoxShown, syncSelBox };
