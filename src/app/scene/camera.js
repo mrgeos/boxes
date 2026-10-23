@@ -25,10 +25,13 @@ import { renderBrand } from '../ui/brand-panel.js';
 import { layoutPending, objectsIn } from '../core/groups.js';
 import { applyEnv, spinEnv } from './environments.js';
 import { active as studioActive, syncRenderChip } from './render-mode.js';
+import { isShown } from './isolation.js';
+import { syncIsolationPlate } from '../ui/isolation-plate.js';
 
-function sceneBounds(onlyActive = false) {
+/* the box round what is shown; all: the isolated-out objects too (where to put a new object) */
+function sceneBounds(onlyActive = false, all = false) {
   const b = new THREE.Box3();
-  for (const o of state.objects) { if ((onlyActive && o.id !== sel.obj) || o.hidden) continue; const rt = RT.get(o.id); if (rt) b.expandByObject(rt.group); }
+  for (const o of state.objects) { if ((onlyActive && o.id !== sel.obj) || (all ? o.hidden : !isShown(o))) continue; const rt = RT.get(o.id); if (rt) b.expandByObject(rt.group); }
   if (b.isEmpty()) b.set(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 1, 1));
   return b;
 }
@@ -62,11 +65,14 @@ function fitDistance(r) {
   const vf = camera.fov * DEG / 2, hf = Math.atan(Math.tan(vf) * camera.aspect);
   return r / Math.sin(Math.min(vf, hf)) * 1.08;
 }
-function tweenCamera(p1, q1, instant = false) {
+function tweenCamera(p1, q1, instant = false, v1 = { x: 0, y: 0 }) {
   invalidate();
-  if (instant) { camera.position.copy(p1); controls.target.copy(q1); view.x = view.y = 0; applyViewOffset(); controls.update(); return; }
-  camTween = { t0: performance.now(), p0: camera.position.clone(), q0: controls.target.clone(), p1, q1, v0: { ...view } };
+  if (instant) { camera.position.copy(p1); controls.target.copy(q1); view.x = v1.x; view.y = v1.y; applyViewOffset(); controls.update(); return; }
+  camTween = { t0: performance.now(), p0: camera.position.clone(), q0: controls.target.clone(), p1, q1, v0: { ...view }, v1 };
 }
+/* where the camera stands (kept by the isolation to come back to), and a way back there */
+const camPose = () => ({ p: camera.position.clone(), q: controls.target.clone(), v: { ...view }, name: viewName, last: lastView });
+function goPose(c) { lastView = c.last; setViewName(c.name); tweenCamera(c.p, c.q, false, c.v); }
 function objBounds(id) {
   const rt = RT.get(id), b = new THREE.Box3(); if (rt) b.expandByObject(rt.group);
   return b.isEmpty() ? null : b;
@@ -84,7 +90,7 @@ function frameItems(ids) {
 const manyPicked = () => sel.multi.length > 1 || !!sel.group;
 function selIds() {
   if (!manyPicked()) { const o = activeObj(); return o ? [o.id] : []; }
-  return [...new Set((sel.group ? [sel.group] : sel.multi).flatMap(objectsIn))].filter(id => !state.objects.find(o => o.id === id)?.hidden);
+  return [...new Set((sel.group ? [sel.group] : sel.multi).flatMap(objectsIn))].filter(id => { const o = state.objects.find(q => q.id === id); return o && isShown(o); });
 }
 function selBounds() {
   const b = new THREE.Box3(); for (const id of selIds()) { const q = objBounds(id); if (q) b.union(q); }
@@ -282,7 +288,7 @@ function initCamera() {
     if (camTween) {
       const t = clamp((now - camTween.t0) / 520, 0, 1), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
       camera.position.lerpVectors(camTween.p0, camTween.p1, e); controls.target.lerpVectors(camTween.q0, camTween.q1, e);
-      view.x = camTween.v0.x * (1 - e); view.y = camTween.v0.y * (1 - e); applyViewOffset();
+      const { v0, v1 } = camTween; view.x = v0.x + (v1.x - v0.x) * e; view.y = v0.y + (v1.y - v0.y) * e; applyViewOffset();
       if (t >= 1) camTween = null;
     }
     controls.enablePan = !lockActive();
@@ -310,7 +316,7 @@ function initCamera() {
     const studio = studioActive(), refining = !!studio && !changed && studio.pending();
     if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) { fitShadowToView(); renderer.shadowMap.needsUpdate = true; } if (studio) studio.frame(true); else renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
     else if (refining) { studio.frame(false); drawSelLook(); }
-    syncRenderChip(studio); syncCtxBar(changed); syncStageHint();
+    syncRenderChip(studio); syncCtxBar(changed); syncStageHint(); syncIsolationPlate();
     if (ui.editor) { ui.editor = false; drawEditor(); }
     if (ui.net) { ui.net = false; drawNet(); }
     if (ui.layers) { ui.layers = false; renderLayers(); }
@@ -320,4 +326,4 @@ function initCamera() {
   });
 }
 
-export { VIEW_DIRS, VIEW_LABEL, fitShadowBias, fitShadowToView, flushFaces, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
+export { camPose, goPose, VIEW_DIRS, VIEW_LABEL, fitShadowBias, fitShadowToView, flushFaces, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };

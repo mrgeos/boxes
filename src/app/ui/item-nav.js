@@ -4,11 +4,12 @@ import { state } from '../core/state.js';
 import { stepItem } from '../core/selection.js';
 import { objectsIn } from '../core/groups.js';
 import { liftOverBars } from './view-cube.js';
+import { isShown } from '../scene/isolation.js';
 
 const ICON = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
 let lastN = -1;
 /* how many items take part: the top of the object list with something shown (a group counts once) */
-const count = () => state.tree.filter(id => objectsIn(id).some(oid => !state.objects.find(o => o.id === oid)?.hidden)).length;
+const count = () => state.tree.filter(id => objectsIn(id).some(oid => { const o = state.objects.find(q => q.id === oid); return o && isShown(o); })).length;
 /* called after each drawn frame: the arrows sit in the corner, raised over the bars when they reach under them,
    and are off when there is nothing to step to */
 function syncItemNav() {

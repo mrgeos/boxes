@@ -3,6 +3,7 @@ import { DEG, uid } from './util.js';
 import { state } from './state.js';
 import { RT, applyTransform, buildObject, disposeObject } from '../scene/renderer.js';
 import { invalidate, updateShadowCam } from '../scene/camera.js';
+import { pruneIsolation } from '../scene/isolation.js';
 
 /* The scene is a tree: state.tree lists the top-level items (object and group ids) in list order, each group
    in state.groups lists its own items. An object at the top level stands where its pos / rotY say; a group's
@@ -100,6 +101,7 @@ function layoutAll() {
     for (const c of g.items) { const [lx, lz] = slots.get(g.id).get(c), [wx, wz] = rotXZ(lx, lz, rot); put(c, x + wx, z + wz, rot + own(c).rotY); }
   };
   for (const id of state.tree) { const t = own(id); put(id, t.pos.x, t.pos.z, t.rotY); }
+  pruneIsolation();   // before the objects take their places (and so their visibility)
   for (const o of state.objects) applyTransform(o, false);
   updateShadowCam();
 }

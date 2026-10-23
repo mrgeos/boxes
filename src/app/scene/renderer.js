@@ -26,6 +26,7 @@ import { buildStickerFilms } from '../stickers/film.js';
 import { camTween, invalidate, orbitLock, updateShadowCam } from './camera.js';
 import { layoutSoon, parentOf, placeOf } from '../core/groups.js';
 import { moving } from './move.js';
+import { isShown } from './isolation.js';
 import { wrapTouch } from '../faces/wrap.js';
 import { corrugateEdges } from '../carriers/corrugated.js';
 import { mergeStatic } from './geometry.js';
@@ -229,7 +230,7 @@ function applyTransform(o, shadow = true) {
   const rt = RT.get(o.id); if (!rt) return;
   const before = rt.group.position.clone(), p = placeOf(o);
   rt.group.position.set(p.x * S, 0, p.z * S); rt.group.rotation.y = p.rot * DEG;
-  rt.group.visible = !o.hidden;
+  rt.group.visible = isShown(o);   // the one place that shows or hides an object (its eye, the isolation)
   // keep orbiting the selected object while it is being moved
   if (rt.placed && orbitLock && o.id === sel.obj && !camTween && !moving()) { const d = rt.group.position.clone().sub(before); camera.position.add(d); controls.target.add(d); }
   rt.placed = true;

@@ -4,6 +4,7 @@ import { state, sel } from '../core/state.js';
 import { pickItems, topItem } from '../core/selection.js';
 import { RT, camera, controls, cvs } from './renderer.js';
 import { recording } from './camera.js';
+import { isShown } from './isolation.js';
 import { tool } from '../ui/action-bar.js';
 
 /* A drag with Alt held draws a frame on the scene; on release every shown object it touches is picked (an object
@@ -26,7 +27,7 @@ function screenRect(rt) {
 function itemsIn(f) {
   const out = [];
   for (const o of state.objects) {
-    if (o.hidden || o.locked) continue;
+    if (!isShown(o) || o.locked) continue;
     const rt = RT.get(o.id), q = rt && screenRect(rt);
     if (q && q.x1 >= f.x0 && q.x0 <= f.x1 && q.y1 >= f.y0 && q.y0 <= f.y1) out.push(topItem(o.id));
   }

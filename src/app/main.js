@@ -25,7 +25,7 @@ import { markAllText } from './core/fonts.js';
 import { RT, camera, controls, dirtyFaces, markObj, rebuildQueue, renderer, scene } from './scene/renderer.js';
 import { placementsFor } from './stickers/placement.js';
 import { buildStickerFilms } from './stickers/film.js';
-import { applyScene, initCamera, invalidate, orbitLock, resize, setOrbitLock, setView } from './scene/camera.js';
+import { applyScene, initCamera, invalidate, orbitLock, resize, sceneBounds, setOrbitLock, setView } from './scene/camera.js';
 import { select } from './core/selection.js';
 import { LS_KEY, loadProject } from './core/project.js';
 import { bindScene } from './ui/model-panel.js';
@@ -41,6 +41,8 @@ import { initWiring } from './ui/wiring.js';
 import { initObjectList } from './ui/object-list.js';
 import { initObjectThumbs } from './ui/object-thumbs.js';
 import { initColorPicker } from './ui/color-picker.js';
+import { exitIsolation, isShown, isolation, setIsolation, toggleIsolation } from './scene/isolation.js';
+import { initIsolationPlate } from './ui/isolation-plate.js';
 
 /* boot: hook up the parts in the order they were built, then load the project (the shadow filter first: before any
    material is built) */
@@ -57,7 +59,7 @@ initWiring();
 initColorPicker();
 initPanels();
 initTabs();
-initActionBar(); initCtxBar(); initStageHint(); initSelLook(); initViewCube(); initItemNav(); initMarquee();
+initActionBar(); initCtxBar(); initStageHint(); initSelLook(); initViewCube(); initItemNav(); initMarquee(); initIsolationPlate();
 initTextEdit();
 initQualityMenu(); initContextLoss();
 resize();
@@ -70,4 +72,4 @@ document.fonts?.ready.then(() => markAllText());
 libLoadBrowser(); loadMyModels();
 initProjects();
 window.__boxStudio = { library, state, sel, select, pick, stickerHit, boxOnScreen, handleAt, setView, faceMM, footprint, pendingFaces: () => dirtyFaces.size,
-  sleeveHoles: o => { const D = sleeveDims(o); return sleeveSheet(D).holes.map(h => h.reduce((a, p) => a + p[1], 0) / h.length / D.P); }, sleeveFold: o => { const D = sleeveDims(o); return D.s0 / D.P; }, RT, camera, THREE, renderer, setRender, scene, applyScene, markObj, rebuildQueue, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };
+  sleeveHoles: o => { const D = sleeveDims(o); return sleeveSheet(D).holes.map(h => h.reduce((a, p) => a + p[1], 0) / h.length / D.P); }, sleeveFold: o => { const D = sleeveDims(o); return D.s0 / D.P; }, RT, camera, THREE, renderer, setRender, setIsolation, exitIsolation, toggleIsolation, isolation, isShown, sceneBounds, scene, applyScene, markObj, rebuildQueue, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };

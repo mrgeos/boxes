@@ -7,6 +7,7 @@ import { activeSticker } from '../stickers/placement.js';
 import { RT, camera, cvs, renderer, scene } from './renderer.js';
 import { invalidate, recording } from './camera.js';
 import { pick } from './interaction.js';
+import { isShown } from './isolation.js';
 import { tool } from '../ui/action-bar.js';
 
 /* The selected object gets a two-tone outline round its silhouette and a faint plate on the floor; the object under
@@ -17,7 +18,7 @@ let hoverId = null, key = '';
 const ACC = new THREE.Color('#0a7aa1');
 
 /* the objects picked: an object, or every object of a group picked in the list */
-const pickedIds = () => [...new Set((sel.multi.length ? sel.multi : sel.obj ? [sel.obj] : []).flatMap(objectsIn))].filter(id => { const o = state.objects.find(q => q.id === id); return o && !o.hidden && RT.has(id); });
+const pickedIds = () => [...new Set((sel.multi.length ? sel.multi : sel.obj ? [sel.obj] : []).flatMap(objectsIn))].filter(id => { const o = state.objects.find(q => q.id === id); return o && isShown(o) && RT.has(id); });
 
 /* ---------- the mask and the outline pass ---------- */
 const MASK_LAYER = 7;
@@ -128,7 +129,7 @@ function drawSelLook() {
   if (recording) { if (el) el.hidden = true; return; }
   drawOutline();
   if (!el) return;
-  const o = hoverId && state.objects.find(q => q.id === hoverId), rt = o && !o.hidden && RT.get(o.id);
+  const o = hoverId && state.objects.find(q => q.id === hoverId), rt = o && isShown(o) && RT.get(o.id);
   if (!rt) { el.hidden = true; return; }
   // over the top of the object's box on screen
   const b = new THREE.Box3().setFromObject(rt.group), r = cvs.getBoundingClientRect(), st = el.parentElement.getBoundingClientRect(), v = new THREE.Vector3();
