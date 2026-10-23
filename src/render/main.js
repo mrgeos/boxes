@@ -22,13 +22,13 @@ const fx = (frag, uniforms) => new THREE.ShaderMaterial({ vertexShader: VERT, fr
 
 function create(ctx) {
   const { renderer, scene, camera, key, viewport } = ctx;
-  const low = !!window.__forceLow || matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) < 500;
+  const low = ctx.low;   // a phone or a small screen: fewer samples, half-size AO, no MSAA
   const FT = !window.__forceHalf && renderer.extensions.has('EXT_color_buffer_float') ? THREE.FloatType : THREE.HalfFloatType;   // the running average needs the precision
-  const NS = +new URLSearchParams(location.search).get('n') || Math.min(low ? 16 : 64, FT === THREE.FloatType ? 64 : 32);
+  const NS = +new URLSearchParams(location.search).get('n') || Math.min(low ? 16 : 64, FT === THREE.FloatType ? 64 : 24);   // the running mean needs float precision: half float stops at 24
   const rt = (type, o = {}) => new THREE.WebGLRenderTarget(1, 1, { type, depthBuffer: false, ...o });
   const rtScene = rt(THREE.HalfFloatType, { samples: low ? 0 : 4, depthBuffer: true }), rtFrame = rt(THREE.HalfFloatType), rtShow = rt(THREE.HalfFloatType);
   const rtAcc = [0, 1].map(() => rt(FT, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter }));
-  let cur = 0, W = 1, H = 1, accN = 0, sampleMs = 0, lightMoved = false;
+  let cur = 0, W = 1, H = 1, accN = 0, sampleMs = 0, lightMoved = false, lastSig = '', frames = 0;
   const quad = new FullScreenQuad(null);
   const run = (mat, target) => { quad.material = mat; renderer.setRenderTarget(target); quad.render(renderer); };
 
@@ -122,7 +122,7 @@ void main(){
   }
   const mats = o => [o.material].flat().filter(Boolean);
   // clear plastic and alpha-cut parts are no wall for the occlusion (the lid is left out: the AO belongs to what is seen through it)
-  const notSolid = o => mats(o).some(m => (m.transparent && !m.depthWrite) || m.alphaTest > .4);
+  const notSolid = o => mats(o).some(m => (m.transparent && (!m.depthWrite || m.opacity < .98)) || m.alphaTest > .4);   // clear plastic, film, tissue (sheer), windows cut by alpha
   const isContact = o => o.material === ctx.contactMat;   // the drawn contact shadow: the AO does that here
 
   // the camera shifted by a sub-pixel on top of the editor's own pan (its view offset, CSS px)
@@ -134,8 +134,40 @@ void main(){
   function shiftLight(i) {
     base.copy(key.position); dir.copy(base).sub(key.target.position); const dist = dir.length(); dir.normalize();
     U.crossVectors(dir, Math.abs(dir.y) > .95 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize(); V.crossVectors(dir, U);
-    const r = dist * LOOK.keyR * Math.sqrt(halton(i + 1, 5)), a = 2 * Math.PI * halton(i + 1, 7);
+    const r = dist * (low ? LOOK.keyR * .65 : LOOK.keyR) * Math.sqrt(halton(i + 1, 5)), a = 2 * Math.PI * halton(i + 1, 7);
     key.position.addScaledVector(U, r * Math.cos(a)).addScaledVector(V, r * Math.sin(a));
+  }
+
+  /* What the picture depends on, as a number: the camera, the lights and environment, and every drawn object (its place,
+     its geometry and material and their pictures). Marks over the scene (layer 5) are left out. The editor asks for a
+     frame for many reasons (the pointer over the view, a selection, a panel); when this number is the same as when the
+     average was made, the average is still right and only the display and the marks are drawn again. */
+  function signature() {
+    let h = 2166136261;
+    const num = x => { h = Math.imul(h ^ (Math.round(x * 1e5) | 0), 16777619); };
+    const arr = a => { for (let i = 0; i < a.length; i++) num(a[i]); };
+    arr(camera.matrixWorld.elements); arr(camera.projectionMatrix.elements); num(W); num(H);
+    num(renderer.toneMappingExposure); num(scene.environmentIntensity); num(scene.environment ? scene.environment.id : -1); num(scene.environmentRotation.y);
+    const maps = ['map', 'bumpMap', 'roughnessMap', 'metalnessMap', 'normalMap', 'clearcoatMap', 'iridescenceMap'];
+    const walk = (o, flat) => {
+      if (o.layers.isEnabled(ctx.overlayLayer)) return;
+      num(o.visible ? 1 : 0); if (!o.visible) return;
+      arr(o.position.toArray()); arr(o.quaternion.toArray()); arr(o.scale.toArray()); if (!o.matrixAutoUpdate) arr(o.matrix.elements);
+      if (o.isLight) { num(o.intensity); num(o.color.r); num(o.color.g); num(o.color.b); }
+      if (o.isMesh) {
+        const g = o.geometry; num(g.id); num(g.attributes.position?.version || 0); num(g.index?.version || 0); num(g.drawRange.count === Infinity ? 0 : g.drawRange.count);
+        for (const m of mats(o)) {
+          num(m.id); num(m.visible ? 1 : 0); num(m.opacity); num(m.side); num(m.transparent ? 1 : 0); num(m.alphaTest); num(m.depthWrite ? 1 : 0);   // (not m.version: three bumps it on every draw of clear double-sided plastic)
+          num(m.clearcoat || 0); num(m.clearcoatRoughness || 0); num(m.sheen || 0); num(m.iridescence || 0); num(m.bumpScale || 0); num(m.envMapIntensity ?? 1); if (m.color) { num(m.color.r); num(m.color.g); num(m.color.b); }
+          if (m.emissive) { num(m.emissive.r); num(m.emissive.g); num(m.emissive.b); }
+          num(m.roughness ?? 0); num(m.metalness ?? 0); num(m.envMap ? m.envMap.id : -1);
+          for (const k of maps) if (m[k]) { num(m[k].id); num(m[k].version); }
+        }
+      }
+      if (!flat) for (const c of o.children) walk(c);
+    };
+    walk(scene);
+    return h;
   }
 
   /* one sample: shifted camera and light -> scene -> AO -> composite -> running average */
@@ -146,7 +178,7 @@ void main(){
     const showContact = hideMeshes(isContact);
     renderer.setRenderTarget(rtScene); renderer.render(scene, camera);
     gtao.gtaoMaterial.uniforms.uFrame.value = gtao.pdMaterial.uniforms.uFrame.value = i;
-    const showClear = hideMeshes(notSolid);
+    const showClear = window.__noAOHide ? () => {} : hideMeshes(notSolid);   // (the flag: debug, to see the occlusion without the exception)
     gtao.render(renderer, null, null);
     showClear(); showContact();
     const u = mComp.uniforms;
@@ -194,19 +226,29 @@ void main(){
   function frame(changed) {
     const s = renderer.getDrawingBufferSize(new THREE.Vector2());
     if (s.x !== W || s.y !== H) resize(s.x, s.y);
-    if (changed) { accN = 0; if (lightMoved) { lightMoved = false; ctx.staleShadow(); } }
+    // a frame asked for, with the picture unchanged (the pointer moved, a selection): the average stays
+    const sig = changed ? signature() : lastSig, same = changed && accN > 0 && sig === lastSig;
+    lastSig = sig; frames++;
+    if (changed && !same) { accN = 0; if (lightMoved) { lightMoved = false; ctx.staleShadow(); } }
     const marks = ctx.overlaysShown(), restore = ctx.hideOverlays(), ac = renderer.autoClear;
     ctx.petLinear.value = 1;   // clear plastic is drawn into a linear target
-    if (changed) preview(); else { sample(accN++); display(); }
+    if (changed) { if (same) display(); else preview(); } else { sample(accN++); display(); }
     ctx.petLinear.value = 0;
     if (marks) overlays(restore); else restore();
     renderer.autoClear = ac;
-    window.__studio = { n: accN, N: NS, done: !changed && accN >= NS, sampleMs, W, H, low, half: FT !== THREE.FloatType };
+    window.__studio = { n: accN, N: NS, done: accN >= NS, sampleMs, W, H, low, half: FT !== THREE.FloatType, frames, mb: Math.round(memory() / 1048576) };
+  }
+  /* the graphics memory of the targets, roughly (bytes) */
+  function memory() {
+    const px = W * H, f = FT === THREE.FloatType ? 16 : 8, ao = low ? .25 : 1, ms = low ? 1 : 4;
+    return px * (8 * ms + 4 * ms + 8 + 8 + 8 + 2 * f)   // scene (colour, depth; resolved colour), frame, show, two averages
+      + px * ao * (4 + 4 + 4 + 4) + px * 8 * 2 * (1 / 3);   // GTAO: normals + depth, AO, denoised; bloom's mips
   }
   const pending = () => accN < Math.min(NS, window.__studioCap || NS);
+  const status = () => ({ n: accN, N: NS });
   // turned off: the big targets are given back (they are sized again at the next frame)
-  const release = () => { resize(1, 1); W = 0; H = 0; lightMoved = false; ctx.staleShadow(); window.__studio = { n: 0, N: NS, done: false, off: true }; };
-  return { frame, pending, release };
+  const release = () => { resize(1, 1); W = 0; H = 0; lightMoved = false; lastSig = ''; ctx.staleShadow(); window.__studio = { n: 0, N: NS, done: false, off: true }; };
+  return { frame, pending, release, status };
 }
 
 window.__bsRender = { create };

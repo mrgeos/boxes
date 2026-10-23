@@ -308,6 +308,14 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .menu.file .seg{margin:0 4px}
 .menu-note{margin:6px 8px 4px;font-size:11.5px;line-height:1.35;color:var(--muted)}
 .menu-note:empty{display:none}
+.render-chip{position:absolute;left:12px;top:12px;z-index:3;display:flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:12px;background:color-mix(in srgb,var(--panel) 90%,transparent);backdrop-filter:blur(6px);border:1px solid var(--line);font:11px/1 var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);pointer-events:none;transition:opacity .4s}
+.render-chip.low{top:60px}
+.render-chip i{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:chip-pulse 1s ease-in-out infinite alternate}
+.render-chip.done i{background:var(--ok,#3a9a5b);animation:none}
+.render-chip.fade{opacity:0}
+.render-chip[hidden]{display:none}
+@keyframes chip-pulse{from{opacity:.25}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.render-chip i{animation:none}.render-chip{transition:none}}
 .menu.file .menu-check{margin:8px 8px 0}
 .menu h3{margin:0;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .menu .btn{justify-content:flex-start;width:100%}

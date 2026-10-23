@@ -86,7 +86,7 @@ const holder = new THREE.Group(); holder.matrixAutoUpdate = false; holder.visibl
 const plateFill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: ACC, transparent: true, opacity: .07, depthWrite: false }));
 const plateLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: ACC, transparent: true, opacity: .45 }));
 plateFill.renderOrder = -1; plateFill.layers.enable(OVERLAY_LAYER); plateLine.layers.enable(OVERLAY_LAYER);
-holder.add(plateFill, plateLine);
+holder.add(plateFill, plateLine); holder.layers.enable(OVERLAY_LAYER);
 /* the object's box in its own frame (three.js units) */
 function localBox(rt) {
   rt.group.updateMatrixWorld(true);
