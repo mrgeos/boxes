@@ -79,10 +79,12 @@ function drawStickerNet(o, st, cw, dpr) {
 }
 /* the object's net (viewNet) on a canvas context: the panels with their designs, cut and fold lines, windows, tabs.
    (ox, oy): where the sheet's corner is, k: px per mm. selKey: the panel drawn as selected (null: none);
-   fan(p, canvas, w, h): a picture for a fan panel, where the caller keeps the slow warp in a cache */
-function paintNet(c, o, n, { ox, oy = ox, k, selKey = sel.face, accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(), fan = null }) {
+   fan(p, canvas, w, h): a picture for a fan panel, where the caller keeps the slow warp in a cache;
+   before(c), after(c): more drawn under the panels and over everything (the bleed, the safe zone, dimensions) */
+function paintNet(c, o, n, { ox, oy = ox, k, selKey = sel.face, accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(), fan = null, before = null, after = null }) {
   const accentCss = accent;
   const rt = RT.get(o.id);
+  before?.(c);
   for (const p of n.panels) {
     const x = ox + p.x * k, y = oy + p.y * k, w = p.w * k, h = p.h * k, fc = rt?.faces[p.key]?.canvas;
     c.save(); c.beginPath(); panelPath(c, p, ox, oy, k); c.clip();
@@ -119,6 +121,7 @@ function paintNet(c, o, n, { ox, oy = ox, k, selKey = sel.face, accent = getComp
     for (const l of ws.leafCut.cuts) line(l, []);
     c.strokeStyle = 'rgba(230,0,126,.8)'; for (const [a, b, x2, y2] of ws.leafCut.creases) line([[a, b], [x2, y2]], [4, 3]);
   }
+  after?.(c);
 }
 function drawNet() {
   const o = activeObj(); const dpr = Math.min(devicePixelRatio || 1, 2);

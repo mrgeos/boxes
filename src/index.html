@@ -98,13 +98,20 @@
   <div class="work" id="work">
   <section class="netpane" id="netPane" aria-label="Развёртка выбранного объекта">
     <canvas id="netBase"></canvas><canvas id="netTop"></canvas>
-    <div class="np-cap" id="netCap"></div>
+    <div class="np-top"><div class="np-cap" id="netCap"></div><button class="np-ready ok" id="netReady" aria-haspopup="menu" title="Проверка макета к печати: края, безопасная зона, разрешение картинок"><i aria-hidden="true"></i><span></span></button></div>
     <div class="np-empty empty" id="netEmpty" hidden><span id="netEmptyText"></span><button class="btn sm" id="netTo3d" hidden>Показать 3D</button></div>
-    <div class="np-zoom" id="netZoom" role="toolbar" aria-label="Масштаб развёртки">
-      <button class="np-b" id="nzOut" aria-label="Уменьшить" title="Уменьшить (колесо мыши)">−</button>
-      <button class="np-b pct" id="nzPct" aria-label="Масштаб 100%" title="Натуральная величина (100%)">100%</button>
-      <button class="np-b" id="nzIn" aria-label="Увеличить" title="Увеличить (колесо мыши)">+</button>
-      <button class="np-b" id="nzFit" aria-label="Вписать в окно" title="Вписать в окно"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <div class="np-bottom">
+      <div class="np-zoom" id="netZoom" role="toolbar" aria-label="Масштаб развёртки">
+        <button class="np-b" id="nzOut" aria-label="Уменьшить" title="Уменьшить (колесо мыши)">−</button>
+        <button class="np-b pct" id="nzPct" aria-label="Масштаб 100%" title="Натуральная величина (100%)">100%</button>
+        <button class="np-b" id="nzIn" aria-label="Увеличить" title="Увеличить (колесо мыши)">+</button>
+        <button class="np-b" id="nzFit" aria-label="Вписать в окно" title="Вписать в окно"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
+      <div class="np-chips" id="netChips" role="group" aria-label="Что показать на развёртке">
+        <button class="np-chip" data-ov="bleed" aria-pressed="false" title="Вылеты: 3 мм дизайна за линией реза">Вылеты</button>
+        <button class="np-chip" data-ov="safe" aria-pressed="false" title="Безопасная зона: 3 мм от края панели; то, что в неё заходит, подсвечено">Безопасная зона</button>
+        <button class="np-chip" data-ov="dims" aria-pressed="false" title="Размеры панелей и всей развёртки, мм">Размеры</button>
+        </div>
     </div>
   </section>
   <div class="split-grip" id="splitGrip" role="separator" aria-orientation="vertical" aria-label="Граница развёртки и 3D" tabindex="0" title="Тяните, чтобы изменить ширину; двойной клик — поровну"></div>

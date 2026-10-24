@@ -4,10 +4,13 @@ import { activeObj, sel } from '../core/state.js';
 import { faceKeys, faceLabel } from '../core/model.js';
 import { RT } from '../scene/renderer.js';
 import { fanImage, fanOutline } from '../carriers/cup.js';
-import { select } from '../core/selection.js';
+import { pickLayers, select } from '../core/selection.js';
 import { hover, onHoverFace, setHoverFace } from '../core/hover.js';
 import { effectiveMode } from '../ui/view-mode.js';
 import { inPanel, paintNet, panelPath, viewNet } from './net-view.js';
+import { openMenu } from '../ui/menu.js';
+import { loadNetOverlays, netOverlay, onNetOverlay, overlayHooks, setNetOverlay } from './net-overlays.js';
+import { printIssues } from './net-check.js';
 import { drawNetEdit, dropPanel, netCursor, netDouble, netKey, netMove, netPress, netRelease } from './net-edit.js';
 
 /* The net of the active object, big: the panels with the faces' designs, cut and fold lines, windows. Two canvases:
@@ -15,10 +18,11 @@ import { drawNetEdit, dropPanel, netCursor, netDouble, netKey, netMove, netPress
    panel, redrawn on its own, so a hover costs no sheet redraw and touches nothing in the 3D view). The sheet is placed
    by V: k px per mm and the screen position of its corner. A click selects a panel's face as the small net does;
    a drag moves the sheet, the wheel zooms round the pointer. */
+const TOOLS = '#netZoom, #netChips, #netReady, #netEmpty';   // what lies over the sheet and takes the pointer itself
 const PX_MM = 96 / 25.4;   // 100%: a millimetre of the sheet is a millimetre on a 96 dpi screen
 const MARGIN = 44, MIN_K = .04, MAX_K = 14;
 const V = { k: 1, ox: 0, oy: 0, fit: true };
-let netDirty = true, cw = 0, ch = 0, dpr = 1, geom = null, objKey = '', raf = 0, baseDirty = true, topDirty = true, settle = 0, moving = false, space = false, over = false;
+let issues = [], netDirty = true, cw = 0, ch = 0, dpr = 1, geom = null, objKey = '', raf = 0, baseDirty = true, topDirty = true, settle = 0, moving = false, space = false, over = false;
 let base = null, top = null, bctx = null, tctx = null;
 const fans = new Map();   // the slow warp of a cup's wall: one picture per face version and size
 
@@ -26,9 +30,13 @@ const shown = () => effectiveMode() !== '3d' && cw > 0 && ch > 0;
 const clampK = k => Math.min(MAX_K, Math.max(MIN_K, k));
 function fitView() {
   if (!geom) return;
-  const { n } = geom, aw = Math.max(40, cw - 2 * MARGIN), ah = Math.max(40, ch - 2 * MARGIN - 20);
+  const { n } = geom, r = $('#netPane').getBoundingClientRect();
+  // room kept free: over the sheet the caption and its dimension line, under it the tools (one row or two)
+  const tools = ['#netZoom', '#netChips'].map(q => $(q)).filter(e => !e.hidden && e.offsetParent), top = 68;
+  const bottom = Math.max(56, tools.length ? ch - (Math.min(...tools.map(e => e.getBoundingClientRect().top)) - r.top) + 12 : 0);
+  const aw = Math.max(40, cw - 2 * MARGIN), ah = Math.max(40, ch - top - bottom);
   V.k = clampK(Math.min(aw / n.W, ah / n.H));
-  V.ox = (cw - n.W * V.k) / 2; V.oy = (ch - n.H * V.k) / 2 - 6; V.fit = true;
+  V.ox = (cw - n.W * V.k) / 2; V.oy = top + (ah - n.H * V.k) / 2; V.fit = true;
 }
 /* the net now: null where the active object has none (a model, nothing picked) */
 function currentNet() {
@@ -58,7 +66,7 @@ function paintBase() {
   bctx.setTransform(dpr, 0, 0, dpr, 0, 0); bctx.clearRect(0, 0, cw, ch);
   if (!geom) return;
   const { o, n } = geom;
-  paintNet(bctx, o, n, { ox: V.ox, oy: V.oy, k: V.k, selKey: null, fan: fanPicture(o) });
+  paintNet(bctx, o, n, { ox: V.ox, oy: V.oy, k: V.k, selKey: null, fan: fanPicture(o), ...overlayHooks(o, n, V.ox, V.oy, V.k, issues) });
 }
 /* the outline of a panel on the sheet */
 function outline(c, p) {
@@ -94,11 +102,27 @@ function paintTop() {
     tctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent-fg').trim() || '#fff'; tctx.fillText(txt, x + 7, y + 10.5);
   }
 }
+/* the «Готово к печати» chip: green with no problems, else amber with their number */
+function syncReady() {
+  const b = $('#netReady'), bad = issues.length;
+  b.classList.toggle('ok', !bad); b.classList.toggle('warn', !!bad);
+  b.lastChild.textContent = bad ? `Проверьте: ${bad}` : 'Готово к печати';
+}
+function syncChips() { for (const b of document.querySelectorAll('#netChips [data-ov]')) b.setAttribute('aria-pressed', String(netOverlay(b.dataset.ov))); }
+/* the list of what is wrong; a pick selects that layer on its face */
+function openIssues(e) {
+  const o = geom?.o, r = e.currentTarget.getBoundingClientRect();
+  if (!o) return;
+  const items = issues.length ? issues.map(it => ({ label: it.text, run: () => { select(o.id, it.face, null, { focus: false }); pickLayers([it.id]); } }))
+    : [{ label: 'Края и безопасная зона в порядке', disabled: true }, { label: 'Картинки — не меньше 150 dpi', disabled: true }];
+  openMenu(Math.max(8, r.right - 300), r.bottom + 6, items, 'Проверка к печати');
+}
 /* the texts and tools round the sheet: the caption, the empty note, the zoom */
 function syncChrome(cur) {
   const none = !cur ? 'Выберите объект, чтобы увидеть его развёртку' : !cur.n ? 'У этого объекта нет развёртки' : '';
   $('#netEmpty').hidden = !none; $('#netEmptyText').textContent = none; $('#netTo3d').hidden = !none || effectiveMode() !== '2d';
-  $('#netZoom').hidden = $('#netCap').hidden = !!none;
+  $('#netZoom').hidden = $('#netCap').hidden = $('#netChips').hidden = $('#netReady').hidden = !!none;
+  syncReady();
   if (!none) $('#netCap').textContent = `${cur.o.name} · ${fmt(cur.n.W, 1)} × ${fmt(cur.n.H, 1)} мм`;
 }
 /* redraws what changed; the loop calls drawNetStage when a face is repainted or the selection changes */
@@ -108,7 +132,9 @@ function flush() {
   if (netDirty) {
     netDirty = false;
     const cur = currentNet(), key = cur?.n ? `${cur.o.id}|${sel.part || ''}|${fmt(cur.n.W, 2)}x${fmt(cur.n.H, 2)}` : '';
-    geom = cur?.n ? cur : null; syncChrome(cur);
+    geom = cur?.n ? cur : null;
+    issues = geom ? printIssues(geom.o, [...new Set(geom.n.panels.map(p => p.key))].filter(k => faceKeys(geom.o).includes(k))) : [];
+    syncChrome(cur);
     // another object, or a sheet of another size: fitted again, unless the user has set the view by hand for this one
     if (key !== objKey) { const same = objKey.split('|').slice(0, 2).join() === key.split('|').slice(0, 2).join(); objKey = key; if (!same || V.fit) fitView(); baseDirty = topDirty = true; }
   }
@@ -152,7 +178,7 @@ function initNetStage() {
   onHoverFace(() => { topDirty = true; schedule(); });
   // wheel: zoom round the pointer (Ctrl and a pinch on a touchpad, faster)
   pane.addEventListener('wheel', e => {
-    if (e.target.closest('#netZoom') || !geom) return;
+    if (e.target.closest(TOOLS) || !geom) return;
     e.preventDefault();
     const r = pane.getBoundingClientRect(), dy = e.deltaY * (e.deltaMode === 1 ? 16 : 1);
     zoomAt(Math.exp(-dy * (e.ctrlKey ? .012 : .0016)), e.clientX - r.left, e.clientY - r.top);
@@ -162,7 +188,7 @@ function initNetStage() {
   const local = e => { const r = pane.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   pane.setAttribute('tabindex', '0');
   pane.addEventListener('pointerdown', e => {
-    if (e.target.closest('#netZoom, #netEmpty')) return;
+    if (e.target.closest(TOOLS)) return;
     pane.setPointerCapture(e.pointerId); pts.set(e.pointerId, local(e));
     if (e.button === 0 && e.pointerType !== 'touch') pane.focus({ preventScroll: true });
     if (pts.size === 2) {
@@ -218,12 +244,16 @@ function initNetStage() {
   // the space bar pans while it is held over the sheet
   addEventListener('keydown', e => { if (e.code === 'Space' && over && !/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)) { space = true; e.preventDefault(); pane.style.cursor = 'grab'; } });
   addEventListener('keyup', e => { if (e.code === 'Space' && space) { space = false; pane.style.cursor = ''; } });
+  loadNetOverlays(); syncChips();
+  onNetOverlay(() => { syncChips(); baseDirty = true; schedule(); });
+  for (const b of document.querySelectorAll('#netChips [data-ov]')) b.onclick = () => setNetOverlay(b.dataset.ov, !netOverlay(b.dataset.ov));
+  $('#netReady').onclick = openIssues;
   $('#nzOut').onclick = () => zoomAt(1 / 1.25);
   $('#nzIn').onclick = () => zoomAt(1.25);
   $('#nzPct').onclick = () => zoomTo(PX_MM);
   $('#nzFit').onclick = () => { fitView(); baseDirty = topDirty = true; schedule(); };
   pane.addEventListener('dblclick', e => {
-    if (e.target.closest('#netZoom')) return;
+    if (e.target.closest(TOOLS)) return;
     if (!netDouble(e, ...local(e)) && !panelAt(...local(e))) { fitView(); baseDirty = topDirty = true; schedule(); }
   });
   refreshNetStage();

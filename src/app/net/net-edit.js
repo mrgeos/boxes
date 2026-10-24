@@ -183,4 +183,4 @@ function netHandles() {
   return { corners: h.corners?.map(at), rot: h.rot && at(h.rot), grips: h.grips?.map(at), center: h.center && at(h.center) };
 }
 
-export { drawNetEdit, dropPanel, netCursor, netDouble, netFacePoint, netKey, netMove, netPress, netHandles, netQuad, netRelease };
+export { mapFor, drawNetEdit, dropPanel, netCursor, netDouble, netFacePoint, netKey, netMove, netPress, netHandles, netQuad, netRelease };
