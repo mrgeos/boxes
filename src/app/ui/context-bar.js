@@ -15,6 +15,7 @@ import { carryDims } from '../carriers/carry.js';
 import { deleteLayer, duplicateLayer, renderLayerProps } from './face-panel.js';
 import { deleteSticker, duplicateSticker, editStickerText, extraAction, renderStickers } from './stickers-panel.js';
 import { deleteIds, duplicateIds, groupIds, picked, renderObjects } from './object-list.js';
+import { objectsIn } from '../core/groups.js';
 import { lidAction, toggleLid, turn } from './context-menus.js';
 import { activeFill, activeRibbon } from '../core/extras.js';
 import { buildRibbons } from '../carriers/ribbon.js';
@@ -24,6 +25,8 @@ import { renderActionBar } from './action-bar.js';
 import { alignItems, distributeItems, rowItems } from '../core/arrange.js';
 import { openMenu } from './menu.js';
 import { bindNum } from './fields.js';
+import { isolated } from '../scene/isolation.js';
+import { isolateAction } from './isolation-plate.js';
 
 /* What it holds follows the selection: an object — open it (a click, or partly with the slider), turn it by 90°,
    its sizes, zoom to it, duplicate, delete; a layer — crop a picture or type into a text, duplicate, delete; a
@@ -51,6 +54,7 @@ function partSlide(o, k) {
 function kindNow() {
   const o = activeObj();
   if (sel.multi.length > 1 && !recording && !textEditing()) return 'multi';
+  if (sel.group && o && !recording && !textEditing()) return 'group';
   if (!o || sel.group || recording || textEditing()) return null;
   if (activeSticker()) return 'sticker';
   if (activeRibbon()) return 'ribbon';
@@ -83,12 +87,15 @@ function alignMenu(btn) {
   ], 'Выровнять');
   if (m) { const h = m.getBoundingClientRect(); m.style.top = Math.max(4, r.top - h.height - 6) + 'px'; }   // above the bar
 }
+/* «Изолировать» (on: «Выйти из изоляции»); icon only on the object's bar, which is full already (a label made it wrap onto a second row) */
+const isoBtn = (label = true) => `<button class="ab ${label ? 'wide' : ''} cb-iso ${isolated() ? 'on' : ''}" id="cbIso" title="${isolated() ? 'Выйти из изоляции' : 'Изолировать: показать только выбранное'} (/)" aria-label="${isolated() ? 'Выйти из изоляции' : 'Изолировать'}">${ICON.isolate}${label ? `<span>${isolated() ? 'Выйти из изоляции' : 'Изолировать'}</span>` : ''}</button>`;
 /* «3 объекта», «5 объектов» */
 const objectsWord = n => { const t = n % 10, h = n % 100; return `${n} ${t === 1 && h !== 11 ? 'объект' : t >= 2 && t <= 4 && (h < 12 || h > 14) ? 'объекта' : 'объектов'}`; };
 function build(kind) {
   const o = activeObj(), L = activeLayer();
   // several objects picked (Shift+click, the Alt frame or the object list): what is done to them all
-  if (kind === 'multi') return `<span class="hint cb-l">${objectsWord(sel.multi.length)}</span>${sep}<button class="ab wide" id="cbGroup" title="Сгруппировать (Ctrl+G)">${FOLDER}<span>Сгруппировать</span></button><button class="ab wide" id="cbAlign" title="Выровнять и расставить" aria-haspopup="menu">${ALIGN}<span>Выровнять</span></button>${sep}`
+  if (kind === 'group') return `<span class="hint cb-l">Группа: ${objectsWord(objectsIn(sel.group).length)}</span>${sep}${isoBtn()}${sep}` + ib('cbDupAll', ICON.copy, 'Дублировать') + ib('cbDelAll', ICON.trash, 'Удалить (Delete)');
+  if (kind === 'multi') return `<span class="hint cb-l">${objectsWord(sel.multi.length)}</span>${sep}<button class="ab wide" id="cbGroup" title="Сгруппировать (Ctrl+G)">${FOLDER}<span>Сгруппировать</span></button><button class="ab wide" id="cbAlign" title="Выровнять и расставить" aria-haspopup="menu">${ALIGN}<span>Выровнять</span></button>${isoBtn()}${sep}`
     + ib('cbDupAll', ICON.copy, 'Дублировать') + ib('cbDelAll', ICON.trash, 'Удалить (Delete)');
   if (kind === 'object') {
     const lid = lidAction(o), open = o.lid > 0;
@@ -96,7 +103,7 @@ function build(kind) {
         <span class="nf fill cb-nf"><span class="nf-bar"></span><input class="num" type="number" inputmode="decimal" id="cbLidR" min="0" max="${lid[2]}" step="1" value="${o.lid || 0}" aria-label="Насколько открыть"></span>${sep}` : '')
       + ib('cbRotL', ICON.rotL, 'Повернуть на 90° влево') + ib('cbRotR', ICON.rotR, 'Повернуть на 90° вправо') + sep
       + (dimKeys(o).length ? `<span class="cb-dims">${dimKeys(o).map(([k, t]) => `<label title="${t}, мм"><span>${t}</span><input class="num" type="number" min="5" max="2000" step="1" data-dim="${k}" value="${fmt(o.dims[k])}"></label>`).join('')}<span class="hint">мм</span></span>${sep}` : '')
-      + ib('cbFocus', ICON.focus, 'Приблизить (F)') + ib('cbDup', ICON.copy, 'Дублировать (Ctrl+D)') + ib('cbDel', ICON.trash, 'Удалить (Delete)');
+      + ib('cbFocus', ICON.focus, 'Приблизить (F)') + isoBtn(false) + ib('cbDup', ICON.copy, 'Дублировать (Ctrl+D)') + ib('cbDel', ICON.trash, 'Удалить (Delete)');
   }
   if (kind === 'part' && sel.part === 'tissue') return `<span class="hint cb-l">Тишью</span>${[['flat', '1 лист'], ['cross', '2 листа']].map(([v, t]) => `<button class="ab wide ${o.tissue.layout === v ? 'on' : ''}" data-lay="${v}"><span>${t}</span></button>`).join('')}${sep}` + ib('cbDel', ICON.trash, 'Удалить (Delete)');
   if (kind === 'part' && sel.part === 'insert') return `<span class="hint cb-l">Ложемент</span>${[['board', 'Картон'], ['foam', 'Пена']].map(([v, t]) => `<button class="ab wide ${o.insert.mat === v ? 'on' : ''}" data-imat="${v}"><span>${t}</span></button>`).join('')}${sep}` + ib('cbDel', ICON.trash, 'Удалить (Delete)');
@@ -121,9 +128,15 @@ function build(kind) {
 function bind(kind) {
   const o = activeObj(), on = (id, ev, fn) => { const el = $('#' + id); if (el) el.addEventListener(ev, fn); };
   bindNum(bar());
+  if (kind === 'group') {
+    on('cbIso', 'click', () => isolateAction([sel.group]));
+    on('cbDupAll', 'click', () => duplicateIds([sel.group])); on('cbDelAll', 'click', () => deleteIds([sel.group]));
+    return;
+  }
   if (kind === 'multi') {
     on('cbGroup', 'click', () => groupIds(picked()));
     on('cbAlign', 'click', e => alignMenu(e.currentTarget));
+    on('cbIso', 'click', () => isolateAction(picked()));
     on('cbDupAll', 'click', () => duplicateIds(picked()));
     on('cbDelAll', 'click', () => deleteIds(picked()));
     return;
@@ -138,6 +151,7 @@ function bind(kind) {
       o.dims[inp.dataset.dim] = v; modelInput('dims.' + inp.dataset.dim); renderModel(); commit();
     }));
     on('cbFocus', 'click', () => setView('focus'));
+    on('cbIso', 'click', () => isolateAction([o.id]));
     on('cbDup', 'click', () => duplicateIds([o.id])); on('cbDel', 'click', () => deleteIds([o.id]));
   } else if (kind === 'part') {
     const k = sel.part;
@@ -171,7 +185,7 @@ function bind(kind) {
 function syncCtxBar(moved = true) {
   const el = bar(); if (!el) return;
   const kind = busy ? null : kindNow(), o = activeObj();
-  const k = kind && [kind, sel.multi.join(','), o?.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, o.tissue?.layout, o.insert?.mat, o.fill?.count, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
+  const k = kind && [kind, isolated(), sel.group, sel.multi.join(','), o?.id, sel.layer, selectedLayers().length, sel.sticker, sel.ribbon, activeRibbon()?.bow, o.tissue?.layout, o.insert?.mat, o.fill?.count, sel.part, editMode(), o.lid > 0, o.type, o.lidType, JSON.stringify(o.dims)].join('|');
   if (!kind) { if (!el.hidden) { el.hidden = true; corners(); } key = ''; return; }
   // nothing new and the view still: it stays where it is
   if (k === key && !moved) return;

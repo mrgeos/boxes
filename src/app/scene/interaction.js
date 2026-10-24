@@ -27,6 +27,9 @@ import { tool } from '../ui/action-bar.js';
 import { placeLibImage } from '../ui/library-panel.js';
 import { ed, edPoint, edState, hitLayer } from '../ui/face-editor.js';
 import { importModelFiles } from '../ui/wiring.js';
+import { exitIsolation, isShown, isolated } from './isolation.js';
+import { isolateAction } from '../ui/isolation-plate.js';
+import { show3D } from '../ui/view-mode.js';
 
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function pick(clientX, clientY, only = null) {
@@ -41,10 +44,12 @@ function pick(clientX, clientY, only = null) {
   const ribbonOff = (o, id) => { const r = o.ribbons?.find(q => q.id === id); return only || !r || r.hidden || r.locked || o.lid > .5; };
   // what is not shown (a part hidden, tissue under a closed lid) is passed through as well
   const shown = m => { for (let n = m; n; n = n.parent) if (!n.visible) return false; return true; };
-  const h = hits.find(x => { const o = state.objects.find(q => q.id === x.object.userData.objId), f = faceOf(x); return !o || (shown(x.object) && !o.hidden && !o.locked && !(isPart(f) && o[f]?.locked) && !(x.object.userData.ribbon && ribbonOff(o, x.object.userData.ribbon))); }); if (!h) return null;
+  const h = hits.find(x => { const o = state.objects.find(q => q.id === x.object.userData.objId), f = faceOf(x); return !o || (shown(x.object) && isShown(o) && !o.locked && !(isPart(f) && o[f]?.locked) && !(x.object.userData.ribbon && ribbonOff(o, x.object.userData.ribbon))); }); if (!h) return null;
   const ud = h.object.userData, face = faceOf(h);
   return { objId: ud.objId, face, ribbon: ud.ribbon || null, wall: !!ud.wall, uv: h.uv, mesh: h.object, mi: h.face.materialIndex };
 }
+/* a popup that closes on Esc by itself: the help, the projects, a colour (the same key must not also leave the isolation) */
+const popupOpen = () => !!document.querySelector('#helpPop:not([hidden]),#projDlg:not([hidden]),.cpop');
 let down = null, drag3 = null, dragSt = null, xform = null, hoverT = 0;
 /* a finger or pen press that missed the handles and the frame in crop or mask mode: only a short tap that stays put ends the mode */
 let editTap = null;
@@ -489,6 +494,8 @@ function initInteraction() {
       const key = e.key.toLowerCase();
       if (key === 'f' || key === 'а') { e.preventDefault(); return activeObj() ? focusSelected({ frame: true }) : setView('fit'); }
       if (key === 'h' || key === 'р' || e.key === 'Home') { e.preventDefault(); return setView('fit'); }
+      // «/» isolates the picked items, once more leaves (the RU layout types it with Shift, so only the physical key needs no Shift)
+      if (e.key === '/' || (e.code === 'Slash' && !e.shiftKey)) { e.preventDefault(); return isolateAction(); }
     }
     // the face's layers, as in Figma: Ctrl+A all, Ctrl+G group, Ctrl+Shift+G ungroup, Alt+A/D/W/S/H/V align,
     // Alt+Shift+H/V distribute, Ctrl+] / Ctrl+[ up and down (with Shift: to the top or the bottom)
@@ -530,12 +537,14 @@ function initInteraction() {
         else if (e.key === 'Escape') selectObjectItself();
         return;
       }
+      // Esc leaves the isolation when nothing else takes it (a crop, a layer, a sticker, a part, a popup)
+      if (e.key === 'Escape' && isolated() && !popupOpen()) { e.preventDefault(); exitIsolation(); return; }
       if (e.key === 'Delete' || e.key === 'Backspace') { if (picked().length) { e.preventDefault(); deleteIds(picked()); } }
       else if (mod && e.key.toLowerCase() === 'd' && picked().length) { e.preventDefault(); duplicateIds(picked()); }
       return;
     }
     // Enter: type into the picked text, in place
-    if (e.key === 'Enter' && !mod && L.type === 'text' && selectedIds().length === 1) { e.preventDefault(); return startTextEdit(L, '3d'); }
+    if (e.key === 'Enter' && !mod && L.type === 'text' && selectedIds().length === 1) { e.preventDefault(); return startTextEdit(L, show3D() ? '3d' : 'net'); }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteLayer(L.id); }
     else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateLayer(L.id); }
     else if (e.key === 'Escape') selectLayer(null);

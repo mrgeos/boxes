@@ -1,13 +1,15 @@
 // Как выбранный объект виден на сцене: контур по силуэту и подложка на полу; ярлык с названием над объектом под курсором
 import * as THREE from 'three';
-import { $, S } from '../core/util.js';
+import { $, OVERLAY_LAYER, S } from '../core/util.js';
 import { activeLayer, sel, state } from '../core/state.js';
 import { objectsIn } from '../core/groups.js';
 import { activeSticker } from '../stickers/placement.js';
 import { RT, camera, cvs, renderer, scene } from './renderer.js';
 import { invalidate, recording } from './camera.js';
 import { pick } from './interaction.js';
+import { isShown } from './isolation.js';
 import { tool } from '../ui/action-bar.js';
+import { notePickHover } from './face-hi.js';
 
 /* The selected object gets a two-tone outline round its silhouette and a faint plate on the floor; the object under
    the pointer gets a pale outline and a label with its name and size. The outline is drawn after the scene: the
@@ -17,7 +19,7 @@ let hoverId = null, key = '';
 const ACC = new THREE.Color('#0a7aa1');
 
 /* the objects picked: an object, or every object of a group picked in the list */
-const pickedIds = () => [...new Set((sel.multi.length ? sel.multi : sel.obj ? [sel.obj] : []).flatMap(objectsIn))].filter(id => { const o = state.objects.find(q => q.id === id); return o && !o.hidden && RT.has(id); });
+const pickedIds = () => [...new Set((sel.multi.length ? sel.multi : sel.obj ? [sel.obj] : []).flatMap(objectsIn))].filter(id => { const o = state.objects.find(q => q.id === id); return o && isShown(o) && RT.has(id); });
 
 /* ---------- the mask and the outline pass ---------- */
 const MASK_LAYER = 7;
@@ -85,8 +87,8 @@ function drawOutline() {
 const holder = new THREE.Group(); holder.matrixAutoUpdate = false; holder.visible = false;
 const plateFill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: ACC, transparent: true, opacity: .07, depthWrite: false }));
 const plateLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: ACC, transparent: true, opacity: .45 }));
-plateFill.renderOrder = -1;
-holder.add(plateFill, plateLine);
+plateFill.renderOrder = -1; plateFill.layers.enable(OVERLAY_LAYER); plateLine.layers.enable(OVERLAY_LAYER);
+holder.add(plateFill, plateLine); holder.layers.enable(OVERLAY_LAYER);
 /* the object's box in its own frame (three.js units) */
 function localBox(rt) {
   rt.group.updateMatrixWorld(true);
@@ -128,7 +130,7 @@ function drawSelLook() {
   if (recording) { if (el) el.hidden = true; return; }
   drawOutline();
   if (!el) return;
-  const o = hoverId && state.objects.find(q => q.id === hoverId), rt = o && !o.hidden && RT.get(o.id);
+  const o = hoverId && state.objects.find(q => q.id === hoverId), rt = o && isShown(o) && RT.get(o.id);
   if (!rt) { el.hidden = true; return; }
   // over the top of the object's box on screen
   const b = new THREE.Box3().setFromObject(rt.group), r = cvs.getBoundingClientRect(), st = el.parentElement.getBoundingClientRect(), v = new THREE.Vector3();
@@ -154,10 +156,12 @@ function initSelLook() {
   cvs.addEventListener('pointermove', e => {
     if (e.pointerType === 'touch' || e.buttons) return;
     lx = e.clientX; ly = e.clientY; if (pend) return; pend = true;
-    requestAnimationFrame(() => { pend = false; setHover(pick(lx, ly)?.objId || null); });
+    requestAnimationFrame(() => { pend = false; const h = pick(lx, ly); setHover(h?.objId || null); notePickHover(h); });
   });
-  cvs.addEventListener('pointerdown', () => setHover(null));
-  cvs.addEventListener('pointerleave', () => setHover(null));
+  cvs.addEventListener('pointerdown', () => { setHover(null); notePickHover(null); });
+  cvs.addEventListener('pointerleave', () => { setHover(null); notePickHover(null); });
 }
 
-export { drawSelLook, hideSelLook, initSelLook, syncSelLook };
+const selLookShown = () => holder.visible;
+
+export { drawSelLook, hideSelLook, initSelLook, selLookShown, syncSelLook };

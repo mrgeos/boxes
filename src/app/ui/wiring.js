@@ -29,14 +29,14 @@ function renderAll() { renderLibrary(); renderObjects(); renderModel(); renderFa
 function addObject(presetId, at = null) {
   const o = newObject(presetId);
   if (at) o.pos = { x: Math.round(at.x), z: Math.round(at.z) };
-  else { const b = sceneBounds(); o.pos.x = state.objects.length ? Math.round(b.max.x / S + o.dims.w / 2 + 40) : 0; }
+  else { const b = sceneBounds(false, true); o.pos.x = state.objects.length ? Math.round(b.max.x / S + o.dims.w / 2 + 40) : 0; }
   state.objects.push(o); buildObject(o); select(o.id, faceKeys(o)[0], null); renderObjects(); commit(); setTimeout(() => setView('fit'), 60);
 }
 /* a 3D model as an object of its own, beside the scene (or at a point of the floor, mm) */
 function addModelObject(ref, opts = {}, at = null) {
   const o = newModelObject(ref, opts);
   if (at) o.pos = { x: Math.round(at.x), z: Math.round(at.z) };
-  else { const b = sceneBounds(); o.pos.x = state.objects.length ? Math.round(b.max.x / S + o.size / 2 + 40) : 0; }
+  else { const b = sceneBounds(false, true); o.pos.x = state.objects.length ? Math.round(b.max.x / S + o.size / 2 + 40) : 0; }
   state.objects.push(o); buildObject(o); select(o.id, undefined, null); renderObjects(); commit(); setTimeout(() => setView('fit'), 400);
   return o;
 }

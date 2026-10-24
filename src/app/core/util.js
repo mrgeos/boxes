@@ -67,4 +67,7 @@ const TR = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 
 const slug = s => [...(s || 'box').toLowerCase()].map(c => TR[c] ?? c).join('').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'box';
 function luminance(hex) { const c = new THREE.Color(hex); return .2126 * c.r + .7152 * c.g + .0722 * c.b; }
 
-export { $, $$, DEG, S, V2, arcPts, clamp, dedupe, esc, fmt, getPath, loadImage, luminance, pixelsOf, r1, readURL, rrPoly, sampleInto, setPath, slug, smooth, splitBand, toast, uid };
+/* the layer the marks over the scene (rings, selection frame, floor plate) are also on: the studio render draws them last, apart from the scene */
+const OVERLAY_LAYER = 5;
+
+export { OVERLAY_LAYER, $, $$, DEG, S, V2, arcPts, clamp, dedupe, esc, fmt, getPath, loadImage, luminance, pixelsOf, r1, readURL, rrPoly, sampleInto, setPath, slug, smooth, splitBand, toast, uid };

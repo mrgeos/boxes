@@ -21,6 +21,8 @@ import { ed, edPoint, edState, hitLayer } from './face-editor.js';
 import { addObject, copyFaceDesign } from './wiring.js';
 import { deleteIds, duplicateIds, groupIds, leaveGroup, renameRow, renderObjects, ungroupIds } from './object-list.js';
 import { openMenu } from './menu.js';
+import { isolated } from '../scene/isolation.js';
+import { isolateAction } from './isolation-plate.js';
 
 const MOD = /Mac|iP(hone|ad)/.test(navigator.platform) ? '⌘' : 'Ctrl+';
 const TYPES = { box: 'Коробки', dome: 'Лотки с крышкой-призмой', tray: 'Лотки и контейнеры', torte: 'Тортницы', board: 'Подложки под торт', cup: 'Бумажные стаканы', bag: 'Пакеты', tube: 'Тубусы и банки' };
@@ -78,11 +80,14 @@ function stickerItems(o, st) {
     { label: 'Заменить картинку из библиотеки', disabled: !library.length, sub: libraryItems(on(() => { renderStickers(); })) },
   ];
 }
+/* «Изолировать» / «Выйти из изоляции» for these items */
+const isolateItem = ids => ({ label: isolated() ? 'Выйти из изоляции' : 'Изолировать', key: '/', run: () => isolateAction(ids) });
 function objectItems(o, face = null, layer = null) {
   const lid = lidAction(o), from = face && o.faces[face] ? face : sel.face, others = outerKeys(o).filter(k => k !== from), g = parentOf(o.id);
   return [
     face && (face !== sel.face || sel.obj !== o.id) && { label: `Выбрать грань «${faceLabel(o, face)}»`, run: () => select(o.id, face, null, { flash: true }) },
     { label: 'Приблизить', key: 'F', run: () => { select(o.id); focusSelected({ frame: true }); } },
+    isolateItem([o.id]),
     'sep',
     layer && { label: `Слой: ${layerTitle(layer)}`, sub: layerItems(o, face, layer) },
     layer && 'sep',
@@ -106,6 +111,7 @@ function groupMenu(g) {
   return [
     { label: 'Разгруппировать', key: MOD + 'Shift+G', run: () => ungroupIds([g.id]) },
     { label: 'Выделить все объекты группы', run: () => { const ids = objectsIn(g.id); select(ids[0]); sel.multi = ids; renderObjects(); } },
+    isolateItem([g.id]),
     { label: 'Направление ряда', sub: Object.entries(dirs).map(([d, label]) => ({ label, checked: g.dir === d, run: () => { g.dir = d; layoutAll(); if (sel.group === g.id) renderModel(); commit(); } })) },
     'sep',
     { label: 'Дублировать', run: () => duplicateIds([g.id]) },
@@ -116,6 +122,7 @@ function groupMenu(g) {
 function multiItems(ids) {
   return [
     { label: 'Сгруппировать', key: MOD + 'G', run: () => groupIds(ids) },
+    isolateItem(ids),
     { label: 'Дублировать', run: () => duplicateIds(ids) },
     { label: 'Удалить', run: () => deleteIds(ids) },
     'sep',

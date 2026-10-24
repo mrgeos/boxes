@@ -12,6 +12,7 @@ import { renderStickers } from '../ui/stickers-panel.js';
 import { refreshTabs } from '../ui/tabs.js';
 import { extraById, isPart } from './extras.js';
 import { isStickerKey } from '../stickers/design.js';
+import { isShown } from '../scene/isolation.js';
 
 function select(objId, face = undefined, layerId = null, { flash = false, focus = true } = {}) {
   const changedObj = sel.obj !== objId, leftGroup = !!sel.group, part0 = sel.part;
@@ -82,7 +83,7 @@ const setMultiMode = on => { multiMode = on; };
 /* the next (d = 1) or previous (d = −1) item at the top of the object list — an object, or a whole group as one —
    picked and framed from the same side; round the end to the start; items with nothing shown are passed over */
 function stepItem(d) {
-  const shown = id => objectsIn(id).some(oid => !state.objects.find(o => o.id === oid)?.hidden);
+  const shown = id => objectsIn(id).some(oid => { const o = state.objects.find(q => q.id === oid); return o && isShown(o); });
   const items = state.tree.filter(shown); if (!items.length) return null;
   const cur = sel.group || sel.obj, top = cur ? topOf(cur)?.id || cur : null, at = items.indexOf(top);
   const next = items[at < 0 ? (d > 0 ? 0 : items.length - 1) : (at + d + items.length) % items.length];

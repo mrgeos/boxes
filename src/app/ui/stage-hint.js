@@ -16,7 +16,13 @@ function hintNow() {
   return 'Клик по грани — её дизайн справа. Двойной клик или F — приблизить';
 }
 /* called after each drawn frame: the text follows the selection */
+/* the red note about a layer off its face sits under the hint (which may wrap to several lines on a narrow stage), not over it */
+function stackNotes() {
+  const note = $('#offHint'), hint = $('#stageHint'); if (!note || note.hidden) return;
+  note.style.top = hint.offsetParent ? hint.offsetTop + hint.offsetHeight + 8 + 'px' : '';
+}
 function syncStageHint() {
+  stackNotes();
   if (off) return;
   const t = hintNow(); if (t === shown) return;
   shown = t; $('#hintText').textContent = t;

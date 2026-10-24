@@ -71,6 +71,12 @@ const models = await build({
   bundle: true, format: 'iife', minify: true, write: false, target: 'es2022', legalComments: 'inline',
 });
 const modelsJs = '// Box Studio 3D: загрузчик 3D-моделей (собран из src/models командой npm run build; three.js — из редактора; meshoptimizer — MIT, © Arseny Kapoulkine)\n' + models.outputFiles[0].text;
+// «Рендер» (studio render: GTAO, bloom, accumulation) is a file of its own as well, loaded when the mode is first turned on
+const renderPack = await build({
+  entryPoints: [new URL('src/render/main.js', import.meta.url).pathname], plugins: [shareThree],
+  bundle: true, format: 'iife', minify: true, write: false, target: 'es2022', legalComments: 'inline',
+});
+const renderJs = '// Box Studio 3D: студийный рендер (собран из src/render командой npm run build; three.js — из редактора)\n' + renderPack.outputFiles[0].text;
 const packed = gzipSync(Buffer.from(js, 'utf8'), { level: 9 }).toString('base64');
 
 // the loader: unpack and run the editor as an inline module (the same rules as a plain inline script)
@@ -96,10 +102,13 @@ if (process.argv.includes('--check')) {
   const [a, b] = [unpack(read('box-studio-3d.html')), unpack(html)];
   if (a[0] !== b[0] || a[1] !== b[1]) { console.error('box-studio-3d.html не совпадает со сборкой из src/: выполните npm run build и закоммитьте его'); process.exit(1); }
   if (read('box-studio-models.js') !== modelsJs) { console.error('box-studio-models.js не совпадает со сборкой из src/models: выполните npm run build и закоммитьте его'); process.exit(1); }
+  if (read('box-studio-render.js') !== renderJs) { console.error('box-studio-render.js не совпадает со сборкой из src/render: выполните npm run build и закоммитьте его'); process.exit(1); }
   console.log('box-studio-3d.html совпадает со сборкой из src/');
   process.exit(0);
 }
 writeFileSync(new URL('box-studio-3d.html', import.meta.url), html);
 writeFileSync(new URL('box-studio-models.js', import.meta.url), modelsJs);
+writeFileSync(new URL('box-studio-render.js', import.meta.url), renderJs);
+console.log(`box-studio-render.js: ${(Buffer.byteLength(renderJs) / 1024).toFixed(0)} КБ (по требованию)`);
 console.log(`box-studio-models.js: ${(Buffer.byteLength(modelsJs) / 1024).toFixed(0)} КБ (по требованию)`);
 console.log(`box-studio-3d.html: ${(Buffer.byteLength(html) / 1024).toFixed(0)} КБ (скрипт без сжатия ${(Buffer.byteLength(js) / 1024).toFixed(0)} КБ, ${Object.keys(out.metafile.inputs).filter(f => f.startsWith('src/app/')).length} модулей)`);

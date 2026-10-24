@@ -14,7 +14,7 @@ import { invalidate } from './camera.js';
    offline); they light matte board about as the old room did, so only the reflections change. A HDR picture of a
    place (.hdr, an equirectangular panorama) can be loaded instead; it is kept with the project as a picture. The
    reflections can be turned round the model (envRot, degrees) or turn slowly by themselves (envSpin). */
-const ENVS = { softbox: 'Студия с софтбоксами', bright: 'Светлая студия', contrast: 'Контраст', warm: 'Тёплый интерьер', room: 'Комната (как раньше)', hdr: 'Свой HDR' };
+const ENVS = { softbox: 'Студия с софтбоксами', cyclo: 'Циклорама (софтбоксы)', bright: 'Светлая студия', contrast: 'Контраст', warm: 'Тёплый интерьер', room: 'Комната (как раньше)', hdr: 'Свой HDR' };
 /* a softbox's glow: bright in the middle, falling off softly to its edges */
 let softTex = null;
 function soft() {
@@ -45,7 +45,30 @@ function studio(room, boxes, gain = 1) {
   }
   return s;
 }
+/* a photo studio's cyclorama: a bright dome (darker overhead), feathered softboxes, a warm kicker behind and black flags
+   that give metal contrast at any angle. Made for the «Рендер» mode, a studio like the others in the plain view */
+let strip = null;
+function stripTex() {
+  if (strip) return strip;
+  const w = 64, h = 256, d = new Uint8Array(w * h * 4), sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const u = x / (w - 1), v = y / (h - 1), k = Math.round(255 * sm(0, .22, Math.min(u, 1 - u)) * sm(0, .1, Math.min(v, 1 - v))); d.set([k, k, k, 255], (y * w + x) * 4); }
+  strip = new THREE.DataTexture(d, w, h); strip.needsUpdate = true; strip.magFilter = strip.minFilter = THREE.LinearFilter;
+  return strip;
+}
+function cyclorama() {
+  const s = new THREE.Scene(), tex = stripTex();
+  const dg = new THREE.SphereGeometry(30, 48, 24), pos = dg.attributes.position, col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) { const y = pos.getY(i) / 30, v = y > 0 ? .85 - .55 * Math.pow(y, .7) : .85 - .05 * y; col.set([v, v, v * 1.02], i * 3); }
+  dg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  s.add(new THREE.Mesh(dg, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, toneMapped: false })));
+  const box = (w, h, p, k, tint = 0xffffff) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(tint).multiplyScalar(k), side: THREE.DoubleSide, toneMapped: false })); m.position.set(...p); m.lookAt(0, 0, 0); s.add(m); };
+  box(4, 24, [-14, 2, 10], 10); box(3, 24, [15, 2, -9], 8); box(14, 14, [0, 18, 0], 4); box(1.6, 12, [-8, 5, -16], 14, 0xfff4e6);
+  const flag = (w, h, p) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: 0x101010, alphaMap: tex, transparent: true, side: THREE.DoubleSide, toneMapped: false })); m.position.set(...p); m.lookAt(0, 0, 0); s.add(m); };
+  flag(5, 28, [-9, 0, 15.6]); flag(5, 28, [-17.7, 0, 3.1]); flag(5, 28, [10.3, 0, -14.7]); flag(5, 28, [17.7, 0, -3.1]); flag(8, 28, [3, 0, -21]);
+  return s;
+}
 const SCENES = {
+  cyclo: cyclorama,
   // a big softbox right above, a tall strip to the left, a square one to the right, a low fill in front, a rim behind
   softbox: () => studio(['#b3afa8', '#5a5651', '#1c1a18'], [
     [0, 90, 26, 20, '#ffffff', 4.2], [-75, 15, 6, 18, '#ffffff', 6], [70, 20, 12, 12, '#fff3e6', 3.5], [0, 10, 18, 6, '#ffffff', 2.2], [180, 32, 24, 7, '#ffffff', 3]], 1.6),
@@ -65,7 +88,7 @@ let hdrKey = '', hdrTex = null;
 /* the texture of environment `name` (a studio is made once) */
 function envTexture(name) {
   if (name === 'hdr') return hdrTex;
-  if (!made.has(name)) { const s = SCENES[name] || SCENES.softbox; made.set(name, pmrem.fromScene(s(), .04).texture); }
+  if (!made.has(name)) { const s = SCENES[name] || SCENES.softbox; made.set(name, pmrem.fromScene(s(), name === 'cyclo' ? .02 : .04).texture); }
   return made.get(name);
 }
 /* reads a HDR picture (an asset of the project, a data: URL) into a prefiltered texture; null if it is not one */

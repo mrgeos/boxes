@@ -14,6 +14,7 @@ import { refreshTabs } from './tabs.js';
 import { select, selectExtra, selectGroup, pickItems } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { setView } from '../scene/camera.js';
+import { inIsolation, isShown, joinIsolation, setIsolation } from '../scene/isolation.js';
 
 const GROUP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l2 2h9A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>';
 const objById = id => state.objects.find(o => o.id === id);
@@ -35,14 +36,14 @@ function renderObjects() {
   const on = new Set(sel.multi.length ? sel.multi : sel.obj ? [sel.obj] : []);
   $('#objList').innerHTML = visibleRows().map(({ id, depth }) => {
     const g = groupById(id), os = objectsIn(id).map(objById), hid = os.length && os.every(o => o.hidden), lck = os.length && os.every(o => o.locked);
-    const cls = `obj ${g ? 'grp' : ''} ${on.has(id) ? 'on' : ''} ${hid ? 'hidden' : ''} ${lck ? 'locked' : ''}`;
+    const cls = `obj ${g ? 'grp' : ''} ${on.has(id) ? 'on' : ''} ${hid ? 'hidden' : ''} ${!hid && !inIsolation(id) ? 'iso-out' : ''} ${lck ? 'locked' : ''}`;
     const acts = `<span class="acts">${rowActs(hid, lck)}</span>`;
     if (g) return `<div class="${cls}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true">
       <button class="caret" data-open aria-label="${g.open ? 'Свернуть' : 'Развернуть'}" aria-expanded="${g.open}">${g.open ? '▾' : '▸'}</button><span class="th">${GROUP_ICON}</span><span class="nm">${esc(g.name)}</span><span class="dm">${count(os.length)}</span>${acts}</div>`;
     const o = own(id), url = thumbOf(id), xs = extrasOf(o), open = !foldedObj.has(id), xOn = id === sel.obj && (sel.sticker || sel.ribbon || sel.part);
     const th = url ? `<img class="th" src="${url}" alt="">` : `<span class="th">${ICON[o.type] || ICON.box}</span>`;
     // the object's extras (stickers, a sleeve) under it, one level in; the object row folds them
-    const kids = open ? xs.map(e => `<div class="obj xtra ${xOn === e.id ? 'on' : ''} ${extraHidden(e) ? 'hidden' : ''} ${e.T.locked ? 'locked' : ''}" data-obj="${id}" data-x="${e.id}" style="--d:${depth + 1}" tabindex="0" role="button">
+    const kids = open ? xs.map(e => `<div class="obj xtra ${xOn === e.id ? 'on' : ''} ${extraHidden(e) ? 'hidden' : ''} ${!inIsolation(id) ? 'iso-out' : ''} ${e.T.locked ? 'locked' : ''}" data-obj="${id}" data-x="${e.id}" style="--d:${depth + 1}" tabindex="0" role="button">
       <span class="caret"></span><span class="th">${extraIcon(e)}</span><span class="nm">${esc(extraName(o, e))}</span><span class="acts">${extraActs(e)}</span></div>`).join('') : '';
     return `<div class="${xOn ? cls.replace(' on ', ' kid-on ') : cls}" data-id="${id}" style="--d:${depth}" tabindex="0" role="button" draggable="true" title="${esc(o.name)} · ${dimsText(o)} мм">
       ${xs.length ? `<button class="caret" data-fold aria-label="${open ? 'Свернуть допы' : 'Развернуть допы'}" aria-expanded="${open}">${open ? '▾' : '▸'}</button>` : '<span class="caret"></span>'}${th}<span class="nm">${esc(o.name)}</span><span class="mods">${objMods(o).map(m => `<button class="mod" data-mod="${m.k}" title="${esc(m.t)}" aria-label="${esc(m.t)}">${ICON[m.i]}</button>`).join('')}</span><span class="dm mono">${dimsText(o)}</span>${acts}</div>${kids}`;
@@ -54,6 +55,7 @@ function renderObjects() {
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (a) return extraAction(o, x, a);
       if (e.detail === 2) return renameExtraTree(o.id, x);
+      if (!inIsolation(o.id)) setIsolation([o.id]);   // a dimmed row: the isolation moves to it
       selectExtra(o.id, x);
     };
     el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } };
@@ -70,12 +72,13 @@ function renderObjects() {
       // comes; the second click's count tells it
       if (e.detail === 2 && !e.shiftKey && !e.ctrlKey && !e.metaKey) { renameRow(id); return; }
       // several picked: the same action as on the scene (the panel shows what they share, the camera turns round them)
-      if (e.ctrlKey || e.metaKey) { anchor = id; pickItems(on.has(id) ? [...on].filter(x => x !== id) : [...on, id]); return; }
+      if (e.ctrlKey || e.metaKey) { anchor = id; joinIsolation([id]); pickItems(on.has(id) ? [...on].filter(x => x !== id) : [...on, id]); return; }
       if (e.shiftKey && anchor) {
         const ids = visibleRows().map(r => r.id), a = ids.indexOf(anchor), b = ids.indexOf(id);
-        if (a >= 0 && b >= 0) { pickItems(ids.slice(Math.min(a, b), Math.max(a, b) + 1)); return; }
+        if (a >= 0 && b >= 0) { const range = ids.slice(Math.min(a, b), Math.max(a, b) + 1); joinIsolation(range); pickItems(range); return; }
       }
       anchor = id;
+      if (!inIsolation(id)) setIsolation([id]);   // a dimmed row: the isolation moves to it, not out of it
       isGroup(id) ? selectGroup(id) : select(id, undefined, null);
     };
     el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } };
@@ -144,7 +147,7 @@ function deleteIds(ids) {
   if (!ids.length) return;
   const names = deleteItems(ids);
   sel.group = null; sel.multi = [];   // sel.obj still names the deleted one, so select() sees the change
-  const next = state.objects[0];
+  const next = state.objects.find(isShown) || state.objects[0];
   select(next?.id ?? null, next ? faceKeys(next)[0] : undefined, null); renderObjects(); commit();
   toast(`Удалено: ${names.join(', ')}. Вернуть — Ctrl+Z`);
 }

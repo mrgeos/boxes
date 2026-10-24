@@ -114,10 +114,10 @@ function windowPath(c, fw, X, Y, sx, sy) {
   else c.roundRect(X + fw.x * sx, Y + fw.y * sy, fw.w * sx, fw.h * sy, fw.rr.map(v => v * fw.r * sx));
 }
 /* the outline of a dieline window (rounded rectangle or polygons) as a canvas path, at scale k and offset pad */
-function netWindowPath(c, q, pad, k) {
+function netWindowPath(c, q, pad, k, padY = pad) {
   c.beginPath();
-  if (q.polys) for (const pl of q.polys) { pl.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](pad + v.x * k, pad + v.y * k)); c.closePath(); }
-  else c.roundRect(pad + q.x * k, pad + q.y * k, q.w * k, q.h * k, q.radii.map(v => v * k));
+  if (q.polys) for (const pl of q.polys) { pl.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](pad + v.x * k, padY + v.y * k)); c.closePath(); }
+  else c.roundRect(pad + q.x * k, padY + q.y * k, q.w * k, q.h * k, q.radii.map(v => v * k));
 }
 /* window cut-outs in dieline mm; pieces that meet across a fold become one opening */
 function netWindows(o, n = netLayout(o)) {
@@ -175,16 +175,16 @@ function netWindows(o, n = netLayout(o)) {
   res.leafCut = leafCut;
   return res;
 }
-function cutNetWindow(c, o, pad, k) {
+function cutNetWindow(c, o, pad, k, padY = pad) {
   const ws = netWindows(o); if (!ws.length) return;
   c.save(); c.globalCompositeOperation = 'destination-out';
   if (ws.leafCut) {
     // the leaves of the handle stay: only the openings round them are cut away
     c.beginPath(); c.rect(-1e4, -1e4, 2e4, 2e4);
-    for (const q of ws.leafCut.keep) { q.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.closePath(); }
+    for (const q of ws.leafCut.keep) { q.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, padY + Y * k)); c.closePath(); }
     c.clip('evenodd');
   }
-  for (const q of ws) { netWindowPath(c, q, pad, k); c.fill(); }
+  for (const q of ws) { netWindowPath(c, q, pad, k, padY); c.fill(); }
   c.restore();
 }
 function buildBox(o, rt) {

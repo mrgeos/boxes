@@ -19,6 +19,7 @@ import { layoutAll, normalizeTree } from './groups.js';
 import { renderFonts, renderLayerProps } from '../ui/face-panel.js';
 import { renderAll } from '../ui/wiring.js';
 import { faceEntries } from '../stickers/design.js';
+import { exitIsolation } from '../scene/isolation.js';
 
 const hist = { stack: [], i: -1 };
 const snapshot = () => JSON.stringify({ name: state.name, brand: state.brand, objects: state.objects, scene: state.scene, fonts: state.fonts, groups: state.groups, tree: state.tree });
@@ -99,6 +100,7 @@ function loadProjectNow(d, { resetHistory = true, name = null } = {}) {
   if (!d || !Array.isArray(d.objects)) throw new Error('bad project');
   state.name = String(d.name || name || 'Без названия').slice(0, 120); paintProjectName();
   state.brand = d.brand || emptyKit(); ui.brand = true;
+  exitIsolation({ camera: false });   // the new project is framed on its own
   for (const id of [...RT.keys()]) disposeObject(id);
   Object.assign(assets, d.assets || {});
   for (const [id, v] of Object.entries(d.vectors || {})) if (assets[v]) vecOf[id] = v;

@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { keyLight, renderer, scene } from './renderer.js';
 import { warmShaders } from './warmup.js';
 import { fitShadowBias, invalidate, resize } from './camera.js';
+import { pixelCap } from './render-mode.js';
 
 /* Like a game's quality presets. A level sets how sharp the picture is at rest (pixels per CSS pixel), how far that
    drops while the camera moves (dynamic resolution: a moving picture looks as sharp with far fewer pixels, and the
@@ -35,7 +36,7 @@ function guessLevel() {
 }
 function apply() {
   const L = LEVELS[level];
-  basePR = Math.min(devicePixelRatio || 1, L.pr);
+  basePR = Math.min(devicePixelRatio || 1, L.pr, pixelCap());   // «Рендер» on a phone: no more than 1.5
   const size = Math.min(L.shadow, renderer.capabilities.maxTextureSize);
   if (keyLight.shadow.mapSize.x !== size) { keyLight.shadow.mapSize.set(size, size); keyLight.shadow.map?.dispose(); keyLight.shadow.map = null; fitShadowBias(); }
   // the filter is part of every lit material's program: they are built again (in the background, scene/warmup.js)
@@ -80,4 +81,7 @@ function initQuality(cb) {
   setQuality(v === 'auto' || LEVELS[v] ? v : 'auto');
 }
 
-export { frameScale, initQuality, lowerQuality, noteFrame, qualityState, setQuality };
+/* the pixel ratio again (the «Рендер» mode was turned on or off) */
+const reapplyQuality = () => apply();
+
+export { reapplyQuality, frameScale, initQuality, lowerQuality, noteFrame, qualityState, setQuality };
