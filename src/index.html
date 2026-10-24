@@ -58,6 +58,8 @@
       <label class="check"><input type="checkbox" id="pngTransparent"> Прозрачный фон</label>
       <button class="btn primary" id="pngBtn">Скачать PNG</button>
       <button class="btn" id="videoBtn">Видео 360° (6 секунд)</button>
+      <button class="btn" id="foldVideoBtn" title="Развёртка складывается в коробку: время берётся из порядка сборки">Видео сборки</button>
+      <label class="check"><input type="checkbox" id="foldVideoBack"> Туда и обратно</label>
       <hr>
       <h3>Развёртка выбранного объекта</h3>
       <label class="check" title="Лист шире развёртки на 3 мм с каждой стороны: дизайн продолжается за линию реза"><input type="checkbox" class="bleedOn"> Вылеты 3 мм</label>
@@ -118,6 +120,7 @@
         <button class="np-chip" data-ov="bleed" aria-pressed="false" title="Вылеты: 3 мм дизайна за линией реза">Вылеты</button>
         <button class="np-chip" data-ov="safe" aria-pressed="false" title="Безопасная зона: 3 мм от края панели; то, что в неё заходит, подсвечено">Безопасная зона</button>
         <button class="np-chip" data-ov="dims" aria-pressed="false" title="Размеры панелей и всей развёртки, мм">Размеры</button>
+        <button class="np-chip" data-ov="folds" aria-pressed="false" title="Сгибы по шагам сборки; клик по сгибу открывает его угол, направление и шаг" hidden>Сгибы</button>
         </div>
     </div>
   </section>
@@ -214,6 +217,11 @@
       </div>
       <button class="btn sm" id="dielineBtn">Загрузить макет</button>
       <button class="btn sm danger" id="dielineOffBtn" hidden>Убрать макет развёртки</button>
+    </section>
+    <section class="sec" id="foldSec" data-tab="net">
+      <div class="sec-h"><h2>Порядок сборки</h2><button class="btn sm" id="fsReset" title="Вернуть порядок, углы и время, как их даёт заготовка">Сбросить</button></div>
+      <p class="hint" id="fsHint">Шаги складываются по очереди. Нажмите шаг, чтобы увидеть его на модели; перетащите за ручку, чтобы поменять порядок; сгибы шага — в раскрывающемся списке или кликом по линии на развёртке (кнопка «Сгибы»).</p>
+      <div class="fs-list" id="fsList"></div>
     </section>
     <section class="sec" id="impSec" data-tab="net">
       <div class="sec-h"><h2>Раскладка на лист</h2><span class="mono hint" id="impSize"></span></div>

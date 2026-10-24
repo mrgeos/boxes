@@ -11,6 +11,8 @@ import { inPanel, paintNet, panelPath, viewNet } from './net-view.js';
 import { openMenu } from '../ui/menu.js';
 import { loadNetOverlays, netOverlay, onNetOverlay, overlayHooks, setNetOverlay } from './net-overlays.js';
 import { printIssues } from './net-check.js';
+import { canFold } from '../scene/fold.js';
+import { clickCrease, creaseAt } from '../ui/fold-steps.js';
 import { drawNetEdit, dropPanel, netCursor, netDouble, netKey, netMove, netPress, netRelease } from './net-edit.js';
 
 /* The net of the active object, big: the panels with the faces' designs, cut and fold lines, windows. Two canvases:
@@ -108,7 +110,12 @@ function syncReady() {
   b.classList.toggle('ok', !bad); b.classList.toggle('warn', !!bad);
   b.lastChild.textContent = bad ? `Проверьте: ${bad}` : 'Готово к печати';
 }
-function syncChips() { for (const b of document.querySelectorAll('#netChips [data-ov]')) b.setAttribute('aria-pressed', String(netOverlay(b.dataset.ov))); }
+function syncChips() {
+  for (const b of document.querySelectorAll('#netChips [data-ov]')) {
+    b.setAttribute('aria-pressed', String(netOverlay(b.dataset.ov)));
+    if (b.dataset.ov === 'folds') b.hidden = !(geom && canFold(geom.o) && !sel.part);   // (only a blank that folds has creases to show)
+  }
+}
 /* the list of what is wrong, at (x, y); a pick selects that layer on its face */
 function showIssues(o, list, x, y) {
   const items = list.length ? list.map(it => ({ label: it.text, run: () => { select(o.id, it.face, null, { focus: false }); pickLayers([it.id]); } }))
@@ -124,7 +131,7 @@ function syncChrome(cur) {
   const none = !cur ? 'Выберите объект, чтобы увидеть его развёртку' : !cur.n ? 'У этого объекта нет развёртки' : '';
   $('#netEmpty').hidden = !none; $('#netEmptyText').textContent = none; $('#netTo3d').hidden = !none || effectiveMode() !== '2d';
   $('#netZoom').hidden = $('#netCap').hidden = $('#netChips').hidden = $('#netReady').hidden = !!none;
-  syncReady();
+  syncReady(); syncChips();
   if (!none) $('#netCap').textContent = `${cur.o.name} · ${fmt(cur.n.W, 1)} × ${fmt(cur.n.H, 1)} мм`;
 }
 /* redraws what changed; the loop calls drawNetStage when a face is repainted or the selection changes */
@@ -198,10 +205,11 @@ function initNetStage() {
       if (editing != null) { netRelease(); editing = null; }
       const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 }; drag = null; return;
     }
-    // a press on a layer (or its handles) edits it; anywhere else the sheet is moved
-    if (e.button === 0 && !space && netPress(e, ...local(e))) { editing = e.pointerId; return; }
+    // a press on a crease line (with «Сгибы» on) opens the crease; a press on a layer (or its handles) edits it; anywhere else the sheet is moved
+    const crease = e.button === 0 && !space && geom ? creaseAt(...toSheet(...local(e)), V.k, e.pointerType === 'touch' ? 14 : 8) : null;
+    if (!crease && e.button === 0 && !space && netPress(e, ...local(e))) { editing = e.pointerId; return; }
     if (e.button === 2) return;
-    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: V.ox, oy: V.oy, moved: false, by: e.button === 1 || space };
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: V.ox, oy: V.oy, moved: false, by: e.button === 1 || space, crease };
     if (e.button === 1) e.preventDefault();
   });
   pane.addEventListener('pointermove', e => {
@@ -217,8 +225,8 @@ function initNetStage() {
       return;
     }
     if (e.pointerType === 'touch') return;
-    const p = panelAt(...local(e)), cur = space ? 'grab' : netCursor(e, ...local(e));
-    pane.style.cursor = cur !== 'default' ? cur : p ? 'pointer' : '';
+    const p = panelAt(...local(e)), cur = space ? 'grab' : netCursor(e, ...local(e)), cr = !space && geom && creaseAt(...toSheet(...local(e)), V.k);
+    pane.style.cursor = cr ? 'pointer' : cur !== 'default' ? cur : p ? 'pointer' : '';
     setHoverFace(geom?.o.id, p?.key);
   });
   const end = e => {
@@ -233,6 +241,7 @@ function initNetStage() {
     if (drag && e.pointerId === drag.id) {
       const d = drag; drag = null; pane.style.cursor = '';
       if (!d.moved && !d.by && e.type === 'pointerup' && e.button === 0) {
+        if (d.crease) { clickCrease(d.crease, e.clientX, e.clientY); return; }
         const p = panelAt(...local(e)); if (p && geom) select(geom.o.id, p.key, null, { flash: true, focus: false });
       }
     }
@@ -265,5 +274,7 @@ function initNetStage() {
 /* for the layer editor on the sheet (net-edit.js) */
 const netGeom = () => geom;
 const markTop = () => { topDirty = true; schedule(); };
+/* the sheet moved by (dx, dy) px, as a drag would */
+function panNetBy(dx, dy) { V.ox += dx; V.oy += dy; moved(); }
 
-export { drawNetStage, initNetStage, markTop, netGeom, panelAt, panelRects, refreshNetStage, showIssues, toSheet, V as netView, zoomAt };
+export { drawNetStage, initNetStage, markTop, netGeom, panNetBy, panelAt, panelRects, refreshNetStage, showIssues, toSheet, V as netView, zoomAt };

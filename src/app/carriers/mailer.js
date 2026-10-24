@@ -125,8 +125,8 @@ const mailerFold = {
     const k = ch.key;
     if (k === 'lock') return { ang: 0, a: 0 };
     if (k === 'ear') return { ang: 90, a: -T };
-    if (k === 'top') return { ang: 90, a: T };
-    if (k === 'flap') return { ang: -90, a: 0 };
+    if (k === 'top') return { ang: 90, a: T, d: T };
+    if (k === 'flap') return { ang: -90, a: 0, d: T };
     if (k === 'fold') return par.key === 'top' ? { ang: 180, a: T } : { ang: 90, a: 0 };
     return { ang: 90, a: 0 };
   },

@@ -167,7 +167,7 @@ function buildObject(o) {
   }
   disposeRibbons(rt);
   rt.group.traverse(m => { if ((m.isMesh || m.isLine) && !m.userData.shared) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.insert = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.trayLid = null; rt.bowl = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null; rt.rsc = null; rt.rscTape = null; rt.drawer = null; rt.rig = null; rt.foldPrev = null;
+  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.insert = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.trayLid = null; rt.bowl = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null; rt.rsc = null; rt.rscTape = null; rt.drawer = null; rt.rig = null; rt.foldPrev = null; rt.creases = null; rt.planned = null;
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'tray') buildTray(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else if (o.type === 'board') buildBoard(o, rt); else if (o.type === 'model') buildModelObject(o, rt); else buildTube(o, rt);

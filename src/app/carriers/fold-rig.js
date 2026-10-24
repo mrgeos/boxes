@@ -7,6 +7,7 @@ import { netWindows } from './box.js';
 import { mailerFold } from './mailer.js';
 import { isCarton } from './carton-net.js';
 import { rscT } from './rsc.js';
+import { nameCreases } from './fold-plan.js';
 import { rrectPts } from '../scene/geometry.js';
 
 /* The «Сборка» slider shows the blank folding into the box. While it is below 100 % the object shows this rig instead
@@ -21,7 +22,8 @@ const sm = x => x * x * (3 - 2 * x), rad = a => a * Math.PI / 180;
 /* A family says how its blank folds: the roots (the panels that keep their place: the bottom, a telescope lid), and for
    each crease the turn (ang, degrees, + away from the print, − toward it), where the crease lies (a: mm off the print
    side, + toward the board's back, − the other way: a panel that lands inside what it is hinged to) and when it closes
-   (rank, default its depth in the tree). info says which way the panel lies from its crease on the sheet. */
+   (rank, default its depth in the tree) and d (mm): how far the panel is slid toward its crease along its own length, so that
+   it lands where the model has it (a lid lies over the wall's thickness, a tuck hangs from the lid's face). info says which way the panel lies from its crease on the sheet. */
 const clampT = o => clamp(o.thickness, .3, Math.min(o.dims.w, o.dims.h, o.dims.d) / 4);
 const boxFold = {
   T: clampT,
@@ -30,8 +32,8 @@ const boxFold = {
     const k = ch.key, tuck = o.lidType === 'tuck';
     if (k === 'tab') return { ang: 90, a: -T };
     if (k === 'fold') return { ang: 180, a: T };
-    if (k === 'top') return { ang: 90, a: T };
-    if (k === 'flap') return { ang: 90, a: tuck ? -T : 0 };
+    if (k === 'top') return { ang: 90, a: T, d: T };
+    if (k === 'flap') return { ang: 90, a: tuck ? -T : 0, d: tuck ? -2 * T : 0 };
     return { ang: 90, a: 0 };
   },
 };
@@ -43,8 +45,8 @@ const cartonFold = {
   hinge(par, ch, T, o, info) {
     const k = ch.key;
     if (k === 'tab') return { ang: 90, a: par.key === 'left' || par.key === 'right' ? (info.dy < 0 ? 0 : -T) : -T };
-    if (k === 'top') return { ang: 90, a: T, rank: 5 };
-    if (k === 'flap') return { ang: 90, a: -T };
+    if (k === 'top') return { ang: 90, a: T, d: T, rank: 5 };
+    if (k === 'flap') return { ang: 90, a: -T, d: -2 * T };
     return { ang: 90, a: 0 };
   },
 };
@@ -110,10 +112,11 @@ function openParts(a, b, creases) {
 /* where a panel of the face `key` lies on the face (its middle, fractions u across and v down, the crop taken in) */
 const faceMid = p => { const c = p.crop || [0, 0, 1, 1]; return [(c[0] + c[2]) / 2, (c[1] + c[3]) / 2]; };
 
-/* the rig of an object: a tree of Groups per root, posed by poseRig(rig, t); null when the blank cannot be folded */
-function buildRig(o, rt) {
+/* the blank as a tree of panels hung on one another by their creases, with what each crease does by default (ang0, a, rank)
+   and its name (id); null when a crease is slanted (not folded here). No three.js objects: the editor reads it too */
+function foldTree(o) {
   const fam = foldFamily(o); if (!fam) return null;
-  const net = netLayout(o), T = fam.T(o), H = o.dims.h;
+  const net = netLayout(o), T = fam.T(o);
   const tabs = (net.tabs || []).filter(t => t.pts?.length > 2).map(t => {
     const xs = t.pts.map(v => v[0]), ys = t.pts.map(v => v[1]), x = Math.min(...xs), y = Math.min(...ys);
     return { key: 'tab', on: t.on, joins: [t.on], poly: t.pts, x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
@@ -133,6 +136,32 @@ function buildRig(o, rt) {
     const n = queue.shift(); nodes.push(n);
     for (const { to, seg } of adj[n.i]) if (!seen.has(to)) { seen.add(to); queue.push({ i: to, parent: n, seg, depth: n.depth + 1, root: n.root }); }
   }
+  for (const n of nodes) {
+    const p = panels[n.i], par = n.parent;
+    if (!par) { n.ox = p.x + p.w / 2; n.oy = p.y + p.h / 2; n.ang0 = 0; n.a = 0; n.rank = 0; continue; }
+    if (Math.abs(n.seg[1] - n.seg[3]) >= .01 && Math.abs(n.seg[0] - n.seg[2]) >= .01) return null;
+    n.ox = (n.seg[0] + n.seg[2]) / 2; n.oy = (n.seg[1] + n.seg[3]) / 2;
+    const pts = pieces[n.i].pts; n.mx = pts.reduce((q, v) => q + v[0], 0) / pts.length; n.my = pts.reduce((q, v) => q + v[1], 0) / pts.length;
+    const h = fam.hinge(panels[par.i], p, T, o, { dx: Math.sign(n.mx - n.ox), dy: Math.sign(n.my - n.oy) }, n.depth);
+    n.ang0 = h.ang; n.a = h.a; n.d = h.d ?? 0; n.rank = h.rank ?? par.rank + 1;
+  }
+  // a crease is told by its two panels and its place among those with the same two (top to bottom, left to right)
+  const groups = new Map();
+  for (const n of nodes) if (n.parent) { const k = panels[n.parent.i].key + '>' + panels[n.i].key; (groups.get(k) || groups.set(k, []).get(k)).push(n); }
+  for (const [k, g] of groups) g.sort((m, q) => m.oy - q.oy || m.ox - q.ox).forEach((n, i) => { n.id = k + '#' + i; });
+  return { fam, net, T, panels, pieces, nodes };
+}
+/* the creases of the object as plain records (for the editor and the plan) */
+function foldCreases(o) {
+  const t = foldTree(o); if (!t) return null;
+  const out = t.nodes.filter(n => n.parent).map(n => { const q = t.panels[n.parent.i]; return { id: n.id, key: t.panels[n.i].key, parentKey: q.key, ang0: n.ang0, rank: n.rank, seg: n.seg, mx: n.ox, my: n.oy, px: q.x + q.w / 2 }; });
+  nameCreases(out); return out;
+}
+
+/* the rig of an object: a tree of Groups per root, posed by poseRig(rig, t); null when the blank cannot be folded */
+function buildRig(o, rt) {
+  const tree = foldTree(o); if (!tree) return null;
+  const { net, T, panels, pieces, nodes } = tree, H = o.dims.h;
   const bbox = ns => { const q = ns.flatMap(n => pieces[n.i].pts), xs = q.map(v => v[0]), ys = q.map(v => v[1]); return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]; };
   const all = bbox(nodes), Gx = (all[0] + all[1]) / 2, Gy = (all[2] + all[3]) / 2;
   const wins = netWindows(o, net), meshes = [], roots = [], group = new THREE.Group();
@@ -144,37 +173,32 @@ function buildRig(o, rt) {
   // each root: where it lies when folded (the bottom: print down at the floor; a telescope lid: print up on the base)
   for (const rn of nodes.filter(n => !n.parent)) {
     const p = panels[rn.i], [u, v] = faceMid(p), top = p.key === 'top', [fw, fd] = faceMM(o, p.key);
-    const rx = p.x + p.w / 2, ry = p.y + p.h / 2, [x0, x1, y0, y1] = bbox(nodes.filter(n => n.root === rn));
+    const rx = rn.ox, ry = rn.oy, [x0, x1, y0, y1] = bbox(nodes.filter(n => n.root === rn));
     const q2 = (((p.q ?? (p.rot ? 2 : 0)) % 4) + 4) % 4 === 2, c = new THREE.Vector3((x0 + x1) / 2 - rx, 0, (y0 + y1) / 2 - ry);
     const axis = q2 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0), fin = new THREE.Vector3((u - .5) * fw, top ? H + T : 0, (top ? v - .5 : .5 - v) * fd);
     const qf = new THREE.Quaternion().setFromAxisAngle(axis, top ? 0 : Math.PI);
     const F = new THREE.Group(), R = new THREE.Group(); F.add(R); R.position.set(-c.x * S, 0, -c.z * S); group.add(F);
     roots.push({ node: rn, F, R, flip: !top, late: top ? .3 : 0, axis, hh: q2 ? (x1 - x0) / 2 : (y1 - y0) / 2, flat: [(x0 + x1) / 2 - Gx, (y0 + y1) / 2 - Gy], to: fin.clone().add(c.clone().applyQuaternion(qf)) });
-    rn.ox = rx; rn.oy = ry; rn.rotG = R;
+    rn.rotG = R;
   }
   for (const n of nodes) {
-    const p = panels[n.i], par = n.parent;
-    let ox, oy;
-    if (!par) { ox = n.ox; oy = n.oy; } else { ox = (n.seg[0] + n.seg[2]) / 2; oy = (n.seg[1] + n.seg[3]) / 2; }
-    n.ox = ox; n.oy = oy;
-    const pts = pieces[n.i].pts, mx = pts.reduce((s, q) => s + q[0], 0) / pts.length, my = pts.reduce((s, q) => s + q[1], 0) / pts.length;
-    const h = par ? fam.hinge(panels[par.i], p, T, o, { dx: Math.sign(mx - ox), dy: Math.sign(my - oy) }, n.depth) : { ang: 0, a: 0 };
-    n.ang = rad(h.ang); n.a = h.a; n.rank = par ? h.rank ?? par.rank + 1 : 0;
+    const p = panels[n.i], par = n.parent, ox = n.ox, oy = n.oy;
+    n.ang = rad(n.ang0);
     n.content = new THREE.Group();
     if (!par) { n.rot = n.content; n.root.rotG.add(n.content); }
     else {
-      n.content.position.y = h.a * S;
-      const anchor = new THREE.Group(), horiz = Math.abs(n.seg[1] - n.seg[3]) < .01, vert = Math.abs(n.seg[0] - n.seg[2]) < .01;
-      if (!horiz && !vert) return null;   // a slanted crease: not folded here
-      anchor.position.set((ox - par.ox) * S, -h.a * S, (oy - par.oy) * S);
+      const anchor = new THREE.Group(), horiz = Math.abs(n.seg[1] - n.seg[3]) < .01;
+      n.content.position.y = n.a * S;
+      anchor.position.set((ox - par.ox) * S, -n.a * S, (oy - par.oy) * S);
       // the axis along the crease, and which way the panel lies from it; the turn away from the print is down (−y)
-      const side = horiz ? Math.sign(my - oy) : Math.sign(mx - ox);
+      const side = horiz ? Math.sign(n.my - oy) : Math.sign(n.mx - ox);
       n.axis = horiz ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
       n.sign = horiz ? side : -side;
+      if (horiz) n.content.position.z = -n.d * side * S; else n.content.position.x = -n.d * side * S;
       n.rot = new THREE.Group(); anchor.add(n.rot); n.rot.add(n.content); par.content.add(anchor);
     }
     // the panel: print side up, the board's side below it, the cut edges between
-    const outline = pts, own = (p.holes || []).slice(), holes = own.slice(), filmed = [];
+    const pts = pieces[n.i].pts, outline = pts, own = (p.holes || []).slice(), holes = own.slice(), filmed = [];
     // windows lying wholly in the panel are cut out of it (one running over its edge, or over a crease, stays solid here)
     for (const q of wins) for (const hl of q.polys ? q.polys.map(pl => pl.map(w => [w.x, w.y])) : [rrectPts(q.x + q.w / 2, q.y + q.h / 2, q.w, q.h, q.radii?.[0] ?? 0).map(w => [w.x, w.y])]) {
       if (p.key !== 'tab' && hl.every(w => w[0] > p.x + .3 && w[0] < p.x + p.w - .3 && w[1] > p.y + .3 && w[1] < p.y + p.h - .3) && (!p.poly || hl.every(w => inside(p.poly, w)))) { holes.push(hl); filmed.push(hl); }
@@ -195,7 +219,7 @@ function buildRig(o, rt) {
     for (const hl of filmed) { const fm = mesh(n.content, flatGeo(hl, [], ox, oy, -T / 2, false, null), rt.filmMat, {}, { renderOrder: 2 }); fm.castShadow = false; fm.raycast = () => {}; }
   }
   const rank = Math.max(1, ...nodes.map(n => n.rank));
-  return { group, nodes, roots, meshes, T, rank, panels };
+  return { group, nodes, roots, meshes, T, rank, panels, steps: null };
 }
 /* is the point inside the polygon */
 function inside(poly, [x, y]) {
@@ -222,11 +246,32 @@ function poseRig(rig, t) {
   const D = rig.rank;
   for (const n of rig.nodes) {
     if (!n.parent) continue;
+    // a plan with its own steps: the step's time slice; else the order the family gives, each crease a bit after the one before
+    if (rig.steps) { const sc = n.sc; n.rot.quaternion.setFromAxisAngle(n.axis, n.sign * n.ang * sm(clamp((ft - sc.s) / sc.len, 0, 1))); continue; }
     const start = (n.rank - 1) * (1 - SPAN) / Math.max(1, D - 1);
     n.rot.quaternion.setFromAxisAngle(n.axis, n.sign * n.ang * sm(clamp((ft - start) / SPAN, 0, 1)));
   }
   rig.group.updateMatrixWorld(true);
 }
-function disposeRig(rig) { for (const m of rig.meshes) m.geometry.dispose(); }
+/* the project's plan (resolved: carriers/fold-plan.js) into the rig: each crease's angle, and its step's time slice */
+function applyPlan(rig, plan, sl) {
+  for (const n of rig.nodes) {
+    if (!n.parent) continue;
+    n.ang = rad(plan.ang[n.id] ?? n.ang0);
+    if (plan.custom) n.sc = sl[plan.stepOf[n.id]] || sl.at(-1);
+  }
+  rig.steps = plan.custom;
+}
+/* the crease picked in the editor, drawn over the model: a bright bar along it (id null: none) */
+function markCrease(rig, id) {
+  if (rig.mark) { rig.mark.removeFromParent(); rig.mark.geometry.dispose(); rig.mark = null; }
+  const n = rig.nodes.find(q => q.parent && q.id === id); if (!n) return;
+  const len = Math.hypot(n.seg[2] - n.seg[0], n.seg[3] - n.seg[1]), g = new THREE.CylinderGeometry(.9 * S, .9 * S, len * S, 8);
+  if (n.axis.x) g.rotateZ(Math.PI / 2); else g.rotateX(Math.PI / 2);
+  const m = new THREE.Mesh(g, markMat()); m.renderOrder = 10; m.raycast = () => {}; n.rot.add(m); rig.mark = m;
+}
+let _mark = null;
+const markMat = () => _mark ||= new THREE.MeshBasicMaterial({ color: 0xff9d1c, depthTest: false, transparent: true, opacity: .95 });
+function disposeRig(rig) { rig.mark?.geometry.dispose(); for (const m of rig.meshes) m.geometry.dispose(); }
 
-export { buildRig, canFold, disposeRig, foldFamily, poseRig };
+export { FLIP, SPAN, applyPlan, buildRig, canFold, disposeRig, foldCreases, foldFamily, markCrease, poseRig };

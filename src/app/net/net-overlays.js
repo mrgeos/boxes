@@ -7,12 +7,13 @@ import { boxCorners, BLEED_MM, SAFE_MM } from './net-check.js';
 import { paintBleed, rectLike } from './bleed.js';
 import { mapFor } from './net-edit.js';
 import { panelPath } from './net-view.js';
+import { drawFolds } from '../ui/fold-steps.js';
 
 /* The three switches are this browser's choice (like the view mode); `setNetOverlay` is the action for them. The
    drawing runs inside paintNet's two hooks: the bleed under the panels (net/bleed.js, the same a print file is made
    with), the safe zone and the dimensions over them. */
-const KEY = 'bs3d-net-overlays', NAMES = ['bleed', 'safe', 'dims'];
-const flags = { bleed: false, safe: false, dims: false };
+const KEY = 'bs3d-net-overlays', NAMES = ['bleed', 'safe', 'dims', 'folds'];
+const flags = { bleed: false, safe: false, dims: false, folds: false };
 const listeners = new Set();
 const netOverlay = name => !!flags[name];
 function setNetOverlay(name, on) {
@@ -126,7 +127,7 @@ function drawDims(c, o, n, ox, oy, k) {
 function overlayHooks(o, n, ox, oy, k, issues) {
   return {
     before: flags.bleed ? c => paintBleed(c, o, n, ox, oy, k, BLEED_MM, BLEED_LINE) : null,
-    after: flags.safe || flags.dims ? c => { if (flags.safe) drawSafe(c, o, n, issues, ox, oy, k); if (flags.dims) drawDims(c, o, n, ox, oy, k); } : null,
+    after: flags.safe || flags.dims || flags.folds ? c => { if (flags.safe) drawSafe(c, o, n, issues, ox, oy, k); if (flags.dims) drawDims(c, o, n, ox, oy, k); if (flags.folds) drawFolds(c, ox, oy, k); } : null,
   };
 }
 

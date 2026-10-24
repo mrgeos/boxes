@@ -22,6 +22,7 @@ import { syncRings } from './move.js';
 import { syncSelBox } from './sel-box.js';
 import { syncCtxBar } from '../ui/context-bar.js';
 import { syncFoldBar } from '../ui/fold-bar.js';
+import { syncFoldSteps } from '../ui/fold-steps.js';
 import { syncFoldVis } from './fold.js';
 import { syncStageHint } from '../ui/stage-hint.js';
 import { drawSelLook, syncSelLook } from './sel-look.js';
@@ -350,7 +351,7 @@ function initCamera() {
     const studio = studioActive(), refining = live && !!studio && !changed && studio.pending();
     if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) { fitShadowToView(); renderer.shadowMap.needsUpdate = true; } if (studio) studio.frame(true); else renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
     else if (refining) { studio.frame(false); drawSelLook(); }
-    syncRenderChip(studio); syncCtxBar(changed); syncFoldBar(changed); syncStageHint(); syncIsolationPlate(); syncFaceHi();
+    syncRenderChip(studio); syncCtxBar(changed); syncFoldBar(changed); syncFoldSteps(); syncStageHint(); syncIsolationPlate(); syncFaceHi();
     if (ui.editor) { ui.editor = false; drawEditor(); markTop(); }
     if (ui.net) { ui.net = false; drawNet(); drawImpose(); drawNetStage(); }
     if (ui.layers) { ui.layers = false; renderLayers(); }

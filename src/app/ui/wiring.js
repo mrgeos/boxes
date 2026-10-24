@@ -18,7 +18,7 @@ import { placeLibImage } from './library-panel.js';
 import { addLayer, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers } from './face-panel.js';
 import { renderStickers } from './stickers-panel.js';
 import { renderLibrary } from './library-panel.js';
-import { exportPNG, exportVideo, setPngScale } from '../export/image.js';
+import { exportFoldVideo, exportPNG, exportVideo, setPngScale } from '../export/image.js';
 import { initPrintMenu } from './print-menu.js';
 import { exportBleed, exportFlat, exportTemplate, loadExportBleed, setExportBleed } from '../net/template.js';
 import { sampleProject } from '../core/sample.js';
@@ -95,6 +95,7 @@ function initWiring() {
   $('#flatBtn').onclick = $('#flatBtn2').onclick = () => { closeMenu(); exportFlat(); };
   $('#pngBtn').onclick = () => { closeMenu(); exportPNG(); };
   $('#videoBtn').onclick = () => { closeMenu(); exportVideo(); };
+  $('#foldVideoBtn').onclick = () => { const back = $('#foldVideoBack').checked; closeMenu(); exportFoldVideo(back); };
   $$('#pngScale button').forEach(b => b.onclick = () => { setPngScale(+b.dataset.v); $$('#pngScale button').forEach(x => x.classList.toggle('on', x === b)); });
   // the export menu on the right and the file menu (burger) on the left of the top bar: one open at a time
   for (const n of ['export', 'file']) $(`#${n}Btn`).onclick = e => { e.stopPropagation(); const m = $(`#${n}Menu`), open = m.hidden; closeMenu(); m.hidden = !open; $(`#${n}Btn`).setAttribute('aria-expanded', String(open)); };

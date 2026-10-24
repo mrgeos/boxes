@@ -3,7 +3,7 @@ import { $ } from '../core/util.js';
 import { activeObj, sel } from '../core/state.js';
 import { liftOverBars } from './view-cube.js';
 import { recording } from '../scene/camera.js';
-import { canFold, foldDone, foldOf, playFold, setFold, stopFold } from '../scene/fold.js';
+import { canFold, foldDone, foldInfo, foldOf, playFold, setFold, stopFold } from '../scene/fold.js';
 import { textEditing } from './text-edit.js';
 
 /* A slim bar over the context bar (or over the action bar when that is hidden) for an object whose blank can fold:
@@ -27,6 +27,9 @@ function syncFoldBar() {
   const v = Math.round(foldOf(o.id) * 100), r = $('#fbRange');
   if (!b.dataset.drag && +r.value !== v) r.value = v;
   $('#fbVal').textContent = v + ' %';
+  // the step the slider is in (the turn-over before the first: «Переворот»)
+  const t = foldOf(o.id), info = t < 1 ? foldInfo(o.id) : null, cur = info?.steps.filter(s => t >= s.start - 1e-6 && t <= s.end + 1e-6).at(-1);
+  $('#fbStep').textContent = !info ? '' : t < info.steps[0].start - 1e-6 && t > 0 ? 'переворот' : cur ? `${cur.i + 1}. ${cur.name}` : '';
   const st = b.parentElement, sw = st.clientWidth, narrow = sw < 520;
   b.hidden = false;
   b.style.width = narrow ? sw - 16 + 'px' : ''; b.style.left = '8px';
@@ -39,7 +42,7 @@ function syncFoldBar() {
 function initFoldBar() {
   const b = document.createElement('div');
   b.className = 'fbar'; b.id = 'foldBar'; b.setAttribute('role', 'group'); b.setAttribute('aria-label', 'Сборка'); b.hidden = true;
-  b.innerHTML = `<button class="ab" id="fbPlay" type="button">${PLAY}</button><span class="fb-l">Сборка</span><input type="range" id="fbRange" min="0" max="100" step="1" value="100" aria-label="Сборка: от развёртки до коробки"><output id="fbVal" aria-live="off">100 %</output>`;
+  b.innerHTML = `<button class="ab" id="fbPlay" type="button">${PLAY}</button><span class="fb-l">Сборка</span><span class="fb-step" id="fbStep"></span><input type="range" id="fbRange" min="0" max="100" step="1" value="100" aria-label="Сборка: от развёртки до коробки"><output id="fbVal" aria-live="off">100 %</output>`;
   $('#ctxBar').before(b); bar();
   setPlaying(false);
   b.addEventListener('pointerdown', e => e.stopPropagation());

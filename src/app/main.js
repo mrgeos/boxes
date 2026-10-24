@@ -58,7 +58,9 @@ import { initColorPicker } from './ui/color-picker.js';
 import { exitIsolation, isShown, isolation, setIsolation, toggleIsolation } from './scene/isolation.js';
 import { initIsolationPlate } from './ui/isolation-plate.js';
 import { initFoldBar } from './ui/fold-bar.js';
-import { canFold, foldOf, foldPoses, playFold, setFold } from './scene/fold.js';
+import { initFoldSteps } from './ui/fold-steps.js';
+import * as Fold from './scene/fold.js';
+import { commit } from './core/project.js';
 
 /* boot: hook up the parts in the order they were built, then load the project (the shadow filter first: before any
    material is built) */
@@ -79,7 +81,7 @@ initPanels();
 initViewMode();
 initTabs();
 initActionBar(); initCtxBar(); initStageHint(); initSelLook(); initViewCube(); initItemNav(); initMarquee(); initIsolationPlate();
-initTextEdit(); initFoldBar();
+initTextEdit(); initFoldBar(); initFoldSteps();
 initQualityMenu(); initContextLoss();
 resize();
 bindScene();
@@ -92,4 +94,10 @@ libLoadBrowser(); loadMyModels();
 initProjects();
 window.__boxStudio = { dielineData, dielineDXF, printPDF, templateSVG, printCanvas, bleedLoops, printSheet, imposition, fitPiece, pieceOf, SHEETS, setViewMode, viewMode, setNetOverlay, netOverlay, netLabelRects: labelRects, printIssues, netPanelRects: panelRects, netView, hover, netHandles, library, state, sel, select, pick, stickerHit, boxOnScreen, handleAt, setView, faceMM, footprint, pendingFaces: () => dirtyFaces.size,
   sleeveHoles: o => { const D = sleeveDims(o); return sleeveSheet(D).holes.map(h => h.reduce((a, p) => a + p[1], 0) / h.length / D.P); }, sleeveFold: o => { const D = sleeveDims(o); return D.s0 / D.P; }, RT, camera, THREE, renderer, setRender, setIsolation, exitIsolation, toggleIsolation, isolation, isShown, sceneBounds, scene, applyScene, markObj, rebuildQueue, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };
-Object.assign(window.__boxStudio, { setFold, foldOf, canFold, playFold, foldPoses, floorMesh: () => floor });
+/* what an agent (and the tests) can do with the assembly: the view (setFold, playFold) and the plan, which is the
+   product's data, so each change of it is one step of the history */
+const asStep = f => (...a) => { const r = f(...a); if (r) commit(); return r; };
+Object.assign(window.__boxStudio, { setFold: Fold.setFold, foldOf: Fold.foldOf, canFold: Fold.canFold, playFold: Fold.playFold, foldPoses: Fold.foldPoses, floorMesh: () => floor,
+  getFoldPlan: Fold.foldInfo, listFoldCreases: Fold.listFoldCreases, focusFoldStep: Fold.focusFoldStep, foldTimeline: Fold.foldTimeline,
+  setFoldAngle: asStep(Fold.setFoldAngle), setFoldStep: asStep(Fold.setFoldStep), moveFoldStep: asStep(Fold.moveFoldStep), mergeFoldSteps: asStep(Fold.mergeFoldSteps),
+  setStepTime: asStep(Fold.setStepTime), resetFoldCrease: asStep(Fold.resetFoldCrease), resetFoldPlan: asStep(Fold.resetFoldPlan) });
