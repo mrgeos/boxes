@@ -207,6 +207,21 @@
       <button class="btn sm" id="dielineBtn">Загрузить макет</button>
       <button class="btn sm danger" id="dielineOffBtn" hidden>Убрать макет развёртки</button>
     </section>
+    <section class="sec" id="impSec" data-tab="net">
+      <div class="sec-h"><h2>Раскладка на лист</h2><span class="mono hint" id="impSize"></span></div>
+      <div class="imp-set">
+        <label title="Расстояние между линиями реза соседних заготовок. Два вылета (6 мм) — вылеты не заходят друг на друга"><span class="fl">Зазор, мм</span><input class="num" id="impGap" type="number" min="0" max="60" step="0.5" inputmode="decimal"></label>
+        <label title="Полоса вдоль длинной стороны офсетного листа, за которую его держат захваты машины: на ней не печатают. У цифровых листов её нет"><span class="fl">Захват, мм</span><input class="num" id="impGrip" type="number" min="0" max="60" step="0.5" inputmode="decimal"></label>
+        <label title="Поле с остальных сторон листа"><span class="fl">Поля, мм</span><input class="num" id="impMargin" type="number" min="0" max="30" step="0.5" inputmode="decimal"></label>
+      </div>
+      <div class="imp-tbl">
+        <div class="imp-head" aria-hidden="true"><span>Лист</span><span>Шт.</span><span>Схема</span><span title="Какую часть листа занимают заготовки (по габариту)">%</span></div>
+        <div id="impRows" role="group" aria-label="Листы"></div>
+      </div>
+      <div class="imp-prev" id="impPrev" hidden></div>
+      <p class="hint" id="impNote"></p>
+      <p class="hint">Оценка по габариту развёртки с вылетом 3 мм, без вложения заготовок друг в друга: на штанцформе их обычно укладывают плотнее. Серая полоса слева — захват или поле, где не печатают.</p>
+    </section>
   </aside>
 
 </div>
