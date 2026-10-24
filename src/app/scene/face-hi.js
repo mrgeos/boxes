@@ -7,6 +7,7 @@ import { RT, camera, viewport } from './renderer.js';
 import { hover, setHoverFace } from '../core/hover.js';
 import { effectiveMode } from '../ui/view-mode.js';
 import { isShown } from './isolation.js';
+import { foldOf } from './fold.js';
 
 /* The picked face and the face under the pointer (on the net or on the model) are outlined on a canvas laid over the
    3D view: the corners of the face's rectangle (RT.frames, the same ones stickers use) go through the camera. It is
@@ -34,7 +35,7 @@ function syncFaceHi() {
   const on = effectiveMode() === 'split', w = viewport.clientWidth, h = viewport.clientHeight, o = activeObj();
   // out of «2D + 3D» the canvas is not in the page at all (display: none), so the 3D view is composited as before
   if (cv.hidden === on) cv.hidden = !on;
-  if (!on || !o || !isShown(o) || !w || !h) { if (drawn) { c2.clearRect(0, 0, cv.width, cv.height); drawn = false; last = ''; } return; }
+  if (!on || !o || !isShown(o) || !w || !h || foldOf(o.id) < 1) { if (drawn) { c2.clearRect(0, 0, cv.width, cv.height); drawn = false; last = ''; } return; }
   const keys = faceKeys(o), hov = hover.obj === o.id && keys.includes(hover.face) ? hover.face : null, pk = keys.includes(sel.face) ? sel.face : null;
   const items = [[hov && hov !== pk ? hov : null, 'hover'], [pk, 'sel']].map(([k, t]) => [k && corners(o, k, w, h), t]).filter(([q]) => q);
   const sig = `${w}x${h}|` + items.map(([q, t]) => t + q.map(p => p.map(v => v.toFixed(1)).join(',')).join(';')).join('|');

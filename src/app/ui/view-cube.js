@@ -61,7 +61,7 @@ function liftOverBars(box) {
   if (!box) return;
   const st = box.parentElement.getBoundingClientRect(), r = box.getBoundingClientRect();
   let top = st.bottom;
-  for (const el of [$('#actionBar'), $('#ctxBar')]) {
+  for (const el of [$('#actionBar'), $('#ctxBar'), $('#foldBar')]) {
     if (!el || el.hidden || !el.offsetWidth) continue;
     const q = el.getBoundingClientRect();
     if (q.right > r.left - 8 && q.left < r.right + 8) top = Math.min(top, q.top);

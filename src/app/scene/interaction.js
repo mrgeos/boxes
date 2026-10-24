@@ -1,4 +1,5 @@
 // Мышь, касания, перетаскивание файлов, клавиатура
+import { foldOf } from './fold.js';
 import * as THREE from 'three';
 import { $, DEG, S, toast } from '../core/util.js';
 import { activeFaceData, activeLayer, activeObj, sel, state } from '../core/state.js';
@@ -300,6 +301,7 @@ function initInteraction() {
     if (recording || e.button !== 0 || pan) return;
     down = { x: e.clientX, y: e.clientY };
     if (tool() !== 'select') return;   // graphics are dragged with the select tool only
+    if (foldOf(sel.obj) < 1) return;   // the blank is folding: the faces are not where the layers were drawn (the net is for editing)
     const g = handleAt(e.clientX, e.clientY, isFinger(e));
     if (editMode()) {
       // crop or mask mode: corners and the inside edit; a mouse press elsewhere ends the mode, a finger's only as a short tap

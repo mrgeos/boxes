@@ -135,7 +135,7 @@ function syncSelBox() {
     const fm = rt.faces[key]?.mat; if (!fm) continue;
     const meshes = [];
     rt.group.traverse(m => {
-      if (!m.isMesh || !m.visible || m.userData.objId !== t.o.id || m.userData.wall || !m.geometry.attributes.uv) return;
+      if (!m.isMesh || !m.visible || m.userData.objId !== t.o.id || m.userData.wall || !m.geometry.attributes.uv || (rt.rig && !rt.rig.group.getObjectById(m.id))) return;   // (while the blank folds, only the rig's parts count)
       if (Array.isArray(m.material) ? m.material.includes(fm) : m.material === fm) meshes.push([m, trisOf(m, fm)]);
     });
     if (!meshes.length) continue;

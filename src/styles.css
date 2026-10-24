@@ -663,3 +663,11 @@ body.pane-drag{cursor:col-resize;user-select:none}
 .menu .np-ready{align-self:flex-start}
 .menu{max-height:calc(100dvh - 64px);overflow:auto}
 @media (max-width:860px){.menu{max-height:calc(100dvh - 130px)}}
+/* «Сборка»: полоса над панелью действий (ui/fold-bar.js) */
+.fbar{position:absolute;z-index:5;display:flex;align-items:center;gap:8px;max-width:calc(100% - 16px);box-sizing:border-box;padding:3px 12px 3px 3px;background:color-mix(in srgb,var(--panel) 96%,transparent);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);white-space:nowrap;font-size:12.5px;color:var(--fg)}
+.fbar[hidden]{display:none}
+.fbar .ab{width:30px;height:30px;flex:none}
+.fbar .ab svg{width:17px;height:17px}
+.fbar .fb-l{font-size:12px}
+.fbar input[type=range]{width:190px;flex:1 1 190px;min-width:0;accent-color:var(--accent);margin:0}
+.fbar output{min-width:44px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}

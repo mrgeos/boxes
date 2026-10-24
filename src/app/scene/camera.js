@@ -21,6 +21,8 @@ import { syncFaceHi } from './face-hi.js';
 import { syncRings } from './move.js';
 import { syncSelBox } from './sel-box.js';
 import { syncCtxBar } from '../ui/context-bar.js';
+import { syncFoldBar } from '../ui/fold-bar.js';
+import { syncFoldVis } from './fold.js';
 import { syncStageHint } from '../ui/stage-hint.js';
 import { drawSelLook, syncSelLook } from './sel-look.js';
 import { syncViewCube } from '../ui/view-cube.js';
@@ -78,7 +80,7 @@ function tweenCamera(p1, q1, instant = false, v1 = { x: 0, y: 0 }) {
 const camPose = () => ({ p: camera.position.clone(), q: controls.target.clone(), v: { ...view }, name: viewName, last: lastView });
 function goPose(c) { lastView = c.last; setViewName(c.name); tweenCamera(c.p, c.q, false, c.v); }
 function objBounds(id) {
-  const rt = RT.get(id), b = new THREE.Box3(); if (rt) b.expandByObject(rt.group);
+  const rt = RT.get(id), b = new THREE.Box3(); if (rt) b.expandByObject(rt.rig ? rt.rig.group : rt.group);   // (a folding blank: the rig, not the hidden model)
   return b.isEmpty() ? null : b;
 }
 /* frames these objects together (an object, or the objects of a group) from the same side the camera looks from now */
@@ -88,6 +90,11 @@ function frameItems(ids) {
   const c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
   const off = camera.position.clone().sub(controls.target).setLength(fitDistance(r));
   tweenCamera(c.clone().add(off), c);
+}
+/* frames a box (world, a Box3) from the side the camera looks from now */
+function frameBox(b) {
+  const c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
+  tweenCamera(c.clone().add(camera.position.clone().sub(controls.target).setLength(fitDistance(r))), c);
 }
 /* what the camera works with: several picked items or a group — all their objects (shown ones); else the active object.
    Its pivot, framing, views and auto-rotation all go by these */
@@ -304,6 +311,7 @@ function initCamera() {
     if (syncSelBox()) changed = true;
     if (syncSelLook()) changed = true;
     if (spinEnv(now)) changed = true;
+    syncFoldVis();   // (the model's parts stay hidden while the blank is folding)
     if (recording) recording.step(now);
     else if (controls.update(dt)) { changed = true; turning = true; }
     // while the camera moves the frame is drawn with fewer pixels and keeps its shadow (see quality.js); a click that
@@ -327,7 +335,7 @@ function initCamera() {
     const studio = studioActive(), refining = live && !!studio && !changed && studio.pending();
     if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) { fitShadowToView(); renderer.shadowMap.needsUpdate = true; } if (studio) studio.frame(true); else renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
     else if (refining) { studio.frame(false); drawSelLook(); }
-    syncRenderChip(studio); syncCtxBar(changed); syncStageHint(); syncIsolationPlate(); syncFaceHi();
+    syncRenderChip(studio); syncCtxBar(changed); syncFoldBar(changed); syncStageHint(); syncIsolationPlate(); syncFaceHi();
     if (ui.editor) { ui.editor = false; drawEditor(); markTop(); }
     if (ui.net) { ui.net = false; drawNet(); drawImpose(); drawNetStage(); }
     if (ui.layers) { ui.layers = false; renderLayers(); }
@@ -337,4 +345,4 @@ function initCamera() {
   });
 }
 
-export { camPose, goPose, VIEW_DIRS, VIEW_LABEL, fitShadowBias, fitShadowToView, flushFaces, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
+export { frameBox, camPose, goPose, VIEW_DIRS, VIEW_LABEL, fitShadowBias, fitShadowToView, flushFaces, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
