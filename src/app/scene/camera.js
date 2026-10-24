@@ -14,6 +14,7 @@ import { renderStickers } from '../ui/stickers-panel.js';
 import { renderLibrary } from '../ui/library-panel.js';
 import { drawEditor } from '../ui/face-editor.js';
 import { drawNet } from '../net/net-view.js';
+import { drawImpose } from '../ui/impose-panel.js';
 import { drawNetStage, markTop } from '../net/net-stage.js';
 import { show3D } from '../ui/view-mode.js';
 import { syncFaceHi } from './face-hi.js';
@@ -328,7 +329,7 @@ function initCamera() {
     else if (refining) { studio.frame(false); drawSelLook(); }
     syncRenderChip(studio); syncCtxBar(changed); syncStageHint(); syncIsolationPlate(); syncFaceHi();
     if (ui.editor) { ui.editor = false; drawEditor(); markTop(); }
-    if (ui.net) { ui.net = false; drawNet(); drawNetStage(); }
+    if (ui.net) { ui.net = false; drawNet(); drawImpose(); drawNetStage(); }
     if (ui.layers) { ui.layers = false; renderLayers(); }
     if (ui.stickers) { ui.stickers = false; renderStickers(); }
     if (ui.lib) { ui.lib = false; renderLibrary(); }

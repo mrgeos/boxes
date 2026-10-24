@@ -109,13 +109,15 @@ function syncReady() {
   b.lastChild.textContent = bad ? `Проверьте: ${bad}` : 'Готово к печати';
 }
 function syncChips() { for (const b of document.querySelectorAll('#netChips [data-ov]')) b.setAttribute('aria-pressed', String(netOverlay(b.dataset.ov))); }
-/* the list of what is wrong; a pick selects that layer on its face */
+/* the list of what is wrong, at (x, y); a pick selects that layer on its face */
+function showIssues(o, list, x, y) {
+  const items = list.length ? list.map(it => ({ label: it.text, run: () => { select(o.id, it.face, null, { focus: false }); pickLayers([it.id]); } }))
+    : [{ label: 'Края и безопасная зона в порядке', disabled: true }, { label: 'Картинки — не меньше 150 dpi', disabled: true }];
+  openMenu(x, y, items, 'Проверка к печати');
+}
 function openIssues(e) {
   const o = geom?.o, r = e.currentTarget.getBoundingClientRect();
-  if (!o) return;
-  const items = issues.length ? issues.map(it => ({ label: it.text, run: () => { select(o.id, it.face, null, { focus: false }); pickLayers([it.id]); } }))
-    : [{ label: 'Края и безопасная зона в порядке', disabled: true }, { label: 'Картинки — не меньше 150 dpi', disabled: true }];
-  openMenu(Math.max(8, r.right - 300), r.bottom + 6, items, 'Проверка к печати');
+  if (o) showIssues(o, issues, Math.max(8, r.right - 300), r.bottom + 6);
 }
 /* the texts and tools round the sheet: the caption, the empty note, the zoom */
 function syncChrome(cur) {
@@ -264,4 +266,4 @@ function initNetStage() {
 const netGeom = () => geom;
 const markTop = () => { topDirty = true; schedule(); };
 
-export { drawNetStage, initNetStage, markTop, netGeom, panelAt, panelRects, refreshNetStage, toSheet, V as netView, zoomAt };
+export { drawNetStage, initNetStage, markTop, netGeom, panelAt, panelRects, refreshNetStage, showIssues, toSheet, V as netView, zoomAt };

@@ -65,12 +65,15 @@ await test('проект в аккаунте claude.ai: картинки сох�
 });
 
 const presets = only && !'заготовки'.includes(only) ? [] : await (async () => { const { ctx, page } = await openEditor(browser); const ids = await presetIds(page); await ctx.close(); return ids; })();
-if (presets.length) await test(`все заготовки (${presets.length}): построение и шаблон SVG без ошибок`, async () => {
+if (presets.length) await test(`все заготовки (${presets.length}): построение, шаблон SVG и DXF без ошибок`, async () => {
   const { ctx, page, errors } = await openEditor(browser);
   for (const id of presets) {
     await addPreset(page, id);
     const svg = readFileSync(await (await download(page, '#tplBtn')).path(), 'utf8');
     assert.match(svg, /<svg[\s\S]*<g id="dieline">[\s\S]+<\/g>/, `${id}: пустой шаблон`);
+    // the DXF is read from that SVG: a line of the cut the reader does not know would be lost without a word (a formed lid has none)
+    const dxf = await page.evaluate(() => window.__boxStudio.dielineDXF(window.__boxStudio.state.objects[0], { bleed: 0 }));
+    if (/<[^>]*stroke="#00a0e3"(?![^>]*stroke-dasharray)/.test(svg)) assert.match(dxf, /\n(LINE|POLYLINE|CIRCLE)\n8\nCUT\n/, `${id}: в DXF нет линий реза`);
     assert.deepEqual(errors, [], `${id}: ошибки в консоли`);
   }
   await ctx.close();
