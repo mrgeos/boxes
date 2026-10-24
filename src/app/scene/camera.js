@@ -91,10 +91,25 @@ function frameItems(ids) {
   const off = camera.position.clone().sub(controls.target).setLength(fitDistance(r));
   tweenCamera(c.clone().add(off), c);
 }
-/* frames a box (world, a Box3) from the side the camera looks from now */
+/* frames a box (world, a Box3), returns the pose it goes to, from the side the camera looks from now: as near as all its corners still fit the view
+   (a flat blank seen at a slant takes far less than its bounding sphere would) */
 function frameBox(b) {
-  const c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
-  tweenCamera(c.clone().add(camera.position.clone().sub(controls.target).setLength(fitDistance(r))), c);
+  const c = b.getCenter(new THREE.Vector3()), dir = camera.position.clone().sub(controls.target).normalize();
+  const right = new THREE.Vector3().crossVectors(camera.up, dir).normalize(), up = new THREE.Vector3().crossVectors(dir, right);
+  // the bars at the bottom of the stage cover part of the view: the box is fitted to what is left over them
+  const st = viewport.getBoundingClientRect(), tops = ['#foldBar', '#ctxBar', '#actionBar'].map(q => document.querySelector(q)).filter(e => e && !e.hidden && e.offsetWidth).map(e => e.getBoundingClientRect().top);
+  const free = tops.length && st.height ? clamp((Math.min(...tops) - 8 - st.top) / st.height, .45, 1) : 1;
+  const tv = Math.tan(camera.fov * DEG / 2) * free, th = Math.tan(camera.fov * DEG / 2) * camera.aspect;
+  let d = 0;
+  for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) {
+    const v = new THREE.Vector3(x, y, z).sub(c), ez = v.dot(dir);
+    d = Math.max(d, ez + Math.abs(v.dot(right)) / th, ez + Math.abs(v.dot(up)) / tv);
+  }
+  d *= 1.1;
+  // the target a bit below the box, so that it stands in the middle of the free part
+  const q = c.clone().addScaledVector(up, -(1 - free) * Math.tan(camera.fov * DEG / 2) * d), p = q.clone().addScaledVector(dir, d);
+  tweenCamera(p, q);
+  return { p, q };   // (where it ends: the caller can tell later whether the user moved it)
 }
 /* what the camera works with: several picked items or a group — all their objects (shown ones); else the active object.
    Its pivot, framing, views and auto-rotation all go by these */

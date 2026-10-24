@@ -5,8 +5,8 @@ import { state } from '../core/state.js';
 import { faceKeys } from '../core/model.js';
 import { netPoint } from '../carriers/box-net.js';
 import { buildRig, canFold, disposeRig, poseRig } from '../carriers/fold-rig.js';
-import { RT, applyLid, staleShadow } from './renderer.js';
-import { frameBox, invalidate } from './camera.js';
+import { RT, applyLid, camera, controls, staleShadow } from './renderer.js';
+import { camPose, camTween, frameBox, goPose, invalidate } from './camera.js';
 
 /* How far an object is folded (0 the blank flat … 1 the box) is a look, like the isolation: it lives on the object's
    runtime record (rt.fold, missing = 1), not in the project, and is gone with the object. Below 1 the object shows its
@@ -51,10 +51,18 @@ function applyFold(o) {
 /* frames the camera on the flat blank and the box together (once, when the fold begins) */
 function foldFrame(id) {
   const o = objById(id), rt = RT.get(id); if (!o || !rt?.rig) return;
-  const t = rt.fold ?? 1; poseRig(rt.rig, 0);
-  const b = new THREE.Box3().setFromObject(rt.rig.group), f = rt.foot || { x0: -o.dims.w / 2, x1: o.dims.w / 2, z0: -o.dims.d / 2, z1: o.dims.d / 2 };
+  const t = rt.fold ?? 1, b = new THREE.Box3(), f = rt.foot || { x0: -o.dims.w / 2, x1: o.dims.w / 2, z0: -o.dims.d / 2, z1: o.dims.d / 2 };
+  // the camera stays where it is while the blank folds: it must see the flat blank and the poses after the turn-over (the turn itself may reach out of the view for a moment)
+  for (const q of [0, .2, .35, .5, .7, 1]) { poseRig(rt.rig, q); b.union(new THREE.Box3().setFromObject(rt.rig.group)); }
   b.union(new THREE.Box3(new THREE.Vector3(f.x0 * S, 0, f.z0 * S), new THREE.Vector3(f.x1 * S, o.dims.h * S, f.z1 * S)).applyMatrix4(rt.group.matrixWorld));
-  poseRig(rt.rig, t); frameBox(b);
+  poseRig(rt.rig, t); rt.foldBefore = camPose(); rt.foldSet = frameBox(b);
+}
+/* the fold is back to 100 %: the camera goes back to the pose it had when the fold began, unless the user has moved it since */
+function foldDone(id) {
+  const rt = RT.get(id); if (!rt?.foldSet || (rt.fold ?? 1) < 1) return;
+  const { p, q } = rt.foldSet, before = rt.foldBefore, still = camTween || (camera.position.distanceTo(p) < 1e-3 && controls.target.distanceTo(q) < 1e-3);
+  rt.foldSet = rt.foldBefore = null;
+  if (still && before) goPose(before);
 }
 /* sets how far the object is folded, 0…1 (false if it cannot fold); frame: bring the camera to the blank first */
 function setFold(id, t, { frame = false } = {}) {
@@ -73,7 +81,7 @@ function playFold(id, { ms = 4000, frame = true } = {}) {
   const ease = x => x < .5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2;
   return new Promise(done => {
     let raf = 0, ended = false, first = true;
-    const finish = ok => { if (ended) return; ended = true; cancelAnimationFrame(raf); anims.delete(id); done(ok); };
+    const finish = ok => { if (ended) return; ended = true; cancelAnimationFrame(raf); anims.delete(id); if (ok) foldDone(id); done(ok); };
     anims.set(id, () => finish(false));
     const step = now => {
       const k = Math.min(1, (now - t0) / ms);
@@ -95,12 +103,14 @@ function foldPoses(id, force = null) {
   rt.group.updateMatrixWorld(true);
   const inv = rt.group.matrixWorld.clone().invert(), nm = new THREE.Matrix3().getNormalMatrix(inv), keys = faceKeys(o), out = [];
   for (const n of rt.rig.nodes) {
-    const p = rt.rig.panels[n.i]; if (!keys.includes(p.key) || p.crop) continue;
-    const [X, Y] = netPoint(p, .5, .5), c = n.content.localToWorld(new THREE.Vector3((X - n.ox) * S, 0, (Y - n.oy) * S)).applyMatrix4(inv).divideScalar(S);
+    const p = rt.rig.panels[n.i]; if (!keys.includes(p.key)) continue;
+    // the face's own middle: for a panel that carries a part of the face (a half), the plane carried on to it
+    const c0 = p.crop || [0, 0, 1, 1], [X, Y] = netPoint(p, (.5 - c0[0]) / (c0[2] - c0[0]), (.5 - c0[1]) / (c0[3] - c0[1]));
+    const c = n.content.localToWorld(new THREE.Vector3((X - n.ox) * S, 0, (Y - n.oy) * S)).applyMatrix4(inv).divideScalar(S);
     const nn = new THREE.Vector3(0, 1, 0).transformDirection(n.content.matrixWorld).applyMatrix3(nm).normalize();
     out.push({ key: p.key, c: c.toArray(), n: nn.toArray() });
   }
   return out;
 }
 
-export { applyFold, canFold, foldFrame, foldOf, foldPoses, playFold, setFold, stopFold, syncFoldVis };
+export { applyFold, canFold, foldDone, foldFrame, foldOf, foldPoses, playFold, setFold, stopFold, syncFoldVis };

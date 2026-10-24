@@ -112,4 +112,4 @@ function rscNet(o) {
   return { v: 2, fefco: '0201', W, H: 2 * fh + h, panels, tabs };
 }
 
-export { TAPES, applyRsc, buildRsc, rscNet };
+export { TAPES, applyRsc, buildRsc, rscNet, rscT };

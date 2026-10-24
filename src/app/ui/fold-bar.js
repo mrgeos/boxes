@@ -3,7 +3,7 @@ import { $ } from '../core/util.js';
 import { activeObj, sel } from '../core/state.js';
 import { liftOverBars } from './view-cube.js';
 import { recording } from '../scene/camera.js';
-import { canFold, foldOf, playFold, setFold, stopFold } from '../scene/fold.js';
+import { canFold, foldDone, foldOf, playFold, setFold, stopFold } from '../scene/fold.js';
 import { textEditing } from './text-edit.js';
 
 /* A slim bar over the context bar (or over the action bar when that is hidden) for an object whose blank can fold:
@@ -50,6 +50,7 @@ function initFoldBar() {
     stopFold(o.id); setPlaying(false);
     setFold(o.id, +e.target.value / 100, { frame: true });
   });
+  $('#fbRange').addEventListener('change', () => { const o = target(); if (o) foldDone(o.id); });   // (released at 100 %: the camera comes back)
   $('#fbPlay').addEventListener('click', () => {
     const o = target(); if (!o) return;
     if (playing) { stopFold(o.id); setPlaying(false); return; }

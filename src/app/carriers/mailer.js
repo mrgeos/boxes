@@ -120,7 +120,7 @@ function mailerNet(o) {
    locks, which stay straight and go through the slots in the bottom */
 const mailerFold = {
   T: o => mailerDims(o).t,
-  root: p => p.key === 'bottom',
+  roots: ps => [ps.findIndex(p => p.key === 'bottom')],
   hinge(par, ch, T) {
     const k = ch.key;
     if (k === 'lock') return { ang: 0, a: 0 };
