@@ -13,7 +13,7 @@ const SHEETS = [
   { id: 'A4', label: 'A4', w: 210, h: 297, kind: 'digital' },
   { id: 'A3', label: 'A3', w: 297, h: 420, kind: 'digital' },
   { id: 'SRA3', label: 'SRA3', w: 320, h: 450, kind: 'digital' },
-  { id: 'A3+', label: 'A3+', w: 330, h: 488, kind: 'offset' },
+  { id: 'A3+', label: 'A3+', w: 330, h: 488, kind: 'digital' },
   { id: '640x900', label: '640×900', w: 640, h: 900, kind: 'offset' },
   { id: '700x1000', label: '700×1000', w: 700, h: 1000, kind: 'offset' },
   { id: '720x1020', label: '720×1020', w: 720, h: 1020, kind: 'offset' },

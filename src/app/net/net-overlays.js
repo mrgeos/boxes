@@ -1,18 +1,16 @@
 // Что показать на развёртке сверх дизайна: вылеты, безопасная зона, размеры (только на экране, в файлы не попадает)
 import { fmt } from '../core/util.js';
 import { sel } from '../core/state.js';
-import { faceLabel, faceMM } from '../core/model.js';
+import { faceLabel } from '../core/model.js';
 import { selectedIds } from '../core/layers.js';
-import { RT } from '../scene/renderer.js';
-import { cropPx } from '../faces/render.js';
 import { boxCorners, BLEED_MM, SAFE_MM } from './net-check.js';
+import { paintBleed, rectLike } from './bleed.js';
 import { mapFor } from './net-edit.js';
 import { panelPath } from './net-view.js';
 
 /* The three switches are this browser's choice (like the view mode); `setNetOverlay` is the action for them. The
-   drawing runs inside paintNet's two hooks: the bleed under the panels (it is covered by the neighbours at the folds,
-   so it shows only past the cut), the safe zone and the dimensions over them. A face's picture runs on into the bleed
-   as its edge pixels do (the same a print file is made with); a panel that is not a rectangle gets its ground colour. */
+   drawing runs inside paintNet's two hooks: the bleed under the panels (net/bleed.js, the same a print file is made
+   with), the safe zone and the dimensions over them. */
 const KEY = 'bs3d-net-overlays', NAMES = ['bleed', 'safe', 'dims'];
 const flags = { bleed: false, safe: false, dims: false };
 const listeners = new Set();
@@ -29,64 +27,6 @@ function loadNetOverlays() {
 }
 
 const BLEED_LINE = 'rgba(224,64,40,.9)', SAFE_LINE = 'rgba(46,156,90,.95)', WARN = '230,150,0', CUT = '214,50,40';
-const rectLike = p => !p.fan && !p.poly && !p.circle && !p.r && p.ang == null;
-
-/* ---------- the bleed ---------- */
-/* the face's picture over the panel inflated by the bleed: nine pieces, the middle one left to the panel itself. Past the
-   face's own edge a piece is its edge pixel stretched; past a cut inside the face (half of a lid) it is the picture */
-function drawBleed(c, fc, p, x, y, w, h, bm, bp, crop) {
-  const S = crop || [0, 0, fc.width, fc.height], q = p.q ?? (p.rot ? 2 : 0);
-  c.save();
-  c.translate(x + w / 2, y + h / 2); c.rotate(q * Math.PI / 2);
-  if (q % 2) [w, h] = [h, w];
-  // per axis: [source start, source length, destination start, destination length] of the near band, the middle, the far band
-  const axis = (s0, sl, full, d0, dl) => [
-    s0 >= bp ? [s0 - bp, bp, d0 - bm, bm] : [s0, 1, d0 - bm, bm],
-    [s0, sl, d0, dl],
-    s0 + sl + bp <= full ? [s0 + sl, bp, d0 + dl, bm] : [s0 + sl - 1, 1, d0 + dl, bm]];
-  const cols = axis(S[0], S[2], fc.width, -w / 2, w), rows = axis(S[1], S[3], fc.height, -h / 2, h);
-  for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) {
-    if (i === 1 && j === 1) continue;
-    c.drawImage(fc, cols[i][0], rows[j][0], cols[i][1], rows[j][1], cols[i][2], rows[j][2], cols[i][3], rows[j][3]);
-  }
-  c.restore();
-}
-/* the outline of a panel grown by g px (a polygon by its corners' miters) */
-function growPath(c, p, g, ox, oy, k) {
-  const x = ox + p.x * k, y = oy + p.y * k, w = p.w * k, h = p.h * k;
-  if (p.circle) { c.moveTo(x + w / 2 + w / 2 + g, y + h / 2); c.arc(x + w / 2, y + h / 2, w / 2 + g, 0, Math.PI * 2); }
-  else if (p.poly) {
-    const P = p.poly.map(([X, Y]) => [ox + X * k, oy + Y * k]), n = P.length;
-    const area = P.reduce((s, [X, Y], i) => s + X * P[(i + 1) % n][1] - P[(i + 1) % n][0] * Y, 0), sg = area > 0 ? 1 : -1;
-    const norm = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return [sg * dy / l, -sg * dx / l]; };
-    P.forEach((v, i) => {
-      const n1 = norm(P[(i + n - 1) % n], v), n2 = norm(v, P[(i + 1) % n]), m = [n1[0] + n2[0], n1[1] + n2[1]], ml = Math.hypot(...m) || 1;
-      const u = [m[0] / ml, m[1] / ml], cos = Math.max(.34, u[0] * n1[0] + u[1] * n1[1]), d = g / cos;
-      c[i ? 'lineTo' : 'moveTo'](v[0] + u[0] * d, v[1] + u[1] * d);
-    });
-    c.closePath();
-  } else if (p.r) c.roundRect(x - g, y - g, w + 2 * g, h + 2 * g, p.r * k + g);
-  else c.rect(x - g, y - g, w + 2 * g, h + 2 * g);
-}
-/* under the panels: the band and the thin line at its edge */
-function bleedUnder(c, o, n, ox, oy, k) {
-  const rt = RT.get(o.id), b = BLEED_MM, g = b * k;
-  for (const p of n.panels) {
-    if (p.fan) continue;
-    const f = rt?.faces[p.key], fc = f?.canvas;
-    if (!fc && !p.fold) continue;
-    if (rectLike(p) && fc?.width) {
-      const bp = Math.max(1, Math.round(b * fc.width / faceMM(o, p.key)[0]));
-      drawBleed(c, fc, p, ox + (p.x - b) * k, oy + (p.y - b) * k, (p.w + 2 * b) * k, (p.h + 2 * b) * k, g, bp, cropPx(fc, p));
-    } else {
-      c.save(); c.beginPath(); growPath(c, p, g, ox, oy, k);
-      if (p.circle) c.moveTo(ox + (p.x + p.w) * k, oy + (p.y + p.h / 2) * k);
-      panelPath(c, p, ox, oy, k); c.fillStyle = o.faces[p.key]?.bg || o.board || '#ffffff'; c.fill('evenodd'); c.restore();
-    }
-    c.save(); c.beginPath(); growPath(c, p, g, ox, oy, k); c.strokeStyle = BLEED_LINE; c.lineWidth = 1; c.stroke(); c.restore();
-  }
-}
-
 /* ---------- the safe zone ---------- */
 function drawSafe(c, o, n, issues, ox, oy, k) {
   const s = SAFE_MM * k;
@@ -185,7 +125,7 @@ function drawDims(c, o, n, ox, oy, k) {
 /* what paintNet runs under and over the panels (null: nothing to add) */
 function overlayHooks(o, n, ox, oy, k, issues) {
   return {
-    before: flags.bleed ? c => bleedUnder(c, o, n, ox, oy, k) : null,
+    before: flags.bleed ? c => paintBleed(c, o, n, ox, oy, k, BLEED_MM, BLEED_LINE) : null,
     after: flags.safe || flags.dims ? c => { if (flags.safe) drawSafe(c, o, n, issues, ox, oy, k); if (flags.dims) drawDims(c, o, n, ox, oy, k); } : null,
   };
 }

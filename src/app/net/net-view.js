@@ -56,7 +56,7 @@ function netTexts(st) {
   const [hint, svg, png] = NET_TEXT[st ? 'sticker' : 'obj'];
   $('#netHint').textContent = st?.kind === 'custom' ? hint.replace(/ Серый пунктир.*$/, ' Текст и важное держите в 2 мм от края картинки.') : hint;
   $('#tplBtn2').textContent = svg; $('#flatBtn2').textContent = png;
-  $('#dielineBtn').hidden = !!st; if (st) $('#dielineOffBtn').hidden = true;
+  $('#bleedRow').hidden = !!st; $('#dielineBtn').hidden = !!st; if (st) $('#dielineOffBtn').hidden = true;
 }
 /* a sticker's sheet: its print with the bleed (paler past the cut), the cut and the safe zone */
 function drawStickerNet(o, st, cw, dpr) {

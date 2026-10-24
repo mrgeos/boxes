@@ -47,6 +47,8 @@ import { sampleProject } from './core/sample.js';
 import { initWiring } from './ui/wiring.js';
 import { initImposePanel } from './ui/impose-panel.js';
 import { SHEETS, fitPiece, imposition, pieceOf } from './net/impose.js';
+import { bleedLoops, printSheet } from './net/bleed.js';
+import { printCanvas, templateSVG } from './net/template.js';
 import { initObjectList } from './ui/object-list.js';
 import { initObjectThumbs } from './ui/object-thumbs.js';
 import { initColorPicker } from './ui/color-picker.js';
@@ -83,5 +85,5 @@ if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
 libLoadBrowser(); loadMyModels();
 initProjects();
-window.__boxStudio = { imposition, fitPiece, pieceOf, SHEETS, setViewMode, viewMode, setNetOverlay, netOverlay, netLabelRects: labelRects, printIssues, netPanelRects: panelRects, netView, hover, netHandles, library, state, sel, select, pick, stickerHit, boxOnScreen, handleAt, setView, faceMM, footprint, pendingFaces: () => dirtyFaces.size,
+window.__boxStudio = { templateSVG, printCanvas, bleedLoops, printSheet, imposition, fitPiece, pieceOf, SHEETS, setViewMode, viewMode, setNetOverlay, netOverlay, netLabelRects: labelRects, printIssues, netPanelRects: panelRects, netView, hover, netHandles, library, state, sel, select, pick, stickerHit, boxOnScreen, handleAt, setView, faceMM, footprint, pendingFaces: () => dirtyFaces.size,
   sleeveHoles: o => { const D = sleeveDims(o); return sleeveSheet(D).holes.map(h => h.reduce((a, p) => a + p[1], 0) / h.length / D.P); }, sleeveFold: o => { const D = sleeveDims(o); return D.s0 / D.P; }, RT, camera, THREE, renderer, setRender, setIsolation, exitIsolation, toggleIsolation, isolation, isShown, sceneBounds, scene, applyScene, markObj, rebuildQueue, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };

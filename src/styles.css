@@ -36,7 +36,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
 .app{display:grid;grid-template-columns:76px var(--side-w,300px) minmax(0,1fr) var(--prop-w,340px);grid-template-rows:auto minmax(0,1fr);height:100%}
-.topbar{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:10px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:relative;z-index:5}
+.topbar{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:10px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:relative;z-index:6}
 /* the title and history on the left, the mode in the middle (really centred: both sides are 1fr), view and export on the right */
 .tb-left,.tb-right{display:flex;align-items:center;gap:10px;min-width:0}
 .tb-right{justify-content:flex-end}
