@@ -77,6 +77,49 @@ function drawStickerNet(o, st, cw, dpr) {
   if (S.kind !== 'poly') { c.beginPath(); if (shapePath(c, S, -S.safe, k, ox, pad)) { c.setLineDash([4, 3]); c.strokeStyle = 'rgba(120,110,95,.85)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]); } }
   netGeom = null;
 }
+/* the object's net (viewNet) on a canvas context: the panels with their designs, cut and fold lines, windows, tabs.
+   (ox, oy): where the sheet's corner is, k: px per mm. selKey: the panel drawn as selected (null: none);
+   fan(p, canvas, w, h): a picture for a fan panel, where the caller keeps the slow warp in a cache */
+function paintNet(c, o, n, { ox, oy = ox, k, selKey = sel.face, accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(), fan = null }) {
+  const accentCss = accent;
+  const rt = RT.get(o.id);
+  for (const p of n.panels) {
+    const x = ox + p.x * k, y = oy + p.y * k, w = p.w * k, h = p.h * k, fc = rt?.faces[p.key]?.canvas;
+    c.save(); c.beginPath(); panelPath(c, p, ox, oy, k); c.clip();
+    if (fc && p.fan && fan) c.drawImage(fan(p, fc, w, h), x, y, w, h); else if (fc) drawNetPanel(c, fc, p, x, y, w, h, cropPx(fc, p)); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
+    else if (p.blank) { c.fillStyle = 'rgba(120,110,95,.14)'; c.fillRect(x, y, w, h); }
+    c.restore();
+    c.beginPath();
+    if (p.fan) {
+      fanOutline(p.fan).forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](x + X * k, y + Y * k)); c.closePath();
+      const [ax, ay] = fanXY(p.fan, 0, 0), [bx, by] = fanXY(p.fan, 0, 1);   // seam: glue overlap to the left
+      c.save(); c.setLineDash([2, 2]); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; const q = new Path2D(); q.moveTo(x + ax * k, y + ay * k); q.lineTo(x + bx * k, y + by * k); c.stroke(q); c.restore();
+    } else if (p.poly || p.r || p.circle) panelPath(c, p, ox, oy, k); else c.rect(x + .5, y + .5, w - 1, h - 1);
+    c.setLineDash(p.key === selKey ? [] : [3, 3]); c.lineWidth = p.key === selKey ? 2.5 : 1; c.strokeStyle = p.key === selKey ? accentCss : 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]);
+  }
+  if (!n.part) cutNetWindow(c, o, ox, k, oy);
+  // a film's safe zone: 4 mm in from the cut
+  if (n.tray?.safe) { c.beginPath(); n.tray.safe.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.closePath(); c.setLineDash([3, 3]); c.lineWidth = 1; c.strokeStyle = 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]); }
+  for (const p of n.panels) for (const l of p.creases || []) { c.beginPath(); c.moveTo(ox + l[0] * k, oy + l[1] * k); c.lineTo(ox + l[2] * k, oy + l[3] * k); c.setLineDash([4, 3]); c.strokeStyle = 'rgba(230,0,126,.7)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]); }
+  for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.fillStyle = o.board || '#ffffff'; c.fill(); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke();
+    if (t.glue) { c.beginPath(); t.glue.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.fillStyle = 'rgba(243,146,0,.25)'; c.fill(); }
+    for (const l of t.creases || []) { c.beginPath(); c.moveTo(ox + l[0] * k, oy + l[1] * k); c.lineTo(ox + l[2] * k, oy + l[3] * k); c.setLineDash([4, 3]); c.strokeStyle = 'rgba(230,0,126,.7)'; c.stroke(); c.setLineDash([]); }
+  }
+  for (const l of n.slots || []) { c.beginPath(); c.moveTo(ox + l[0] * k, oy + l[1] * k); c.lineTo(ox + l[2] * k, oy + l[3] * k); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1.2; c.stroke(); }
+  for (const p of n.panels) for (const hl of p.holes || []) {
+    c.save(); c.beginPath(); hl.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.closePath();
+    c.globalCompositeOperation = 'destination-out'; c.fill(); c.restore();
+    c.beginPath(); hl.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.closePath(); c.setLineDash([3, 3]); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]);
+  }
+  const ws = n.part ? [] : netWindows(o, n), line = (pts, dash) => { c.beginPath(); pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.setLineDash(dash); c.stroke(); c.setLineDash([]); };
+  c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1;
+  for (const q of ws) if (!(ws.leafCut && q.lid)) { netWindowPath(c, q, ox, k, oy); c.stroke(); }
+  // the handle cut out of the lid: its leaves lie in the openings, creased to the bridge
+  if (ws.leafCut) {
+    for (const l of ws.leafCut.cuts) line(l, []);
+    c.strokeStyle = 'rgba(230,0,126,.8)'; for (const [a, b, x2, y2] of ws.leafCut.creases) line([[a, b], [x2, y2]], [4, 3]);
+  }
+}
 function drawNet() {
   const o = activeObj(); const dpr = Math.min(devicePixelRatio || 1, 2);
   const cw = netC.clientWidth || 300, st = o && activeSticker();
@@ -87,44 +130,7 @@ function drawNet() {
   const n = viewNet(o), pad = 8, k = (cw - pad * 2) / n.W, ch = Math.round(n.H * k + pad * 2);
   if (netC.width !== cw * dpr || netC.height !== ch * dpr) { netC.width = cw * dpr; netC.height = ch * dpr; netC.style.height = ch + 'px'; }
   const c = nctx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, cw, ch);
-  const rt = RT.get(o.id);
-  const accentCss = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
-  for (const p of n.panels) {
-    const x = pad + p.x * k, y = pad + p.y * k, w = p.w * k, h = p.h * k, fc = rt?.faces[p.key]?.canvas;
-    c.save(); c.beginPath(); panelPath(c, p, pad, pad, k); c.clip();
-    if (fc) drawNetPanel(c, fc, p, x, y, w, h, cropPx(fc, p)); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
-    else if (p.blank) { c.fillStyle = 'rgba(120,110,95,.14)'; c.fillRect(x, y, w, h); }
-    c.restore();
-    c.beginPath();
-    if (p.fan) {
-      fanOutline(p.fan).forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](x + X * k, y + Y * k)); c.closePath();
-      const [ax, ay] = fanXY(p.fan, 0, 0), [bx, by] = fanXY(p.fan, 0, 1);   // seam: glue overlap to the left
-      c.save(); c.setLineDash([2, 2]); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; const q = new Path2D(); q.moveTo(x + ax * k, y + ay * k); q.lineTo(x + bx * k, y + by * k); c.stroke(q); c.restore();
-    } else if (p.poly || p.r || p.circle) panelPath(c, p, pad, pad, k); else c.rect(x + .5, y + .5, w - 1, h - 1);
-    c.setLineDash(p.key === sel.face ? [] : [3, 3]); c.lineWidth = p.key === sel.face ? 2.5 : 1; c.strokeStyle = p.key === sel.face ? accentCss : 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]);
-  }
-  if (!n.part) cutNetWindow(c, o, pad, k);
-  // a film's safe zone: 4 mm in from the cut
-  if (n.tray?.safe) { c.beginPath(); n.tray.safe.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.closePath(); c.setLineDash([3, 3]); c.lineWidth = 1; c.strokeStyle = 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]); }
-  for (const p of n.panels) for (const l of p.creases || []) { c.beginPath(); c.moveTo(pad + l[0] * k, pad + l[1] * k); c.lineTo(pad + l[2] * k, pad + l[3] * k); c.setLineDash([4, 3]); c.strokeStyle = 'rgba(230,0,126,.7)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]); }
-  for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.fillStyle = o.board || '#ffffff'; c.fill(); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke();
-    if (t.glue) { c.beginPath(); t.glue.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.fillStyle = 'rgba(243,146,0,.25)'; c.fill(); }
-    for (const l of t.creases || []) { c.beginPath(); c.moveTo(pad + l[0] * k, pad + l[1] * k); c.lineTo(pad + l[2] * k, pad + l[3] * k); c.setLineDash([4, 3]); c.strokeStyle = 'rgba(230,0,126,.7)'; c.stroke(); c.setLineDash([]); }
-  }
-  for (const l of n.slots || []) { c.beginPath(); c.moveTo(pad + l[0] * k, pad + l[1] * k); c.lineTo(pad + l[2] * k, pad + l[3] * k); c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1.2; c.stroke(); }
-  for (const p of n.panels) for (const hl of p.holes || []) {
-    c.save(); c.beginPath(); hl.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.closePath();
-    c.globalCompositeOperation = 'destination-out'; c.fill(); c.restore();
-    c.beginPath(); hl.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.closePath(); c.setLineDash([3, 3]); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]);
-  }
-  const ws = n.part ? [] : netWindows(o, n), line = (pts, dash) => { c.beginPath(); pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](pad + X * k, pad + Y * k)); c.setLineDash(dash); c.stroke(); c.setLineDash([]); };
-  c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1;
-  for (const q of ws) if (!(ws.leafCut && q.lid)) { netWindowPath(c, q, pad, k); c.stroke(); }
-  // the handle cut out of the lid: its leaves lie in the openings, creased to the bridge
-  if (ws.leafCut) {
-    for (const l of ws.leafCut.cuts) line(l, []);
-    c.strokeStyle = 'rgba(230,0,126,.8)'; for (const [a, b, x2, y2] of ws.leafCut.creases) line([[a, b], [x2, y2]], [4, 3]);
-  }
+  paintNet(c, o, n, { ox: pad, k });
   netGeom = { n, k, pad };
 }
 
@@ -137,4 +143,4 @@ function initNetView() {
   });
 }
 
-export { drawNet, initNetView, panelPath, viewNet };
+export { drawNet, inPanel, initNetView, paintNet, panelPath, viewNet };

@@ -5,6 +5,7 @@
   --fg:#1c1b19; --muted:#6c675e; --accent:#0a7aa1; --accent-fg:#ffffff; --accent-soft:#d6ecf3;
   --danger:#b8461b; --ok:#2e7a4b; --warn:#a86a00;
   --checker-a:#ffffff; --checker-b:#e4e0d8; --shadow:0 10px 30px rgba(40,32,20,.16);
+  --seg-track:#e8e5df; --seg-pill:#ffffff; --seg-lift:0 1px 2px rgba(40,32,20,.2),0 0 0 .5px rgba(40,32,20,.08);
   --ui:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
   --display:"Unbounded","Onest",system-ui,sans-serif;
@@ -16,6 +17,7 @@
   --fg:#ece8e1; --muted:#9b958a; --accent:#45b9df; --accent-fg:#0b1d24; --accent-soft:#16323c;
   --danger:#ef8a5f; --ok:#6cc58e; --warn:#e2ac45;
   --checker-a:#2a2926; --checker-b:#201f1d; --shadow:0 10px 30px rgba(0,0,0,.5); --k:#ece8e1;
+  --seg-track:#2b2a27; --seg-pill:#47453f; --seg-lift:0 1px 2px rgba(0,0,0,.5),0 0 0 .5px rgba(255,255,255,.06);
   color-scheme:dark;
 }}
 :root[data-theme="dark"]{
@@ -23,6 +25,7 @@
   --fg:#ece8e1; --muted:#9b958a; --accent:#45b9df; --accent-fg:#0b1d24; --accent-soft:#16323c;
   --danger:#ef8a5f; --ok:#6cc58e; --warn:#e2ac45;
   --checker-a:#2a2926; --checker-b:#201f1d; --shadow:0 10px 30px rgba(0,0,0,.5); --k:#ece8e1;
+  --seg-track:#2b2a27; --seg-pill:#47453f; --seg-lift:0 1px 2px rgba(0,0,0,.5),0 0 0 .5px rgba(255,255,255,.06);
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -33,7 +36,18 @@ button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
 .app{display:grid;grid-template-columns:76px var(--side-w,300px) minmax(0,1fr) var(--prop-w,340px);grid-template-rows:auto minmax(0,1fr);height:100%}
-.topbar{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;position:relative;z-index:5}
+.topbar{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:10px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:relative;z-index:5}
+/* the title and history on the left, the mode in the middle (really centred: both sides are 1fr), view and export on the right */
+.tb-left,.tb-right{display:flex;align-items:center;gap:10px;min-width:0}
+.tb-right{justify-content:flex-end}
+.tb-left .tb-group,.tb-right .tb-group{flex:none;flex-wrap:nowrap}   /* the title gives way (it is shortened), the buttons keep their row */
+.tb-mid{justify-self:center}
+/* «2D | 2D + 3D | 3D»: a light track with the picked mode as a raised pill */
+.mode-seg{display:inline-flex;gap:2px;padding:3px;border-radius:10px;background:var(--seg-track)}
+.mode-seg button{height:24px;padding:0 12px;border:0;border-radius:7.5px;background:transparent;color:var(--muted);font:600 12.5px/1 var(--ui);cursor:pointer;white-space:nowrap;transition:background .12s,color .12s}
+.mode-seg button:hover{color:var(--fg)}
+.mode-seg button[aria-checked=true]{background:var(--seg-pill);color:var(--fg);box-shadow:var(--seg-lift)}
+.mode-seg button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .brand{display:flex;align-items:center;gap:10px;min-width:0}
 .tb-group.hist{margin-right:auto}
 .proj-name{font-weight:600;font-size:13.5px;max-width:min(36vw,360px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:3px 6px;border-radius:5px;cursor:default;border:1px solid transparent}
@@ -182,7 +196,33 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .obj.drop-into{border-color:var(--accent);border-style:dashed}
 
 /* stage */
-.stage{position:relative;min-width:0;min-height:0;overflow:hidden}
+.work{position:relative;display:flex;min-width:0;min-height:0;overflow:hidden}
+.stage{position:relative;flex:1 1 0;min-width:0;min-height:0;overflow:hidden}
+.face-hi{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+/* the net beside the 3D view («2D + 3D»), or alone («2D»); in «3D» it is not there */
+.netpane{position:relative;flex:0 0 var(--net-w,50%);min-width:160px;max-width:calc(100% - 160px);overflow:hidden;background:var(--bg);touch-action:none;user-select:none;-webkit-user-select:none}
+.netpane canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#netTop{pointer-events:none}
+.np-cap{position:absolute;left:12px;top:10px;max-width:calc(100% - 24px);padding:3px 10px;border-radius:999px;font-size:11.5px;color:var(--muted);background:color-mix(in srgb,var(--panel) 88%,transparent);border:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.np-zoom{position:absolute;left:12px;bottom:12px;display:flex;gap:2px;padding:4px;background:color-mix(in srgb,var(--panel) 94%,transparent);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+.np-b{all:unset;box-sizing:border-box;display:grid;place-items:center;min-width:30px;height:30px;border-radius:7px;color:var(--fg);cursor:pointer;font-size:16px;line-height:1}
+.np-b.pct{min-width:54px;font:12px var(--mono)}
+.np-b svg{width:17px;height:17px}
+.np-b:hover{background:var(--field)}
+.np-b:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+@media (pointer:coarse){.np-b{min-width:40px;height:40px}.np-b.pct{min-width:60px}}
+.np-empty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:max-content;max-width:calc(100% - 48px);display:flex;flex-direction:column;align-items:center;gap:10px;background:var(--panel)}
+.split-grip{position:relative;flex:none;width:1px;background:var(--line);cursor:col-resize;z-index:4;touch-action:none}
+.split-grip::before{content:"";position:absolute;top:0;bottom:0;left:-5px;right:-5px}
+.split-grip::after{content:"";position:absolute;top:0;bottom:0;left:-1px;width:3px;background:transparent;transition:background .12s}
+.split-grip:hover::after,.split-grip.drag::after,.split-grip:focus-visible::after{background:var(--accent)}
+.split-grip:focus-visible{outline:none}
+.app[data-view="3d"] .netpane,.app:not([data-view="split"]) .split-grip{display:none}
+.app[data-view="split"] .stage{min-width:160px}
+/* «2D»: the 3D view is not drawn, but keeps its size (hidden, not removed), so the scene's picture still has its frame */
+.app[data-view="2d"] .stage{position:absolute;inset:0;visibility:hidden;pointer-events:none}
+.app[data-view="2d"] .netpane{flex:1 1 auto;max-width:none}
+.app[data-view="2d"] #views{display:none}
 #viewport{position:absolute;inset:0}
 #viewport canvas{display:block;width:100%;height:100%;touch-action:none}
 .stage.checker{background-color:var(--checker-a);background-image:linear-gradient(45deg,var(--checker-b) 25%,transparent 25%,transparent 75%,var(--checker-b) 75%),linear-gradient(45deg,var(--checker-b) 25%,transparent 25%,transparent 75%,var(--checker-b) 75%);background-size:20px 20px;background-position:0 0,10px 10px}
@@ -345,7 +385,7 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 
 @media (max-width:1100px){.app{grid-template-columns:64px var(--side-w,250px) minmax(0,1fr) var(--prop-w,300px)}}
 /* the panels' widths: dragged at their inner edge (ui/panels.js); the left one can be hidden, the rail stays */
-.rail{grid-area:2/1}.panel.side{grid-area:2/2}.stage{grid-area:2/3}.panel.props{grid-area:2/4}
+.rail{grid-area:2/1}.panel.side{grid-area:2/2}.work{grid-area:2/3}.panel.props{grid-area:2/4}
 .pane-grip{grid-row:2;width:9px;z-index:4;cursor:col-resize;position:relative;touch-action:none}
 .pane-grip.side{grid-column:2;justify-self:end;margin-right:-5px}
 .pane-grip.props{grid-column:4;justify-self:start;margin-left:-5px}
@@ -360,7 +400,7 @@ body.pane-drag{cursor:col-resize;user-select:none}
 @media (max-width:860px){
   html,body{height:auto}
   .app{display:flex;flex-direction:column;height:auto}
-  .stage{height:62vh;min-height:360px;order:1}
+  .work{height:62vh;min-height:360px;order:1}
   .rail{order:4;flex-direction:row;overflow-x:auto;border:0;border-top:1px solid var(--line);padding:4px}
   .rail-btn{flex:1 0 64px}
   .panel.props{order:3;border:0;border-top:1px solid var(--line)}
@@ -369,6 +409,14 @@ body.pane-drag{cursor:col-resize;user-select:none}
   .stage-hint{display:none}
   .brand small{display:none}
   .tb-sep{display:none}
+  /* the top bar wraps: title and history, then the view and the mode (2D | 3D only), then export */
+  .topbar{display:flex;flex-wrap:wrap}
+  .tb-left,.tb-mid,.tb-right{display:contents}
+  .tb-group.views{order:1}
+  .mode-seg{order:2;margin-left:auto}
+  .mode-seg button{height:32px;padding:0 16px}
+  .mode-seg button[data-v=split]{display:none}
+  .tb-group.main{order:3}
   .tb-group.main{width:100%}
   .tb-group.main .btn{flex:1 1 auto;padding:0 8px}
   .menu{left:16px;right:16px;width:auto}

@@ -14,6 +14,9 @@ import { renderStickers } from '../ui/stickers-panel.js';
 import { renderLibrary } from '../ui/library-panel.js';
 import { drawEditor } from '../ui/face-editor.js';
 import { drawNet } from '../net/net-view.js';
+import { drawNetStage } from '../net/net-stage.js';
+import { show3D } from '../ui/view-mode.js';
+import { syncFaceHi } from './face-hi.js';
 import { syncRings } from './move.js';
 import { syncSelBox } from './sel-box.js';
 import { syncCtxBar } from '../ui/context-bar.js';
@@ -266,7 +269,11 @@ function initCamera() {
   controls.addEventListener('change', () => { if (userDrag) setViewName('custom'); });
   // a handler may change materials or the scene directly: draw after any input
   // (input outside the 3D view may change the scene in ways the parts do not report: its shadow is drawn anew)
-  for (const t of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'click', 'drop', 'paste']) addEventListener(t, e => { invalidate(); if (e.target !== renderer.domElement) staleShadow(); }, { capture: true, passive: true });
+  for (const t of ['pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'input', 'change', 'click', 'drop', 'paste']) addEventListener(t, e => {
+    // working on the net (zoom, pan, hover) does not change the 3D view: its refined picture stays
+    if ((e.type === 'wheel' || e.type.startsWith('pointer')) && e.target.closest?.('#netPane')) return;
+    invalidate(); if (e.target !== renderer.domElement) staleShadow();
+  }, { capture: true, passive: true });
   renderer.domElement.addEventListener('pointermove', () => invalidate(), { passive: true });
   let lastNow = 0, wasMoving = false, lastDraw = 0;
   renderer.setAnimationLoop(now => {
@@ -311,14 +318,17 @@ function initCamera() {
     if (painting && !changed && (!dirtyFaces.size || now - lastDraw > PAINT_DRAW_MS)) changed = true;
     wasMoving = moving;
     // the frame waits (the last one stays on screen) while the programs it needs are built in the background
+    // in «2D» the 3D view is hidden: nothing is drawn (the faces are still painted, the net needs them)
+    const live = show3D();
+    if (!live) changed = false;
     if (changed && !shadersReady(now)) { changed = false; invalidate(); }
     // «Рендер» (scene/render-mode.js): a frame that changed is drawn quickly; a still one adds a sample to the refined picture
-    const studio = studioActive(), refining = !!studio && !changed && studio.pending();
+    const studio = studioActive(), refining = live && !!studio && !changed && studio.pending();
     if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) { fitShadowToView(); renderer.shadowMap.needsUpdate = true; } if (studio) studio.frame(true); else renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
     else if (refining) { studio.frame(false); drawSelLook(); }
-    syncRenderChip(studio); syncCtxBar(changed); syncStageHint(); syncIsolationPlate();
+    syncRenderChip(studio); syncCtxBar(changed); syncStageHint(); syncIsolationPlate(); syncFaceHi();
     if (ui.editor) { ui.editor = false; drawEditor(); }
-    if (ui.net) { ui.net = false; drawNet(); }
+    if (ui.net) { ui.net = false; drawNet(); drawNetStage(); }
     if (ui.layers) { ui.layers = false; renderLayers(); }
     if (ui.stickers) { ui.stickers = false; renderStickers(); }
     if (ui.lib) { ui.lib = false; renderLibrary(); }

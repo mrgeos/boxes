@@ -9,6 +9,7 @@ import { invalidate, recording } from './camera.js';
 import { pick } from './interaction.js';
 import { isShown } from './isolation.js';
 import { tool } from '../ui/action-bar.js';
+import { notePickHover } from './face-hi.js';
 
 /* The selected object gets a two-tone outline round its silhouette and a faint plate on the floor; the object under
    the pointer gets a pale outline and a label with its name and size. The outline is drawn after the scene: the
@@ -155,10 +156,10 @@ function initSelLook() {
   cvs.addEventListener('pointermove', e => {
     if (e.pointerType === 'touch' || e.buttons) return;
     lx = e.clientX; ly = e.clientY; if (pend) return; pend = true;
-    requestAnimationFrame(() => { pend = false; setHover(pick(lx, ly)?.objId || null); });
+    requestAnimationFrame(() => { pend = false; const h = pick(lx, ly); setHover(h?.objId || null); notePickHover(h); });
   });
-  cvs.addEventListener('pointerdown', () => setHover(null));
-  cvs.addEventListener('pointerleave', () => setHover(null));
+  cvs.addEventListener('pointerdown', () => { setHover(null); notePickHover(null); });
+  cvs.addEventListener('pointerleave', () => { setHover(null); notePickHover(null); });
 }
 
 const selLookShown = () => holder.visible;
