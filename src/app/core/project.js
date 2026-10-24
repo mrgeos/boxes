@@ -130,20 +130,22 @@ function renameProject(name) {
   const n = String(name || '').trim().slice(0, 120); if (!n || n === state.name) return false;
   state.name = n; paintProjectName(); commit(); return true;
 }
-/* ---------- file saving (viewer download capability, with a plain fallback) ---------- */
+/* ---------- file saving (viewer download capability, with a plain fallback) ----------
+   true when the file was handed over. The page of claude.ai saves only some types (png svg pdf txt zip … but no dxf):
+   what else must go in an archive (export/zip.js). */
 let dlNS;
 async function saveFile(filename, blob) {
   if (window.claude?.use) {
     if (dlNS === undefined) { try { dlNS = await window.claude.use('downloads'); } catch { dlNS = null; } }
     if (dlNS) {
-      try { await dlNS.save({ filename, data: blob }); toast(`Сохранено: ${filename}`); }
-      catch (e) { if (e?.code !== 'declined') toast(`Не удалось сохранить файл (${e?.code || 'ошибка'})`); }
-      return;
+      try { await dlNS.save({ filename, data: blob }); toast(`Сохранено: ${filename}`); return true; }
+      catch (e) { if (e?.code !== 'declined') toast(`Не удалось сохранить файл (${e?.code || 'ошибка'})`); return false; }
     }
   }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   toast(`Сохранено: ${filename}`);
+  return true;
 }
 async function addFontFile(file) {
   const name = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim().slice(0, 40) || 'Мой шрифт';

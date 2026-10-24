@@ -56,12 +56,13 @@ function growPath(c, p, g, ox, oy, k) {
   else c.rect(x - g, y - g, w + 2 * g, h + 2 * g);
 }
 /* The bleed of the net's printed panels under what is drawn after it: the sheet's corner at (ox, oy) px, k px per mm, the
-   bleed b mm. `line`: a colour to draw the bleed's edge in (the screen's overlay; a file has none) */
-function paintBleed(c, o, n, ox, oy, k, b = BLEED_MM, line = null) {
+   bleed b mm. `line`: a colour to draw the bleed's edge in (the screen's overlay; a file has none). `canvasOf(p)`: the picture of
+   a panel's face where it is not the one on the model (a print at its own resolution) */
+function paintBleed(c, o, n, ox, oy, k, b = BLEED_MM, line = null, canvasOf = null) {
   const rt = RT.get(o.id), g = b * k;
   for (const p of n.panels) {
     if (p.fan) continue;
-    const f = rt?.faces[p.key], fc = f?.canvas;
+    const fc = canvasOf ? canvasOf(p) : rt?.faces[p.key]?.canvas;
     if (!fc && !p.fold) continue;
     if (rectLike(p) && fc?.width) {
       const bp = Math.max(1, Math.round(b * fc.width / faceMM(o, p.key)[0]));
@@ -166,4 +167,4 @@ function printSheet(o, bleed = 0, n = netLayout(o)) {
   return { n, bleed: b, ox: b, oy: b, W: n.W + 2 * b, H: n.H + 2 * b };
 }
 
-export { bleedLoops, bleeds, growPath, offsetPoly, paintBleed, printSheet, rectLike };
+export { bleedLoops, bleeds, grownPoly, growPath, offsetPoly, paintBleed, printSheet, rectLike };

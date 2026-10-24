@@ -255,10 +255,13 @@ function textIndexAt(L, W, H, px, py) {
   for (let c = 0; c <= spots[l].ln.length; c++) { const d = Math.abs(spots[l].x + mctx.measureText(spots[l].ln.slice(0, c)).width - lx); if (d < bd) { bd = d; best = c; } }
   return m.lines.slice(0, l).reduce((t, s) => t + s.length + 1, 0) + best;
 }
-function renderFace(o, k) {
+/* The face's picture. `target` ({ canvas, ctx, ppm } of a canvas of any size, ppm: px per mm): paints the print there
+   instead, as the face looks on the sheet, and does nothing else (no texture, no 3D material): what the print files of
+   a large sheet are made of (export/pdf.js). */
+function renderFace(o, k, target = null) {
   const rt = RT.get(o.id), st = stickerOfKey(o, k); if (!rt || !(st?.design || faceKeys(o).includes(k))) return;
-  const f = ensureFaceRT(o, k), face = o.faces[k], ctx = f.ctx;
-  f.mat.visible = true;   // (a clear face waits hidden for its picture)
+  const f = target || ensureFaceRT(o, k), face = o.faces[k], ctx = f.ctx;
+  if (f.mat) f.mat.visible = true;   // (a clear face waits hidden for its picture)
   const W = f.canvas.width, H = f.canvas.height;
   // print on a clear PET lid: no board colour, paper grain or kraft, only the layers
   const clear = f.clear = isClearFace(o, k);
@@ -353,6 +356,7 @@ function renderFace(o, k) {
     if (film) stickerShadow(ctx, st, ppx); else drawSticker(ctx, st, ppx, true, rt.faces['st:' + st.id]?.canvas);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (target) return;
   f.tex.needsUpdate = true;
   // a sticker's design is cut to its shape and laid on the model as its film (stickers/film.js), drawn again now
   if (st) { const L = rt.stickerLook?.get(st.id); if (L) L.key = ''; stickerDirty.add(o.id); return; }

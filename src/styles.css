@@ -660,3 +660,6 @@ body.pane-drag{cursor:col-resize;user-select:none}
 .imp-prev svg{display:block;width:100%;max-width:260px;height:auto;max-height:240px}
 .sec #impNote:empty{display:none}
 @media (pointer:coarse){.imp-row{min-height:44px}}
+.menu .np-ready{align-self:flex-start}
+.menu{max-height:calc(100dvh - 64px);overflow:auto}
+@media (max-width:860px){.menu{max-height:calc(100dvh - 130px)}}

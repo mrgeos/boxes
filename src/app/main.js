@@ -48,6 +48,9 @@ import { initWiring } from './ui/wiring.js';
 import { initImposePanel } from './ui/impose-panel.js';
 import { SHEETS, fitPiece, imposition, pieceOf } from './net/impose.js';
 import { bleedLoops, printSheet } from './net/bleed.js';
+import { dielineData } from './net/dieline.js';
+import { dielineDXF } from './export/dxf.js';
+import { printPDF } from './export/pdf.js';
 import { printCanvas, templateSVG } from './net/template.js';
 import { initObjectList } from './ui/object-list.js';
 import { initObjectThumbs } from './ui/object-thumbs.js';
@@ -85,5 +88,5 @@ if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
 libLoadBrowser(); loadMyModels();
 initProjects();
-window.__boxStudio = { templateSVG, printCanvas, bleedLoops, printSheet, imposition, fitPiece, pieceOf, SHEETS, setViewMode, viewMode, setNetOverlay, netOverlay, netLabelRects: labelRects, printIssues, netPanelRects: panelRects, netView, hover, netHandles, library, state, sel, select, pick, stickerHit, boxOnScreen, handleAt, setView, faceMM, footprint, pendingFaces: () => dirtyFaces.size,
+window.__boxStudio = { dielineData, dielineDXF, printPDF, templateSVG, printCanvas, bleedLoops, printSheet, imposition, fitPiece, pieceOf, SHEETS, setViewMode, viewMode, setNetOverlay, netOverlay, netLabelRects: labelRects, printIssues, netPanelRects: panelRects, netView, hover, netHandles, library, state, sel, select, pick, stickerHit, boxOnScreen, handleAt, setView, faceMM, footprint, pendingFaces: () => dirtyFaces.size,
   sleeveHoles: o => { const D = sleeveDims(o); return sleeveSheet(D).holes.map(h => h.reduce((a, p) => a + p[1], 0) / h.length / D.P); }, sleeveFold: o => { const D = sleeveDims(o); return D.s0 / D.P; }, RT, camera, THREE, renderer, setRender, setIsolation, exitIsolation, toggleIsolation, isolation, isShown, sceneBounds, scene, applyScene, markObj, rebuildQueue, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };

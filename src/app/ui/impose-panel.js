@@ -4,13 +4,14 @@ import { activeObj, sel } from '../core/state.js';
 import { activeSticker } from '../stickers/placement.js';
 import { ui } from '../scene/renderer.js';
 import { SHEETS, fitPiece, pieceOf } from '../net/impose.js';
+import { exportSheetPDF } from '../export/print-files.js';
 
 /* The three numbers and the picked sheet are this browser's choice (like the net's overlays). The table is the pure
    `fitPiece` (net/impose.js) for every sheet; this file only draws it. It is drawn again only when what it shows
    changes: the loop asks for it with every redraw of the net. */
 const KEY = 'bs3d-impose', DEF = { gap: 6, grip: 12, margin: 5 }, P = { ...DEF, sheet: null };
 const FIELDS = { impGap: ['gap', 0, 60], impGrip: ['grip', 0, 60], impMargin: ['margin', 0, 30] };
-let sig = '';
+let sig = '', shown = null;   // shown: the layout the table has picked
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
@@ -48,7 +49,7 @@ function rowHTML(r, on) {
 function drawImpose() {
   const sec = $('#impSec'), o = activeObj(), piece = o && !activeSticker() ? pieceOf(o, sel.part || null) : null;
   sec.classList.toggle('imp-off', !piece);
-  if (!piece || sec.hidden) { if (!piece) sig = ''; return; }
+  if (!piece || sec.hidden) { if (!piece) { sig = ''; shown = null; } return; }
   const key = JSON.stringify([o.id, sel.part, +piece.w.toFixed(2), +piece.h.toFixed(2), P]);
   if (key === sig) return;
   sig = key;
@@ -57,7 +58,7 @@ function drawImpose() {
   $('#impSize').textContent = `${fmt(piece.w, 1)} × ${fmt(piece.h, 1)} мм`;
   $('#impRows').innerHTML = rows.map(r => rowHTML(r, r === pick)).join('');
   $('#impPrev').innerHTML = pick.count ? sheetSVG(pick) : '';
-  $('#impPrev').hidden = !pick.count;
+  $('#impPrev').hidden = !pick.count; shown = pick.count ? pick : null; $('#impPdfBtn').hidden = !shown;
   $('#impNote').textContent = rows.some(r => r.count) ? '' : 'Заготовка больше самого большого листа в таблице.';
 }
 
@@ -71,6 +72,7 @@ function initImposePanel() {
       el.value = P[k]; save(); ui.net = true;
     };
   }
+  $('#impPdfBtn').onclick = () => shown && exportSheetPDF(shown);
   $('#impRows').addEventListener('click', e => {
     const b = e.target.closest('.imp-row'); if (!b) return;
     P.sheet = b.dataset.id; save(); ui.net = true;

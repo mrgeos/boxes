@@ -19,6 +19,7 @@ import { addLayer, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProp
 import { renderStickers } from './stickers-panel.js';
 import { renderLibrary } from './library-panel.js';
 import { exportPNG, exportVideo, setPngScale } from '../export/image.js';
+import { initPrintMenu } from './print-menu.js';
 import { exportBleed, exportFlat, exportTemplate, loadExportBleed, setExportBleed } from '../net/template.js';
 import { sampleProject } from '../core/sample.js';
 import { newModelObject } from '../carriers/model-object.js';
@@ -88,7 +89,7 @@ function initWiring() {
   };
   $('#dielineOffBtn').onclick = () => { const o = activeObj(); if (!o) return; o.dieline = null; o.netV = 2; markObj(o); ui.net = true; renderFacePanel(); commit(); };
   // the bleed switch (in the export menu and in the net's section): one choice, kept for the next visit
-  loadExportBleed();
+  loadExportBleed(); initPrintMenu(closeMenu);
   $$('.bleedOn').forEach(b => { b.checked = exportBleed(); b.onchange = () => { setExportBleed(b.checked); $$('.bleedOn').forEach(x => { x.checked = b.checked; }); }; });
   $('#tplBtn').onclick = $('#tplBtn2').onclick = () => { closeMenu(); exportTemplate(); };
   $('#flatBtn').onclick = $('#flatBtn2').onclick = () => { closeMenu(); exportFlat(); };
