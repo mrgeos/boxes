@@ -34,6 +34,7 @@ import { initFaceEditor } from './ui/face-editor.js';
 import { initNetView } from './net/net-view.js';
 import { initNetStage, netView, panelRects } from './net/net-stage.js';
 import { hover } from './core/hover.js';
+import { netHandles } from './net/net-edit.js';
 import { initFaceHi } from './scene/face-hi.js';
 import { initViewMode, setViewMode, viewMode } from './ui/view-mode.js';
 import { initInteraction, pick, stickerHit } from './scene/interaction.js';
@@ -78,5 +79,5 @@ if (!booted) loadProject(sampleProject());
 document.fonts?.ready.then(() => markAllText());
 libLoadBrowser(); loadMyModels();
 initProjects();
-window.__boxStudio = { setViewMode, viewMode, netPanelRects: panelRects, netView, hover, library, state, sel, select, pick, stickerHit, boxOnScreen, handleAt, setView, faceMM, footprint, pendingFaces: () => dirtyFaces.size,
+window.__boxStudio = { setViewMode, viewMode, netPanelRects: panelRects, netView, hover, netHandles, library, state, sel, select, pick, stickerHit, boxOnScreen, handleAt, setView, faceMM, footprint, pendingFaces: () => dirtyFaces.size,
   sleeveHoles: o => { const D = sleeveDims(o); return sleeveSheet(D).holes.map(h => h.reduce((a, p) => a + p[1], 0) / h.length / D.P); }, sleeveFold: o => { const D = sleeveDims(o); return D.s0 / D.P; }, RT, camera, THREE, renderer, setRender, setIsolation, exitIsolation, toggleIsolation, isolation, isShown, sceneBounds, scene, applyScene, markObj, rebuildQueue, controlsTarget: () => controls.target, placementsFor, __bsf: o => { buildStickerFilms(o); invalidate(); } };

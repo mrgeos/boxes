@@ -12,6 +12,7 @@ import { deleteLayers, setLayerSelection, setText } from '../core/layers.js';
 import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
 import { ed, edPoint, edState, hitLayer } from './face-editor.js';
+import { netFacePoint, netQuad } from '../net/net-edit.js';
 import { renderFaceTabs, renderLayerProps, renderLayers } from './face-panel.js';
 
 /* The keys go into a textarea laid over the text layer (in perspective, CSS matrix3d, onto where the layer is on
@@ -33,6 +34,7 @@ function squareToQuad([[x0, y0], [x1, y1], [x2, y2], [x3, y3]]) {
 function quad() {
   const { o, k, L, where } = cur;
   if (where === '3d') return boxOnScreen();
+  if (where === 'net') return netQuad(L);
   const r = ed.getBoundingClientRect(), PAD = (r.width - edState.dw) / 2, [W, H] = facePx(o, k), [w, h] = layerBox(L, W, H), s = edState.k;
   const a = (L.rot || 0) * DEG, cs = Math.cos(a), sn = Math.sin(a), cx = r.left + PAD + L.x * W * s, cy = r.top + PAD + L.y * H * s;
   return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => { const x = sx * w * s / 2, y = sy * h * s / 2; return [cx + x * cs - y * sn, cy + x * sn + y * cs]; });
@@ -110,7 +112,7 @@ function initTextEdit() {
     cur.drag = { anchor, target: e.currentTarget }; e.currentTarget.setPointerCapture(e.pointerId);
     ta.setSelectionRange(Math.min(anchor, i), Math.max(anchor, i)); showCaret();
   };
-  for (const [el, where] of [[cvs, '3d'], [ed, '2d']]) {
+  for (const [el, where] of [[cvs, '3d'], [ed, '2d'], [$('#netPane'), 'net']]) {
     el.addEventListener('pointerdown', e => press(e, where), true);
     // the textarea keeps the keyboard while the camera turns
     el.addEventListener('mousedown', e => { if (cur) e.preventDefault(); }, true);
@@ -142,6 +144,7 @@ function indexAt(e, where, any = false) {
   const { o, k, L } = cur, [W, H] = facePx(o, k);
   let p = null;
   if (where === '2d') { const [mx, my] = edPoint(e); p = [mx / edState.k, my / edState.k]; }
+  else if (where === 'net') p = netFacePoint(e);
   else { const h = pick(e.clientX, e.clientY, RT.get(o.id)?.group); if (h?.face === k && h.uv && !h.wall) p = [h.uv.x * W, (1 - h.uv.y) * H]; }
   if (!p || (!any && !hitLayer({ layers: [L] }, W, H, p[0], p[1]))) return null;
   return textIndexAt(L, W, H, p[0], p[1]);

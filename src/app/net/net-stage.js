@@ -8,6 +8,7 @@ import { select } from '../core/selection.js';
 import { hover, onHoverFace, setHoverFace } from '../core/hover.js';
 import { effectiveMode } from '../ui/view-mode.js';
 import { inPanel, paintNet, panelPath, viewNet } from './net-view.js';
+import { drawNetEdit, dropPanel, netCursor, netDouble, netKey, netMove, netPress, netRelease } from './net-edit.js';
 
 /* The net of the active object, big: the panels with the faces' designs, cut and fold lines, windows. Two canvases:
    the base (the sheet, redrawn when a face is repainted or the view moves) and the top (the selected and the hovered
@@ -79,8 +80,12 @@ function paintTop() {
   };
   if (hov && hov !== sel.face) mark(hov, 1.5, .1);
   if (sel.face && keys.includes(sel.face)) mark(sel.face, 2.5, .07);
-  // the name of the picked or hovered panel, over its top left corner
-  const names = [...new Set([sel.face, hov])].filter(k => k && keys.includes(k));
+  // layers being dragged: the panel they would land on
+  const drop = dropPanel();
+  if (drop) { tctx.beginPath(); outline(tctx, drop); tctx.globalAlpha = .2; tctx.fillStyle = accent; tctx.fill(); tctx.globalAlpha = 1; tctx.lineWidth = 3; tctx.strokeStyle = accent; tctx.setLineDash([6, 4]); tctx.stroke(); tctx.setLineDash([]); }
+  drawNetEdit(tctx, dpr);
+  // the name of the picked (while no layer is, it would cover the layer's frame) or hovered panel, over its top left corner
+  const names = [...new Set([sel.layer ? null : sel.face, hov, drop?.key])].filter(k => k && keys.includes(k));
   tctx.font = '600 11.5px Onest, system-ui, sans-serif'; tctx.textBaseline = 'middle';
   for (const key of names) {
     const p = n.panels.find(q => q.key === key); if (!p) continue;
@@ -138,7 +143,7 @@ function panelAt(px, py) {
 function panelRects() {
   if (!geom) return [];
   const r = $('#netPane').getBoundingClientRect(), keys = faceKeys(geom.o);
-  return geom.n.panels.filter(p => keys.includes(p.key)).map(p => ({ key: p.key, x: r.left + V.ox + p.x * V.k, y: r.top + V.oy + p.y * V.k, w: p.w * V.k, h: p.h * V.k }));
+  return geom.n.panels.filter(p => keys.includes(p.key)).map(p => ({ key: p.key, q: p.q ?? (p.rot ? 2 : 0), ang: p.ang, crop: !!p.crop, x: r.left + V.ox + p.x * V.k, y: r.top + V.oy + p.y * V.k, w: p.w * V.k, h: p.h * V.k }));
 }
 
 function initNetStage() {
@@ -153,20 +158,27 @@ function initNetStage() {
     zoomAt(Math.exp(-dy * (e.ctrlKey ? .012 : .0016)), e.clientX - r.left, e.clientY - r.top);
   }, { passive: false });
   // pointers: one drags the sheet (a click that does not move picks a panel), two pinch and move it
-  const pts = new Map(); let drag = null, pinch = null;
+  const pts = new Map(); let drag = null, pinch = null, editing = null, lastTap = null;
   const local = e => { const r = pane.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  pane.setAttribute('tabindex', '0');
   pane.addEventListener('pointerdown', e => {
     if (e.target.closest('#netZoom, #netEmpty')) return;
     pane.setPointerCapture(e.pointerId); pts.set(e.pointerId, local(e));
+    if (e.button === 0 && e.pointerType !== 'touch') pane.focus({ preventScroll: true });
     if (pts.size === 2) {
+      // a second finger: a layer being moved is let go where it is, and the two pinch the sheet
+      if (editing != null) { netRelease(); editing = null; }
       const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 }; drag = null; return;
     }
+    // a press on a layer (or its handles) edits it; anywhere else the sheet is moved
+    if (e.button === 0 && !space && netPress(e, ...local(e))) { editing = e.pointerId; return; }
     if (e.button === 2) return;
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: V.ox, oy: V.oy, moved: false, by: e.button === 1 || space };
     if (e.button === 1) e.preventDefault();
   });
   pane.addEventListener('pointermove', e => {
     if (pts.has(e.pointerId)) pts.set(e.pointerId, local(e));
+    if (editing === e.pointerId) { netMove(e, ...local(e)); return; }
     if (pinch && pts.size >= 2) {
       const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
       V.ox += mx - pinch.mx; V.oy += my - pinch.my; zoomAt(d / pinch.d, mx, my); moved(); pinch.d = d; pinch.mx = mx; pinch.my = my; return;
@@ -177,12 +189,19 @@ function initNetStage() {
       return;
     }
     if (e.pointerType === 'touch') return;
-    const p = panelAt(...local(e)); pane.style.cursor = space ? 'grab' : p ? 'pointer' : '';
+    const p = panelAt(...local(e)), cur = space ? 'grab' : netCursor(e, ...local(e));
+    pane.style.cursor = cur !== 'default' ? cur : p ? 'pointer' : '';
     setHoverFace(geom?.o.id, p?.key);
   });
   const end = e => {
     pts.delete(e.pointerId);
     if (pts.size < 2) pinch = null;
+    // two quick taps of a finger on one spot are a double click
+    if (e.type === 'pointerup' && e.pointerType === 'touch') {
+      const now = performance.now(), [x, y] = local(e);
+      if (lastTap && now - lastTap.t < 400 && Math.hypot(x - lastTap.x, y - lastTap.y) < 30) { lastTap = null; setTimeout(() => netDouble(e, x, y), 0); } else lastTap = { t: now, x, y };
+    }
+    if (editing === e.pointerId) { editing = null; netRelease(); return; }
     if (drag && e.pointerId === drag.id) {
       const d = drag; drag = null; pane.style.cursor = '';
       if (!d.moved && !d.by && e.type === 'pointerup' && e.button === 0) {
@@ -191,6 +210,7 @@ function initNetStage() {
     }
   };
   pane.addEventListener('pointerup', end); pane.addEventListener('pointercancel', end);
+  pane.addEventListener('keydown', netKey);
   pane.addEventListener('pointerleave', () => setHoverFace(null, null));
   pane.addEventListener('pointerenter', () => { over = true; });
   pane.addEventListener('pointerleave', () => { over = false; });
@@ -202,9 +222,16 @@ function initNetStage() {
   $('#nzIn').onclick = () => zoomAt(1.25);
   $('#nzPct').onclick = () => zoomTo(PX_MM);
   $('#nzFit').onclick = () => { fitView(); baseDirty = topDirty = true; schedule(); };
-  pane.addEventListener('dblclick', e => { if (!e.target.closest('#netZoom') && !panelAt(...local(e))) { fitView(); baseDirty = topDirty = true; schedule(); } });
+  pane.addEventListener('dblclick', e => {
+    if (e.target.closest('#netZoom')) return;
+    if (!netDouble(e, ...local(e)) && !panelAt(...local(e))) { fitView(); baseDirty = topDirty = true; schedule(); }
+  });
   refreshNetStage();
   addEventListener('resize', () => { if (shown()) { sizeCanvases(); if (V.fit) fitView(); baseDirty = topDirty = true; schedule(); } });
 }
 
-export { drawNetStage, initNetStage, panelAt, panelRects, refreshNetStage, toSheet, V as netView, zoomAt };
+/* for the layer editor on the sheet (net-edit.js) */
+const netGeom = () => geom;
+const markTop = () => { topDirty = true; schedule(); };
+
+export { drawNetStage, initNetStage, markTop, netGeom, panelAt, panelRects, refreshNetStage, toSheet, V as netView, zoomAt };

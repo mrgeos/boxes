@@ -68,7 +68,6 @@ function drawEditor() {
   c.drawImage(f.canvas, 0, 0, dw, dh);
   c.restore();
   if (stE) stickerVeil(c, stE, dw, dh);
-  const accentCss = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
   if (circle) { c.strokeStyle = 'rgba(0,0,0,.25)'; c.setLineDash([4, 4]); c.beginPath(); c.arc(dw / 2, dh / 2, dw / 2 - .5, 0, Math.PI * 2); c.stroke(); c.setLineDash([]); }
   if (sel.face === 'sleeve' && sleeveOn(o)) {
     // where the band folds round the box, and which side each part ends up on
@@ -139,12 +138,40 @@ function drawEditor() {
     }
     base();
   }
+  // the part of a layer past the face's edge is not printed (unless it runs over the edge or round a ring): hatched red
+  const hatch = (c, L, pts, w, h) => {
+    const ax = loopAxis(o, sel.face);
+    if (!(L.type === 'image' && L.tile) && !(L.wrap && layerReach(o, sel.face, L).length)) {
+      c.save(); c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); c.clip();
+      // hatched: past the face's edge and in its window (but not on the handle's leaves printed there)
+      if (fw) windowPath(c, fw, 0, 0, dw, dh); else c.beginPath();
+      for (const q of fw?.keep || []) { q.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](v.x * dw, v.y * dh)); c.closePath(); }
+      c.rect(-PAD, -PAD, cw, ch);
+      const cr = clipRect(o, sel.face, L, W, H);   // cut to the face or to a panel of the band
+      if (cr) c.rect(cr[0] * k, cr[1] * k, cr[2] * k, cr[3] * k);
+      else if (circle) c.arc(dw / 2, dh / 2, dw / 2, 0, Math.PI * 2, true);
+      else c.rect(ax === 'x' ? -PAD : 0, ax === 'y' ? -PAD : 0, ax === 'x' ? cw : dw, ax === 'y' ? ch : dh);
+      c.clip('evenodd');
+      c.fillStyle = 'rgba(210,69,58,.12)'; c.fillRect(-PAD, -PAD, cw, ch);
+      c.strokeStyle = 'rgba(210,69,58,.7)'; c.lineWidth = 1; c.beginPath();
+      for (let x = -PAD - ch; x < cw; x += 5) { c.moveTo(x, -PAD); c.lineTo(x + ch, -PAD + ch); }
+      c.stroke(); c.restore();
+    }
+  };
+  drawSelection(c, edState, o, { k, W, H, dw, dh, faceT: q => q.setTransform(dpr * k, 0, 0, dpr * k, dpr * PAD, dpr * PAD), hatch });
+}
+
+/* the selection on a surface (the face window, or a panel of the net): guides, the frame drawn with the mouse, the
+   frame of the picked layer or layers with its handles. c is set to the surface's own px (a face px times ctx.k, the
+   face's corner at 0, 0); ctx.faceT(c) sets it to face px. st gets .handles, to hit-test the pointer with */
+function drawSelection(c, st, o, ctx) {
+  const { k, W, H, dw, dh } = ctx, accentCss = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
   // guides
   c.strokeStyle = '#e6007e'; c.lineWidth = 1;
-  for (const g of edState.guides) { c.beginPath(); if (g[0] === 'x') { c.moveTo(g[1] * dw, 0); c.lineTo(g[1] * dw, dh); } else { c.moveTo(0, g[1] * dh); c.lineTo(dw, g[1] * dh); } c.stroke(); }
+  for (const g of st.guides) { c.beginPath(); if (g[0] === 'x') { c.moveTo(g[1] * dw, 0); c.lineTo(g[1] * dw, dh); } else { c.moveTo(0, g[1] * dh); c.lineTo(dw, g[1] * dh); } c.stroke(); }
   // a frame drawn with the mouse over empty space
-  if (edState.marquee) {
-    const [x0, y0, x1, y1] = edState.marquee;
+  if (st.marquee) {
+    const [x0, y0, x1, y1] = st.marquee;
     c.save(); c.fillStyle = 'rgba(10,122,161,.08)'; c.strokeStyle = accentCss; c.lineWidth = 1; c.setLineDash([4, 3]);
     c.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)); c.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)); c.restore();
   }
@@ -164,7 +191,7 @@ function drawEditor() {
     c.fillStyle = '#fff';
     for (const p of pts) { c.beginPath(); c.rect(p[0] - 4, p[1] - 4, 8, 8); c.fill(); c.stroke(); }
     c.beginPath(); c.arc(rh[0], rh[1], 5, 0, Math.PI * 2); c.fill(); c.stroke(); c.restore();
-    edState.handles = { multi: true, corners: pts, rot: rh, center: [cxm, (b[1] + b[3]) / 2] };
+    st.handles = { multi: true, corners: pts, rot: rh, center: [cxm, (b[1] + b[3]) / 2] };
     return;
   }
   const L = activeLayer();
@@ -173,24 +200,7 @@ function drawEditor() {
     const hw = w * k / 2, hh = h * k / 2, cs = Math.cos(a), sn = Math.sin(a);
     const P = (lx, ly) => [cx + lx * cs - ly * sn, cy + lx * sn + ly * cs];
     const pts = [P(-hw, -hh), P(hw, -hh), P(hw, hh), P(-hw, hh)];
-    // the part past the face's edge is not printed (unless it runs over the edge or round a ring): hatched red
-    const ax = loopAxis(o, sel.face);
-    if (!(L.type === 'image' && L.tile) && !(L.wrap && layerReach(o, sel.face, L).length)) {
-      c.save(); c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); c.clip();
-      // hatched: past the face's edge and in its window (but not on the handle's leaves printed there)
-      if (fw) windowPath(c, fw, 0, 0, dw, dh); else c.beginPath();
-      for (const q of fw?.keep || []) { q.forEach((v, i) => c[i ? 'lineTo' : 'moveTo'](v.x * dw, v.y * dh)); c.closePath(); }
-      c.rect(-PAD, -PAD, cw, ch);
-      const cr = clipRect(o, sel.face, L, W, H);   // cut to the face or to a panel of the band
-      if (cr) c.rect(cr[0] * k, cr[1] * k, cr[2] * k, cr[3] * k);
-      else if (circle) c.arc(dw / 2, dh / 2, dw / 2, 0, Math.PI * 2, true);
-      else c.rect(ax === 'x' ? -PAD : 0, ax === 'y' ? -PAD : 0, ax === 'x' ? cw : dw, ax === 'y' ? ch : dh);
-      c.clip('evenodd');
-      c.fillStyle = 'rgba(210,69,58,.12)'; c.fillRect(-PAD, -PAD, cw, ch);
-      c.strokeStyle = 'rgba(210,69,58,.7)'; c.lineWidth = 1; c.beginPath();
-      for (let x = -PAD - ch; x < cw; x += 5) { c.moveTo(x, -PAD); c.lineTo(x + ch, -PAD + ch); }
-      c.stroke(); c.restore();
-    }
+    if (ctx.hatch) ctx.hatch(c, L, pts, w, h);
     const mode = editMode(), er = mode && editRects(mode, L, W, H, [w, h]);
     if (er) {
       // crop or mask mode: what is cut away shows faintly round the frame being edited
@@ -201,7 +211,7 @@ function drawEditor() {
       if (mode === 'mask') { c.save(); c.scale(k, k); maskPath(c, L.mask, w, h); c.restore(); }
       else { c.scale(fx, fy); c.rect(er.inner[0] * k, er.inner[1] * k, (er.inner[2] - er.inner[0]) * k, (er.inner[3] - er.inner[1]) * k); }
       c.clip('evenodd');
-      c.setTransform(dpr * k, 0, 0, dpr * k, dpr * PAD, dpr * PAD);
+      ctx.faceT(c);
       drawLayer(c, mode === 'crop' ? uncropped(L, W, H) : { ...L, mask: null }, W, H, null, .35);
       c.restore();
       c.strokeStyle = accentCss; c.lineWidth = 1; c.setLineDash([4, 3]); poly(outer); c.stroke(); c.setLineDash([]);
@@ -214,17 +224,20 @@ function drawEditor() {
         if (i < 4) c.fillRect(-4.5, -4.5, 9, 9); else if (i % 2) c.fillRect(-2.5, -8, 5, 16); else c.fillRect(-8, -2.5, 16, 5);
         c.restore();
       });
-      edState.handles = { edit: mode, corners: inner, grips: hs, center: [cx, cy], box: [w, h] };
+      st.handles = { edit: mode, corners: inner, grips: hs, center: [cx, cy], box: [w, h] };
       return;
     }
-    c.strokeStyle = accentCss; c.lineWidth = 1.5; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); c.stroke();
+    // where the layer reaches past what is printed (the net: past its panel) the frame is faint and dashed
+    const frame = () => { c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath(); };
+    c.strokeStyle = accentCss; c.lineWidth = 1.5; frame();
+    if (ctx.inside) { c.save(); c.globalAlpha = .5; c.setLineDash([4, 3]); c.stroke(); c.restore(); c.save(); ctx.inside(c); frame(); c.stroke(); c.restore(); } else c.stroke();
     const rh = P(0, -hh - 18); const top = P(0, -hh);
     c.beginPath(); c.moveTo(...top); c.lineTo(...rh); c.stroke();
     c.fillStyle = '#fff';
     for (const p of pts) { c.beginPath(); c.rect(p[0] - 4, p[1] - 4, 8, 8); c.fill(); c.stroke(); }
     c.beginPath(); c.arc(rh[0], rh[1], 5, 0, Math.PI * 2); c.fill(); c.stroke();
-    edState.handles = { corners: pts, rot: rh, center: [cx, cy] };
-  } else edState.handles = null;
+    st.handles = { corners: pts, rot: rh, center: [cx, cy] };
+  } else st.handles = null;
 }
 const inPoly = ([x, y], q) => { let r = false; for (let i = 0, j = q.length - 1; i < q.length; j = i++) if ((q[i][1] > y) !== (q[j][1] > y) && x < (q[j][0] - q[i][0]) * (y - q[i][1]) / (q[j][1] - q[i][1]) + q[i][0]) r = !r; return r; };
 function hitLayer(face, W, H, px, py) {
@@ -240,145 +253,167 @@ function hitLayer(face, W, H, px, py) {
 }
 /* smart guides: a moving box (face px) snaps its edges and centre to the face's edges and centre and to the other
    layers' ones, within 6 screen px; returns the shift to add and the lines to show */
-function snapBox(bx, others, W, H) {
-  const th = 6 / edState.k, xs = [0, W / 2, W], ys = [0, H / 2, H];
+function snapBox(st, bx, others, W, H) {
+  const th = 6 / st.k, xs = [0, W / 2, W], ys = [0, H / 2, H];
   for (const L of others) { if (!L.visible) continue; const q = layerAABB(L, W, H); xs.push(q[0], (q[0] + q[2]) / 2, q[2]); ys.push(q[1], (q[1] + q[3]) / 2, q[3]); }
   const best = (vals, cands) => { let r = null; for (const v of vals) for (const c of cands) { const d = c - v; if (Math.abs(d) < th && (!r || Math.abs(d) < Math.abs(r[0]))) r = [d, c]; } return r; };
   const bx_ = best([bx[0], (bx[0] + bx[2]) / 2, bx[2]], xs), by_ = best([bx[1], (bx[1] + bx[3]) / 2, bx[3]], ys);
   return { dx: bx_?.[0] || 0, dy: by_?.[0] || 0, guides: [...(bx_ ? [['x', bx_[1] / W]] : []), ...(by_ ? [['y', by_[1] / H]] : [])] };
 }
 function edPoint(e) { const r = ed.getBoundingClientRect(); return [(e.clientX - r.left - PAD), (e.clientY - r.top - PAD)]; }
-const edUp = () => {
-  const d = edState.drag; if (!d) return;
-  edState.drag = null; edState.guides = []; edState.marquee = null; ui.editor = true; ui.layers = true;
+/* A surface the pointer works on: the face window, or a panel of the net. s.st holds its state (k: px per face px, W, H,
+   drag, guides, marquee, handles), s.el takes the pointer, s.rad(e) is the handle radius (px), s.where names it for
+   the text editor. Points (mx, my) are in the surface's own px: a face px times st.k, the face's corner at 0, 0.
+   s.panOnEmpty: a press on empty space is not taken (the net moves the sheet there; with Shift it draws a frame). */
+const edSurf = { st: edState, el: ed, rad: () => 9, where: '2d' };
+const edUp = s => {
+  const st = s.st, d = st.drag; if (!d) return;
+  st.drag = null; st.guides = []; st.marquee = null; ui.editor = true; ui.layers = true;
   // a click on one of several picked layers (without moving it) picks it alone
   if (d.mode === 'move' && !d.moved && d.pick) pickLayers(d.pick);
+  // the surface may do more with what was dragged (the net moves a layer to the face it was dropped on)
+  s.dropped?.(d);
   commit();
 };
+/* a press: true when it started something (a handle, a drag of layers, a frame) */
+function edPress(s, e, mx, my) {
+  const f = activeFaceData(); if (!f) return false;
+  const st = s.st, { k, W, H } = st, px = mx / k, py = my / k, R = s.rad(e);
+  const L = activeLayer(), hd = st.handles;
+  let mode = null;
+  if (L && hd?.edit) {
+    // crop or mask mode: a corner resizes the frame, inside it moves (the picture under the crop frame, the mask
+    // over the layer); a press elsewhere ends the mode
+    let i = hd.grips.findIndex(p => Math.hypot(mx - p[0], my - p[1]) < 9);
+    const inside = inPoly([mx, my], hd.corners);
+    // a wider reach for a finger (R) counts only outside the frame: inside it a press moves the frame
+    if (i < 0 && !inside && R > 9) i = hd.grips.findIndex(p => Math.hypot(mx - p[0], my - p[1]) < R);
+    if (i >= 0 || inside) {
+      s.el.setPointerCapture(e.pointerId);
+      st.drag = { mode: 'edit', edit: hd.edit, handle: i >= 0 ? i : 'move', L, mx, my, from: editFrom(L), box: hd.box };
+      return true;
+    }
+    setEditMode(null); renderLayerProps(); ui.editor = true;
+  }
+  if (L && hd && !hd.edit) {
+    const near = p => Math.hypot(mx - p[0], my - p[1]), dr = near(hd.rot), dc = Math.min(...hd.corners.map(near));
+    if (dr < 9) mode = 'rot';
+    else if (dc < 9) mode = 'scale';
+    // a wider reach for a finger counts only outside the frame (a small layer would else have no body to grab)
+    else if (R > 9 && !inPoly([mx, my], hd.corners)) mode = dr < R ? 'rot' : dc < R ? 'scale' : null;
+  }
+  const many = selectedLayers(f);
+  // the selected layers first, even under others; else the top layer under the cursor
+  const hit = !mode && ((many.length && hitLayer({ layers: many }, W, H, px, py)) || hitLayer(f, W, H, px, py));
+  if (!mode && !hit && s.panOnEmpty && !(e.shiftKey || e.ctrlKey || e.metaKey)) return false;
+  s.el.setPointerCapture(e.pointerId);
+  if (mode && hd.multi) {
+    // several layers scaled or turned together round the middle of their frame
+    const [cx, cy] = hd.center;
+    st.drag = { mode: 'm' + mode, snap: snapshot(many), mx, my, cx, cy, px: cx / k, py: cy / k, d0: Math.max(4, Math.hypot(mx - cx, my - cy)), a0: Math.atan2(my - cy, mx - cx) };
+    return true;
+  }
+  if (mode) {
+    const [cx, cy] = [L.x * W * k, L.y * H * k];
+    st.drag = { mode, L, mx, my, x: L.x, y: L.y, rot: L.rot, w: L.w, h: L.h, size: L.size, d0: Math.max(4, Math.hypot(mx - cx, my - cy)), cx, cy };
+    return true;
+  }
+  if (!hit) {
+    // empty space: a frame drawn with the mouse picks the layers it touches (Shift adds to the picked ones)
+    const keep = e.shiftKey || e.ctrlKey || e.metaKey ? many.map(l => l.id) : [];
+    if (!keep.length && sel.layer) pickLayers([]);
+    st.drag = { mode: 'marquee', mx, my, keep };
+    return true;
+  }
+  if (e.shiftKey || e.ctrlKey || e.metaKey) { pickLayers(clickPick(f, hit, true)); st.drag = null; return true; }
+  // a press on one of several picked layers moves them all; a click without moving then picks it alone
+  let pick = null;
+  if (!many.includes(hit)) pickLayers(clickPick(f, hit), hit.group ? undefined : hit.id);
+  else if (many.length > 1) pick = clickPick(f, hit);
+  const Ls = selectedLayers(f);
+  st.drag = { mode: 'move', snap: snapshot(Ls), mx, my, pick, moved: false, others: f.layers.filter(l => !Ls.includes(l)), box: boundsOf(Ls, W, H) };
+  return true;
+}
+/* the cursor over (mx, my) when nothing is dragged */
+function edCursor(s, e, mx, my) {
+  const f = activeFaceData(); if (!f) return 'default';
+  const st = s.st, hd = st.handles, R = s.rad(e);
+  const gi = hd?.edit ? hd.grips.findIndex(p => Math.hypot(mx - p[0], my - p[1]) < R) : -1;
+  if (hd?.edit) return gi >= 0 ? editCursor(gi) : inPoly([mx, my], hd.corners) ? 'move' : 'default';
+  if (hd && Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < R) return 'grab';
+  if (hd && hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < R)) return 'nwse-resize';
+  if (hitLayer(f, st.W, st.H, mx / st.k, my / st.k)) return 'move';
+  return 'default';
+}
+function edMove(s, e, mx, my) {
+  const st = s.st, d = st.drag, { k, W, H } = st, L = d.L, o = activeObj(), f = activeFaceData();
+  if (d.mode === 'marquee') {
+    st.marquee = [d.mx, d.my, mx, my];
+    const r = [Math.min(d.mx, mx) / k, Math.min(d.my, my) / k, Math.max(d.mx, mx) / k, Math.max(d.my, my) / k], ids = new Set(d.keep);
+    for (const M of f.layers) {
+      if (!M.visible || M.locked) continue;
+      const q = layerAABB(M, W, H);
+      if (q[0] <= r[2] && q[2] >= r[0] && q[1] <= r[3] && q[3] >= r[1]) for (const g of groupOf(f, M)) ids.add(g.id);
+    }
+    const now = f.layers.filter(l => ids.has(l.id)).map(l => l.id);
+    if (now.join() !== selectedIds().join()) pickLayers(now); else ui.editor = true;
+    return;
+  }
+  if (d.mode === 'move') {
+    let dx = (mx - d.mx) / k, dy = (my - d.my) / k;
+    if (!d.moved && Math.hypot(mx - d.mx, my - d.my) < 2) return;
+    d.moved = true;
+    // smart guides (Alt: none)
+    const g = e.altKey ? { dx: 0, dy: 0, guides: [] } : snapBox(st, [d.box[0] + dx, d.box[1] + dy, d.box[2] + dx, d.box[3] + dy], d.others, W, H);
+    dx += g.dx; dy += g.dy; st.guides = g.guides;
+    moveLayers(o, sel.face, d.snap, dx, dy);
+    refreshFields($('#layerSec'), activeLayer() || d.snap[0].L); return;
+  }
+  if (d.mode === 'mscale') { scaleLayers(o, sel.face, d.snap, d.px, d.py, Math.hypot(mx - d.cx, my - d.cy) / d.d0); refreshFields($('#layerSec'), activeLayer()); return; }
+  if (d.mode === 'mrot') {
+    let a = (Math.atan2(my - d.cy, mx - d.cx) - d.a0) / DEG;
+    if (e.shiftKey) a = Math.round(a / 15) * 15;
+    rotateLayers(o, sel.face, d.snap, d.px, d.py, a); refreshFields($('#layerSec'), activeLayer()); return;
+  }
+  if (d.mode === 'edit') {
+    // the pointer's move in the layer's own px (unturned)
+    const a = -L.rot * DEG, ex = (mx - d.mx) / k, ey = (my - d.my) / k;
+    editDrag(activeObj(), sel.face, L, d.edit, d.handle, d.from, ex * Math.cos(a) - ey * Math.sin(a), ex * Math.sin(a) + ey * Math.cos(a), W, H, d.box);
+    refreshFields($('#layerSec'), L); return;
+  }
+  if (d.mode === 'scale') {
+    scaleItem(activeObj(), sel.face, L, d, Math.hypot(mx - d.cx, my - d.cy) / d.d0);
+  } else if (d.mode === 'rot') {
+    let a = Math.atan2(my - d.cy, mx - d.cx) / DEG + 90;
+    if (a > 180) a -= 360;
+    if (e.shiftKey) a = Math.round(a / 15) * 15; else for (const q of [-180, -90, 0, 90, 180]) if (Math.abs(a - q) < 3) a = q;
+    rotateItem(activeObj(), sel.face, L, a);
+  }
+  markFace(activeObj(), sel.face); refreshFields($('#layerSec'), L);
+}
+/* a double click on a layer: a text is typed in place, a picture gets its crop frame; true when it did something */
+function edDouble(s, mx, my) {
+  // a double click on a layer of a group picks it alone (inside the group, as in Figma)
+  const f = activeFaceData(), hit = f && hitLayer(f, s.st.W, s.st.H, mx / s.st.k, my / s.st.k);
+  if (hit?.group && selectedIds().length > 1) { pickLayers([hit.id]); return true; }
+  const L = activeLayer();
+  if (L?.type === 'text') { startTextEdit(L, s.where); return true; }
+  if (L?.type === 'image' && !L.tile) { setEditMode(editMode() === 'crop' ? null : 'crop'); renderLayerProps(); ui.editor = true; return true; }
+  return false;
+}
 
 /* hooks up the 2D editor */
 function initFaceEditor() {
-  ed.addEventListener('pointerdown', e => {
-    const f = activeFaceData(); if (!f) return;
-    const [mx, my] = edPoint(e), { k, W, H } = edState, px = mx / k, py = my / k;
-    const L = activeLayer(), hd = edState.handles;
-    let mode = null;
-    if (L && hd?.edit) {
-      // crop or mask mode: a corner resizes the frame, inside it moves (the picture under the crop frame, the mask
-      // over the layer); a press elsewhere ends the mode
-      const i = hd.grips.findIndex(p => Math.hypot(mx - p[0], my - p[1]) < 9), inside = inPoly([mx, my], hd.corners);
-      if (i >= 0 || inside) {
-        ed.setPointerCapture(e.pointerId);
-        edState.drag = { mode: 'edit', edit: hd.edit, handle: i >= 0 ? i : 'move', L, mx, my, from: editFrom(L), box: hd.box };
-        return;
-      }
-      setEditMode(null); renderLayerProps(); ui.editor = true;
-    }
-    if (L && hd && !hd.edit) {
-      if (Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < 9) mode = 'rot';
-      else if (hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9)) mode = 'scale';
-    }
-    const many = selectedLayers(f);
-    ed.setPointerCapture(e.pointerId);
-    if (mode && hd.multi) {
-      // several layers scaled or turned together round the middle of their frame
-      const [cx, cy] = hd.center;
-      edState.drag = { mode: 'm' + mode, snap: snapshot(many), mx, my, cx, cy, px: cx / k, py: cy / k, d0: Math.max(4, Math.hypot(mx - cx, my - cy)), a0: Math.atan2(my - cy, mx - cx) };
-      return;
-    }
-    if (mode) {
-      const [cx, cy] = [L.x * W * k, L.y * H * k];
-      edState.drag = { mode, L, mx, my, x: L.x, y: L.y, rot: L.rot, w: L.w, h: L.h, size: L.size, d0: Math.max(4, Math.hypot(mx - cx, my - cy)), cx, cy };
-      return;
-    }
-    // the selected layers first, even under others; else the top layer under the cursor
-    const hit = (many.length && hitLayer({ layers: many }, W, H, px, py)) || hitLayer(f, W, H, px, py);
-    if (!hit) {
-      // empty space: a frame drawn with the mouse picks the layers it touches (Shift adds to the picked ones)
-      const keep = e.shiftKey || e.ctrlKey || e.metaKey ? many.map(l => l.id) : [];
-      if (!keep.length && sel.layer) pickLayers([]);
-      edState.drag = { mode: 'marquee', mx, my, keep };
-      return;
-    }
-    if (e.shiftKey || e.ctrlKey || e.metaKey) { pickLayers(clickPick(f, hit, true)); edState.drag = null; return; }
-    // a press on one of several picked layers moves them all; a click without moving then picks it alone
-    let pick = null;
-    if (!many.includes(hit)) pickLayers(clickPick(f, hit), hit.group ? undefined : hit.id);
-    else if (many.length > 1) pick = clickPick(f, hit);
-    const Ls = selectedLayers(f);
-    edState.drag = { mode: 'move', snap: snapshot(Ls), mx, my, pick, moved: false, others: f.layers.filter(l => !Ls.includes(l)), box: boundsOf(Ls, W, H) };
-  });
+  ed.addEventListener('pointerdown', e => { const [mx, my] = edPoint(e); edPress(edSurf, e, mx, my); });
   ed.addEventListener('pointermove', e => {
-    const d = edState.drag;
-    if (!d) {
-      const f = activeFaceData(); if (!f) return;
-      const [mx, my] = edPoint(e), hd = edState.handles;
-      let cur = 'default';
-      const gi = hd?.edit ? hd.grips.findIndex(p => Math.hypot(mx - p[0], my - p[1]) < 9) : -1;
-      if (hd?.edit) cur = gi >= 0 ? editCursor(gi) : inPoly([mx, my], hd.corners) ? 'move' : 'default';
-      else if (hd && Math.hypot(mx - hd.rot[0], my - hd.rot[1]) < 9) cur = 'grab';
-      else if (hd && hd.corners.some(p => Math.hypot(mx - p[0], my - p[1]) < 9)) cur = 'nwse-resize';
-      else if (hitLayer(f, edState.W, edState.H, mx / edState.k, my / edState.k)) cur = 'move';
-      ed.style.cursor = cur; return;
-    }
-    const [mx, my] = edPoint(e), { k, W, H } = edState, L = d.L, o = activeObj(), f = activeFaceData();
-    if (d.mode === 'marquee') {
-      edState.marquee = [d.mx, d.my, mx, my];
-      const r = [Math.min(d.mx, mx) / k, Math.min(d.my, my) / k, Math.max(d.mx, mx) / k, Math.max(d.my, my) / k], ids = new Set(d.keep);
-      for (const M of f.layers) {
-        if (!M.visible || M.locked) continue;
-        const q = layerAABB(M, W, H);
-        if (q[0] <= r[2] && q[2] >= r[0] && q[1] <= r[3] && q[3] >= r[1]) for (const g of groupOf(f, M)) ids.add(g.id);
-      }
-      const now = f.layers.filter(l => ids.has(l.id)).map(l => l.id);
-      if (now.join() !== selectedIds().join()) pickLayers(now); else ui.editor = true;
-      return;
-    }
-    if (d.mode === 'move') {
-      let dx = (mx - d.mx) / k, dy = (my - d.my) / k;
-      if (!d.moved && Math.hypot(mx - d.mx, my - d.my) < 2) return;
-      d.moved = true;
-      // smart guides (Alt: none)
-      const g = e.altKey ? { dx: 0, dy: 0, guides: [] } : snapBox([d.box[0] + dx, d.box[1] + dy, d.box[2] + dx, d.box[3] + dy], d.others, W, H);
-      dx += g.dx; dy += g.dy; edState.guides = g.guides;
-      moveLayers(o, sel.face, d.snap, dx, dy);
-      refreshFields($('#layerSec'), activeLayer() || d.snap[0].L); return;
-    }
-    if (d.mode === 'mscale') { scaleLayers(o, sel.face, d.snap, d.px, d.py, Math.hypot(mx - d.cx, my - d.cy) / d.d0); refreshFields($('#layerSec'), activeLayer()); return; }
-    if (d.mode === 'mrot') {
-      let a = (Math.atan2(my - d.cy, mx - d.cx) - d.a0) / DEG;
-      if (e.shiftKey) a = Math.round(a / 15) * 15;
-      rotateLayers(o, sel.face, d.snap, d.px, d.py, a); refreshFields($('#layerSec'), activeLayer()); return;
-    }
-    if (d.mode === 'edit') {
-      // the pointer's move in the layer's own px (unturned)
-      const a = -L.rot * DEG, ex = (mx - d.mx) / k, ey = (my - d.my) / k;
-      editDrag(activeObj(), sel.face, L, d.edit, d.handle, d.from, ex * Math.cos(a) - ey * Math.sin(a), ex * Math.sin(a) + ey * Math.cos(a), W, H, d.box);
-      refreshFields($('#layerSec'), L); return;
-    }
-    if (d.mode === 'scale') {
-      scaleItem(activeObj(), sel.face, L, d, Math.hypot(mx - d.cx, my - d.cy) / d.d0);
-    } else if (d.mode === 'rot') {
-      let a = Math.atan2(my - d.cy, mx - d.cx) / DEG + 90;
-      if (a > 180) a -= 360;
-      if (e.shiftKey) a = Math.round(a / 15) * 15; else for (const s of [-180, -90, 0, 90, 180]) if (Math.abs(a - s) < 3) a = s;
-      rotateItem(activeObj(), sel.face, L, a);
-    }
-    markFace(activeObj(), sel.face); refreshFields($('#layerSec'), L);
+    const [mx, my] = edPoint(e);
+    if (!edState.drag) { if (activeFaceData()) ed.style.cursor = edCursor(edSurf, e, mx, my); return; }
+    edMove(edSurf, e, mx, my);
   });
-  ed.addEventListener('pointerup', edUp);
-   ed.addEventListener('pointercancel', edUp);
-  ed.addEventListener('dblclick', e => {
-    // a double click on a layer of a group picks it alone (inside the group, as in Figma)
-    const f = activeFaceData(), [mx, my] = edPoint(e), hit = f && hitLayer(f, edState.W, edState.H, mx / edState.k, my / edState.k);
-    if (hit?.group && selectedIds().length > 1) { pickLayers([hit.id]); return; }
-    const L = activeLayer();
-    // a text: typed in place
-    if (L?.type === 'text') return startTextEdit(L, '2d');
-    // a picture: its crop frame
-    if (L?.type === 'image' && !L.tile) { setEditMode(editMode() === 'crop' ? null : 'crop'); renderLayerProps(); ui.editor = true; }
-  });
+  ed.addEventListener('pointerup', () => edUp(edSurf));
+  ed.addEventListener('pointercancel', () => edUp(edSurf));
+  ed.addEventListener('dblclick', e => { const [mx, my] = edPoint(e); edDouble(edSurf, mx, my); });
   new ResizeObserver(() => { ui.editor = true; ui.net = true; }).observe($('#editorWrap'));
 }
 
-export { drawEditor, ed, edPoint, edState, hitLayer, initFaceEditor };
+export { drawEditor, drawSelection, edCursor, edDouble, edMove, edPoint, edPress, edState, edUp, ed, hitLayer, initFaceEditor };

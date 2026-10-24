@@ -14,7 +14,7 @@ import { renderStickers } from '../ui/stickers-panel.js';
 import { renderLibrary } from '../ui/library-panel.js';
 import { drawEditor } from '../ui/face-editor.js';
 import { drawNet } from '../net/net-view.js';
-import { drawNetStage } from '../net/net-stage.js';
+import { drawNetStage, markTop } from '../net/net-stage.js';
 import { show3D } from '../ui/view-mode.js';
 import { syncFaceHi } from './face-hi.js';
 import { syncRings } from './move.js';
@@ -327,7 +327,7 @@ function initCamera() {
     if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) { fitShadowToView(); renderer.shadowMap.needsUpdate = true; } if (studio) studio.frame(true); else renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
     else if (refining) { studio.frame(false); drawSelLook(); }
     syncRenderChip(studio); syncCtxBar(changed); syncStageHint(); syncIsolationPlate(); syncFaceHi();
-    if (ui.editor) { ui.editor = false; drawEditor(); }
+    if (ui.editor) { ui.editor = false; drawEditor(); markTop(); }
     if (ui.net) { ui.net = false; drawNet(); drawNetStage(); }
     if (ui.layers) { ui.layers = false; renderLayers(); }
     if (ui.stickers) { ui.stickers = false; renderStickers(); }

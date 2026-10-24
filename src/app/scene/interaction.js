@@ -29,6 +29,7 @@ import { ed, edPoint, edState, hitLayer } from '../ui/face-editor.js';
 import { importModelFiles } from '../ui/wiring.js';
 import { exitIsolation, isShown, isolated } from './isolation.js';
 import { isolateAction } from '../ui/isolation-plate.js';
+import { show3D } from '../ui/view-mode.js';
 
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function pick(clientX, clientY, only = null) {
@@ -543,7 +544,7 @@ function initInteraction() {
       return;
     }
     // Enter: type into the picked text, in place
-    if (e.key === 'Enter' && !mod && L.type === 'text' && selectedIds().length === 1) { e.preventDefault(); return startTextEdit(L, '3d'); }
+    if (e.key === 'Enter' && !mod && L.type === 'text' && selectedIds().length === 1) { e.preventDefault(); return startTextEdit(L, show3D() ? '3d' : 'net'); }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteLayer(L.id); }
     else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateLayer(L.id); }
     else if (e.key === 'Escape') selectLayer(null);

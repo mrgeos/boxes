@@ -167,6 +167,32 @@ function shiftLayers(o, k, Ls, step) {
   placeLayers(o, k, [...set], Math.max(0, Math.min(rest.length, at)));
 }
 
+/* ---------- to another face ---------- */
+/* Moves layer(s) `id` (an id or a list: a group goes whole) from face `from` to the top of face `to` of object o; returns
+   the moved layers. Sizes are shares of the face, so they are scaled to stay the same in mm. Without `at` a layer keeps
+   its x and y (shares of the face) and its turn; at: { x, y, rot } (or { [layerId]: { x, y, rot } } for several) puts it
+   where it lands on `to`. One call is one edit: the caller commits. */
+function moveLayerToFace(o, id, from, to, at = null) {
+  const src = o.faces[from], dst = o.faces[to];
+  if (!src || !dst || from === to || isStickerKey(from) || isStickerKey(to)) return [];
+  const ids = [].concat(id), Ls = src.layers.filter(L => ids.includes(L.id));
+  if (!Ls.length) return [];
+  const [sw, sh] = faceMM(o, from), [tw, th] = faceMM(o, to), ax = sw / tw, ay = sh / th;
+  const names = { ...(src.groups || {}) }, whole = g => src.layers.filter(l => l.group === g).every(l => ids.includes(l.id));
+  for (const L of Ls) {
+    if (L.type === 'image') L.w *= ax; else if (L.type === 'shape') { L.w *= ax; L.h *= ay; } else L.size *= ay;
+    const p = at && (at[L.id] ?? (at.x != null ? at : null));
+    if (p) { L.x = p.x; L.y = p.y; if (p.rot != null) L.rot = Math.round((((p.rot + 180) % 360 + 360) % 360 - 180) * 10) / 10; }
+    delete L.clipBelow;
+    if (L.group && !whole(L.group)) delete L.group;
+  }
+  src.layers = src.layers.filter(L => !Ls.includes(L));
+  dst.layers.push(...Ls);
+  for (const L of Ls) if (L.group && names[L.group]) dst.groups = { ...(dst.groups || {}), [L.group]: names[L.group] };
+  tidyGroups(src); tidyGroups(dst); markFace(o, from); markFace(o, to);
+  return Ls;
+}
+
 /* ---------- delete, duplicate, copy and paste ---------- */
 function deleteLayers(o, k, Ls) {
   const face = o.faces[k], set = new Set(Ls);
@@ -283,4 +309,4 @@ function setImageFit(o, k, L, mode) {
   markFace(o, k);
 }
 
-export { imageFitOf, setImageFit, addBackgroundImage, bgToAllFaces, clearFace, selectBg, setFaceBg, setFaceBgGrad, activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setText, setVisible, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };
+export { imageFitOf, setImageFit, addBackgroundImage, bgToAllFaces, clearFace, selectBg, setFaceBg, setFaceBgGrad, activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, moveLayerToFace, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setText, setVisible, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };
