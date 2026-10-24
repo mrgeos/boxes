@@ -21,6 +21,9 @@ import { syncFaceHi } from './face-hi.js';
 import { syncRings } from './move.js';
 import { syncSelBox } from './sel-box.js';
 import { syncCtxBar } from '../ui/context-bar.js';
+import { syncFoldBar } from '../ui/fold-bar.js';
+import { syncFoldSteps } from '../ui/fold-steps.js';
+import { syncFoldVis } from './fold.js';
 import { syncStageHint } from '../ui/stage-hint.js';
 import { drawSelLook, syncSelLook } from './sel-look.js';
 import { syncViewCube } from '../ui/view-cube.js';
@@ -78,7 +81,7 @@ function tweenCamera(p1, q1, instant = false, v1 = { x: 0, y: 0 }) {
 const camPose = () => ({ p: camera.position.clone(), q: controls.target.clone(), v: { ...view }, name: viewName, last: lastView });
 function goPose(c) { lastView = c.last; setViewName(c.name); tweenCamera(c.p, c.q, false, c.v); }
 function objBounds(id) {
-  const rt = RT.get(id), b = new THREE.Box3(); if (rt) b.expandByObject(rt.group);
+  const rt = RT.get(id), b = new THREE.Box3(); if (rt) b.expandByObject(rt.rig ? rt.rig.group : rt.group);   // (a folding blank: the rig, not the hidden model)
   return b.isEmpty() ? null : b;
 }
 /* frames these objects together (an object, or the objects of a group) from the same side the camera looks from now */
@@ -88,6 +91,26 @@ function frameItems(ids) {
   const c = b.getCenter(new THREE.Vector3()), r = b.getBoundingSphere(new THREE.Sphere()).radius;
   const off = camera.position.clone().sub(controls.target).setLength(fitDistance(r));
   tweenCamera(c.clone().add(off), c);
+}
+/* frames a box (world, a Box3), returns the pose it goes to, from the side the camera looks from now: as near as all its corners still fit the view
+   (a flat blank seen at a slant takes far less than its bounding sphere would) */
+function frameBox(b) {
+  const c = b.getCenter(new THREE.Vector3()), dir = camera.position.clone().sub(controls.target).normalize();
+  const right = new THREE.Vector3().crossVectors(camera.up, dir).normalize(), up = new THREE.Vector3().crossVectors(dir, right);
+  // the bars at the bottom of the stage cover part of the view: the box is fitted to what is left over them
+  const st = viewport.getBoundingClientRect(), tops = ['#foldBar', '#ctxBar', '#actionBar'].map(q => document.querySelector(q)).filter(e => e && !e.hidden && e.offsetWidth).map(e => e.getBoundingClientRect().top);
+  const free = tops.length && st.height ? clamp((Math.min(...tops) - 8 - st.top) / st.height, .45, 1) : 1;
+  const tv = Math.tan(camera.fov * DEG / 2) * free, th = Math.tan(camera.fov * DEG / 2) * camera.aspect;
+  let d = 0;
+  for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) {
+    const v = new THREE.Vector3(x, y, z).sub(c), ez = v.dot(dir);
+    d = Math.max(d, ez + Math.abs(v.dot(right)) / th, ez + Math.abs(v.dot(up)) / tv);
+  }
+  d *= 1.1;
+  // the target a bit below the box, so that it stands in the middle of the free part
+  const q = c.clone().addScaledVector(up, -(1 - free) * Math.tan(camera.fov * DEG / 2) * d), p = q.clone().addScaledVector(dir, d);
+  tweenCamera(p, q);
+  return { p, q };   // (where it ends: the caller can tell later whether the user moved it)
 }
 /* what the camera works with: several picked items or a group — all their objects (shown ones); else the active object.
    Its pivot, framing, views and auto-rotation all go by these */
@@ -304,6 +327,7 @@ function initCamera() {
     if (syncSelBox()) changed = true;
     if (syncSelLook()) changed = true;
     if (spinEnv(now)) changed = true;
+    syncFoldVis();   // (the model's parts stay hidden while the blank is folding)
     if (recording) recording.step(now);
     else if (controls.update(dt)) { changed = true; turning = true; }
     // while the camera moves the frame is drawn with fewer pixels and keeps its shadow (see quality.js); a click that
@@ -327,7 +351,7 @@ function initCamera() {
     const studio = studioActive(), refining = live && !!studio && !changed && studio.pending();
     if (changed) { lastDraw = now; fitClipPlanes(); if (takeShadowStale() || !moving) { fitShadowToView(); renderer.shadowMap.needsUpdate = true; } if (studio) studio.frame(true); else renderer.render(scene, camera); drawSelLook(); syncViewCube(); syncItemNav(); }
     else if (refining) { studio.frame(false); drawSelLook(); }
-    syncRenderChip(studio); syncCtxBar(changed); syncStageHint(); syncIsolationPlate(); syncFaceHi();
+    syncRenderChip(studio); syncCtxBar(changed); syncFoldBar(changed); syncFoldSteps(); syncStageHint(); syncIsolationPlate(); syncFaceHi();
     if (ui.editor) { ui.editor = false; drawEditor(); markTop(); }
     if (ui.net) { ui.net = false; drawNet(); drawImpose(); drawNetStage(); }
     if (ui.layers) { ui.layers = false; renderLayers(); }
@@ -337,4 +361,4 @@ function initCamera() {
   });
 }
 
-export { camPose, goPose, VIEW_DIRS, VIEW_LABEL, fitShadowBias, fitShadowToView, flushFaces, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };
+export { frameBox, camPose, goPose, VIEW_DIRS, VIEW_LABEL, fitShadowBias, fitShadowToView, flushFaces, frameItems, manyPicked, lookFrom, setViewName, accent, applyScene, applyViewOffset, camTween, focusSelected, initCamera, invalidate, lastView, lockActive, orbitLock, recording, resize, sceneBounds, setCamTween, setLastView, setOrbitLock, setRecording, setView, updateShadowCam, view, viewName };

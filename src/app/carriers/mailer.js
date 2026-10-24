@@ -113,4 +113,23 @@ function mailerNet(o) {
   return { v: 2, fefco: '0427', W: Math.max(...all.map(v => v[0])) - x0, H: Math.max(...all.map(v => v[1])) - y0, panels, tabs: [] };
 }
 
-export { buildMailer, mailerDims, mailerNet };
+/* how the blank folds (carriers/fold-rig.js): ang is the turn of a panel from its parent in degrees, positive away from
+   the print side, negative toward it; a shifts the crease from the print side by that many mm (+ toward the back of the
+   board: a panel that lies on top of its parent, - the other way: a panel that lands inside it). Every crease is 90°
+   but the lid's rolled lip (180°, under the lid), the tuck flap (hangs down from the lip, toward its print), and the
+   locks, which stay straight and go through the slots in the bottom */
+const mailerFold = {
+  T: o => mailerDims(o).t,
+  roots: ps => [ps.findIndex(p => p.key === 'bottom')],
+  hinge(par, ch, T) {
+    const k = ch.key;
+    if (k === 'lock') return { ang: 0, a: 0 };
+    if (k === 'ear') return { ang: 90, a: -T };
+    if (k === 'top') return { ang: 90, a: T, d: T };
+    if (k === 'flap') return { ang: -90, a: 0, d: T };
+    if (k === 'fold') return par.key === 'top' ? { ang: 180, a: T } : { ang: 90, a: 0 };
+    return { ang: 90, a: 0 };
+  },
+};
+
+export { buildMailer, mailerDims, mailerFold, mailerNet };

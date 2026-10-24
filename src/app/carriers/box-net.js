@@ -89,16 +89,17 @@ function netPoint(p, u, v) {
 /* the cut and crease lines of a sheet made of panels and glue flaps: an edge two pieces share is a crease (unless
    one of them only joins others), every other edge is cut */
 function dieLines(pieces) {
-  const eps = .01, cuts = [], creases = [];
+  const eps = .01, cuts = [], creases = [], links = [];   // links: the pieces a crease joins, for the fold rig
   const edges = pieces.map(pc => pc.pts.map((a, i) => [a, pc.pts[(i + 1) % pc.pts.length]]));
   const joined = (A, B) => (!A.joins || A.joins.includes(B.key)) && (!B.joins || B.joins.includes(A.key));
+  const put = (i, j, seg) => { if (joined(pieces[i], pieces[j])) { creases.push(seg); links.push({ a: i, b: j, seg }); } else cuts.push(seg); };
   pieces.forEach((A, i) => edges[i].forEach(([a, b]) => {
     const hor = Math.abs(a[1] - b[1]) < eps, ver = Math.abs(a[0] - b[0]) < eps;
     if (!hor && !ver) {
       // a slanted edge: a crease where another piece has the same edge and is joined to this one
       const same = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < eps * 10;
       const j = pieces.findIndex((B, k) => k !== i && edges[k].some(([p, q]) => (same(p, a) && same(q, b)) || (same(p, b) && same(q, a))));
-      if (j < 0) cuts.push([...a, ...b]); else if (i < j) (joined(A, pieces[j]) ? creases : cuts).push([...a, ...b]);
+      if (j < 0) cuts.push([...a, ...b]); else if (i < j) put(i, j, [...a, ...b]);
       return;
     }
     const ax = hor ? 0 : 1, c = a[1 - ax], lo = Math.min(a[ax], b[ax]), hi = Math.max(a[ax], b[ax]), shared = [];
@@ -116,12 +117,12 @@ function dieLines(pieces) {
     let cur = lo;
     for (const [s, e, j] of shared.sort((m, n) => m[0] - n[0])) {
       if (s > cur + eps) cuts.push(at(cur, s));
-      if (i < j) (joined(A, pieces[j]) ? creases : cuts).push(at(Math.max(s, cur), e));
+      if (i < j) put(i, j, at(Math.max(s, cur), e));
       cur = Math.max(cur, e);
     }
     if (hi > cur + eps) cuts.push(at(cur, hi));
   }));
-  return { cuts, creases };
+  return { cuts, creases, links };
 }
 
 export { boxNet, cornerTabs, dieLines, netPoint };

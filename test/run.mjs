@@ -27,9 +27,12 @@ async function saveAndReopen(page, edit = p => p) {
 
 await test('открывается без интернета, пример из трёх объектов, проект сохраняется и открывается', async () => {
   const { ctx, page, errors } = await openEditor(browser, { offline: true });
-  const snap = () => page.evaluate(() => JSON.stringify(window.__boxStudio.state.objects.map(o => ({ type: o.type, dims: o.dims, faces: Object.keys(o.faces) }))));
+  const snap = () => page.evaluate(() => JSON.stringify(window.__boxStudio.state.objects.map(o => ({ type: o.type, dims: o.dims, faces: Object.keys(o.faces), plan: o.foldPlan }))));
   assert.equal(await page.evaluate(() => window.__boxStudio.state.objects.length), 3);
+  // an assembly plan of the mailer (an angle and a step moved) is the product's data: it comes back with the project
+  await page.evaluate(() => { const B = window.__boxStudio, o = B.state.objects.find(q => q.lidType === 'f0427'); B.setFoldAngle(o.id, 'bottom>front#0', 60); B.moveFoldStep(o.id, 0, 1); });
   const before = await snap();
+  assert.match(before, /"ang":60/, 'план сборки задан');
   await saveAndReopen(page);
   assert.equal(await snap(), before, 'после сохранения и открытия те же объекты');
   assert.deepEqual(errors, []);

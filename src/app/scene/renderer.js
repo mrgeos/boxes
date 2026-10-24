@@ -32,6 +32,7 @@ import { corrugateEdges } from '../carriers/corrugated.js';
 import { mergeStatic } from './geometry.js';
 import { applyInsert, buildInsert } from '../carriers/insert.js';
 import { drawerOut } from '../carriers/rigid.js';
+import { applyFold } from './fold.js';
 
 const viewport = $('#viewport');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -166,12 +167,12 @@ function buildObject(o) {
   }
   disposeRibbons(rt);
   rt.group.traverse(m => { if ((m.isMesh || m.isLine) && !m.userData.shared) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.insert = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.trayLid = null; rt.bowl = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null; rt.rsc = null; rt.rscTape = null; rt.drawer = null;
+  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.insert = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.trayLid = null; rt.bowl = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null; rt.rsc = null; rt.rscTape = null; rt.drawer = null; rt.rig = null; rt.foldPrev = null; rt.creases = null; rt.planned = null;
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'tray') buildTray(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else if (o.type === 'board') buildBoard(o, rt); else if (o.type === 'model') buildModelObject(o, rt); else buildTube(o, rt);
   applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); buildTissue(o, rt); buildInsert(o, rt); buildFill(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); corrugateEdges(o, rt); applyObjMaterials(o); markObj(o); mergeStatic(rt);
-  rt.stickerMeshes = []; buildStickerFilms(o);
+  rt.stickerMeshes = []; buildStickerFilms(o); applyFold(o);
   if (parentOf(o.id) && JSON.stringify(foot) !== JSON.stringify(rt.foot)) layoutSoon();   // the row makes room for its new size
 }
 /* the object's footprint on the floor with the lid closed, in its own frame (mm): groups lay objects out by it */
