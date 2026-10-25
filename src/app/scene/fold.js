@@ -177,4 +177,12 @@ function foldPoses(id, force = null) {
   return out;
 }
 
-export { applyFold, canFold, focusFoldStep, foldDone, foldFrame, foldInfo, foldOf, foldPoses, foldTimeline, listFoldCreases, markFold, mergeFoldSteps, moveFoldStep, onFoldPlan, playFold, resetFoldCrease, resetFoldPlan, setFold, setFoldAngle, setFoldStep, setStepTime, stopFold, syncFoldVis };
+/* the crease mark is a mark over the scene, not part of the picture: «Рендер» hides it while it samples and draws it last
+   (scene/render-mode.js) */
+const foldMarkShown = () => [...RT.values()].some(rt => rt.rig?.mark?.visible);
+function hideFoldMark() {
+  const hid = [...RT.values()].map(rt => rt.rig?.mark).filter(m => m?.visible); hid.forEach(m => { m.visible = false; });
+  return () => hid.forEach(m => { m.visible = true; });
+}
+
+export { foldMarkShown, hideFoldMark, applyFold, canFold, focusFoldStep, foldDone, foldFrame, foldInfo, foldOf, foldPoses, foldTimeline, listFoldCreases, markFold, mergeFoldSteps, moveFoldStep, onFoldPlan, playFold, resetFoldCrease, resetFoldPlan, setFold, setFoldAngle, setFoldStep, setStepTime, stopFold, syncFoldVis };

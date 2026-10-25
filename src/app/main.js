@@ -13,7 +13,7 @@ import { footprint } from './core/arrange.js';
 import { initProjects } from './ui/projects.js';
 import { initTextEdit } from './ui/text-edit.js';
 import { initQualityMenu } from './ui/quality-menu.js';
-import { setRender } from './scene/render-mode.js';
+import { addMarks, setRender } from './scene/render-mode.js';
 import { initContextLoss } from './scene/context-loss.js';
 import * as THREE from 'three';
 import { sel, state } from './core/state.js';
@@ -82,6 +82,7 @@ initViewMode();
 initTabs();
 initActionBar(); initCtxBar(); initStageHint(); initSelLook(); initViewCube(); initItemNav(); initMarquee(); initIsolationPlate();
 initTextEdit(); initFoldBar(); initFoldSteps();
+addMarks(Fold.hideFoldMark, Fold.foldMarkShown);   // the fold's crease mark is a mark over the scene too
 initQualityMenu(); initContextLoss();
 resize();
 bindScene();

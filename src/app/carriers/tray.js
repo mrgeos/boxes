@@ -2,8 +2,9 @@
 import * as THREE from 'three';
 import { S, clamp } from '../core/util.js';
 import { TOUCH } from '../core/model.js';
-import { rrectPts } from '../scene/geometry.js';
+import { rrectPts, tangentOf } from '../scene/geometry.js';
 import { envTexture } from '../scene/environments.js';
+import { renderOn } from '../core/render-flag.js';
 
 /* ---------- thermoformed / foil food tray ----------
    One parametric shape. The plan is a rounded rectangle walked in 8 pieces (4 straight sides, 4 corners); one section
@@ -145,7 +146,7 @@ function lidProfile(G) {
 }
 
 /* ---------- a surface swept: the profile carried round the plan, pushed in along the profile's normal by the flutes ---------- */
-function sweep(G, { pts }, fluted, sp, sc) {
+function sweep(G, { pts }, fluted, sp, sc, frame = false) {
   const { L, W, R } = G, ring = ringSamples(G, sp, sc), side = [L - 2 * R, 0, W - 2 * R, 0, L - 2 * R, 0, W - 2 * R, 0];
   const pos = new Float32Array(pts.length * ring.length * 3), idx = [];
   let k = 0;
@@ -178,6 +179,30 @@ function sweep(G, { pts }, fluted, sp, sc) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   geo.setIndex(idx); geo.computeVertexNormals();
+  // `edge`: how sharply the profile turns near each ring (the rim's lip, the steps), for the clear plastic's whitened creases
+  // in the «Рендер» mode; from the profile's rows, not from the triangles
+  const cum = [0], turn = new Array(pts.length).fill(0);
+  for (let j = 1; j < pts.length; j++) cum[j] = cum[j - 1] + Math.hypot(pts[j][0] - pts[j - 1][0], pts[j][1] - pts[j - 1][1]);
+  for (let j = 1; j < pts.length - 1; j++) {
+    const ax = pts[j][0] - pts[j - 1][0], ay = pts[j][1] - pts[j - 1][1], bx = pts[j + 1][0] - pts[j][0], by = pts[j + 1][1] - pts[j][1], la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+    turn[j] = la && lb ? Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by) / (la * lb)))) : 0;
+  }
+  const edge = new Float32Array(pts.length * n);
+  for (let j = 0; j < pts.length; j++) {
+    let e = 0; for (let m = 0; m < pts.length; m++) if (turn[m] > .1) e = Math.max(e, turn[m] * Math.exp(-Math.abs(cum[j] - cum[m]) / 1.4));
+    edge.fill(THREE.MathUtils.smoothstep(e, .25, .85), j * n, (j + 1) * n);
+  }
+  geo.setAttribute('edge', new THREE.BufferAttribute(edge, 1));
+  if (frame) {
+    // real tangents (along the ring = the texture's u, down the profile = v) for the foil's normal map and anisotropy
+    const nrm = geo.attributes.normal.array, tan = new Float32Array(pts.length * n * 4);
+    for (let j = 0; j < pts.length; j++) for (let i = 0; i < n; i++) {
+      const o = j * n + i, a = j * n + (i + 1) % n, b = j * n + (i + n - 1) % n, ja = Math.max(0, j - 1) * n + i, jb = Math.min(pts.length - 1, j + 1) * n + i;
+      tan.set(tangentOf([nrm[o * 3], nrm[o * 3 + 1], nrm[o * 3 + 2]], [pos[a * 3] - pos[b * 3], pos[a * 3 + 1] - pos[b * 3 + 1], pos[a * 3 + 2] - pos[b * 3 + 2]],
+        [pos[jb * 3] - pos[ja * 3], pos[jb * 3 + 1] - pos[ja * 3 + 1], pos[jb * 3 + 2] - pos[ja * 3 + 2]]), o * 4);
+    }
+    geo.setAttribute('tangent', new THREE.BufferAttribute(tan, 4));
+  }
   return geo;
 }
 /* a flat panel: the plan inset by d, at height z */
@@ -187,6 +212,10 @@ function panel(G, d, z) {
   const geo = new THREE.ShapeGeometry(sh); geo.rotateX(Math.PI / 2); geo.translate(0, z * S, 0);
   const p = geo.attributes.position, uv = geo.attributes.uv;
   for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / (50 * S), p.getZ(i) / (50 * S));
+  const nr = geo.attributes.normal, tg = new Float32Array(p.count * 4);   // planar uv (x, z): u along +x, v along +z
+  for (let i = 0; i < p.count; i++) tg.set(tangentOf([nr.getX(i), nr.getY(i), nr.getZ(i)], [1, 0, 0], [0, 0, 1]), i * 4);
+  geo.setAttribute('tangent', new THREE.BufferAttribute(tg, 4));
+  geo.setAttribute('edge', new THREE.BufferAttribute(new Float32Array(p.count), 1));
   return geo;
 }
 
@@ -329,11 +358,14 @@ function trayMaterial(o, rt) {
   const m = rt.bowlMat, k = o.mat in TRAY_MATS ? o.mat : 'pp', pet = k === 'pet';
   if (!pet) {
     Object.assign(m, { ...PLASTIC[k], color: new THREE.Color(PLASTIC[k].color) });
-    m.normalMap = k === 'foil' ? crinkle() : null; m.normalScale.set(.3, .3); m.needsUpdate = true;
+    m.normalMap = k === 'foil' ? crinkle() : null; m.normalScale.set(.3, .3);
+    // «Рендер»: the foil is brushed along the draw direction (anisotropic highlights), which plain view does not have
+    const on = renderOn() && k === 'foil'; m.anisotropy = on ? .35 : 0; m.anisotropyRotation = Math.PI / 2;
+    m.needsUpdate = true;
   }
   // metal shows what is round it: the foil keeps its own bright room, whatever studio the scene has (a metal in a dark
   // studio goes black). The texture is asked for each time: the cache is cleared when the graphics card is lost.
-  const room = envTexture('room');
+  const room = envTexture(renderOn() ? 'cyclo' : 'room');   // «Рендер»: the studio's own cyclorama (flags, softboxes)
   for (const mm of [m, rt.tabBackMat]) { mm.envMap = k === 'foil' || mm === rt.tabBackMat ? room : null; mm.envMapIntensity = FOIL_ENV; mm.needsUpdate = true; }
   for (const b of rt.bowl) { b.material = pet ? rt.petMat : m; b.castShadow = !pet; }
   rt.tabMat.color.set(o.board || '#ffffff');
@@ -353,7 +385,7 @@ function buildTray(o, rt) {
   // fine enough for the flutes (about 5 samples across a groove), coarser on a touch screen
   const sp = clamp(G.rib.pitch * G.rib.width / 5, .4, 1) * (TOUCH ? 2 : 1), tp = trayProfile(G);
   rt.bowl = [];
-  for (const geo of [sweep(G, tp, true, sp, sp), panel(G, tp.panelD, tp.panelZ)]) {
+  for (const geo of [sweep(G, tp, true, sp, sp, true), panel(G, tp.panelD, tp.panelZ)]) {
     const m = new THREE.Mesh(geo, rt.bowlMat); m.receiveShadow = true; m.userData = { objId: o.id, face: null }; g.add(m); rt.bowl.push(m);
   }
   // picking is done on a coarse smooth copy of the bowl: the fluted mesh has up to 200 000 triangles, too many for a ray on every mouse move

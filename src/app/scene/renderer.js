@@ -29,7 +29,7 @@ import { moving } from './move.js';
 import { isShown } from './isolation.js';
 import { wrapTouch } from '../faces/wrap.js';
 import { corrugateEdges } from '../carriers/corrugated.js';
-import { mergeStatic } from './geometry.js';
+import { addCreaseEdge, mergeStatic } from './geometry.js';
 import { applyInsert, buildInsert } from '../carriers/insert.js';
 import { drawerOut } from '../carriers/rigid.js';
 import { applyFold } from './fold.js';
@@ -171,7 +171,7 @@ function buildObject(o) {
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'tray') buildTray(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else if (o.type === 'board') buildBoard(o, rt); else if (o.type === 'model') buildModelObject(o, rt); else buildTube(o, rt);
-  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); buildTissue(o, rt); buildInsert(o, rt); buildFill(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); corrugateEdges(o, rt); applyObjMaterials(o); markObj(o); mergeStatic(rt);
+  applyTransform(o); computeFrames(o, rt); buildSleeve(o, rt); buildCarry(o, rt); buildTissue(o, rt); buildInsert(o, rt); buildFill(o, rt); const foot = rt.foot; rt.foot = measureFoot(rt); applyLid(o); buildRibbons(o, rt); corrugateEdges(o, rt); applyObjMaterials(o); markObj(o); creaseEdges(rt); mergeStatic(rt);
   rt.stickerMeshes = []; buildStickerFilms(o); applyFold(o);
   if (parentOf(o.id) && JSON.stringify(foot) !== JSON.stringify(rt.foot)) layoutSoon();   // the row makes room for its new size
 }
@@ -203,22 +203,39 @@ function disposeObject(id) {
    (the canvas is transparent) and highlights still read as light on top. */
 /* the «Рендер» mode draws into a linear float target, not to the screen: the coverage is then taken from the value as the
    screen would show it (encoded), or the plastic would nearly vanish (scene/render-mode.js sets it while it draws) */
-const petLinear = { value: 0 };
+const petLinear = { value: 0 }, petGamma = { value: .7 };   // the coverage's curve in the studio: 1 = the light itself (clear plastic all but vanishes), .45 ≈ as the screen's encoding (a grey smoke); .7 between
 function makePetMaterial() {
   const m = new THREE.MeshPhysicalMaterial({ color: 0x000000, metalness: 0, roughness: .06, ior: 1.57, specularIntensity: 1,
     transparent: true, depthWrite: false, side: THREE.DoubleSide });
   m.onBeforeCompile = sh => {
-    sh.uniforms.uLin = petLinear;
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uLin;').replace('#include <dithering_fragment>', `#include <dithering_fragment>
+    sh.uniforms.uLin = petLinear; sh.uniforms.uG = petGamma;
+    // «Рендер» only (uLin): thin PET is not glass. A milky haze at grazing angles and along creases (the vertex attribute
+    // `edge`), as a white diffuse term the studio's light falls on (so the coverage below takes it up), and a faint wobble of
+    // the normal: reflections of a thermoformed sheet are never perfectly straight
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', 'attribute float edge; varying float vEdge; varying vec3 vPetPos;\n#include <common>')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEdge = edge; vPetPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uLin, uG; varying float vEdge; varying vec3 vPetPos;')
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      if (uLin > 0.5) {
+        vec3 pw = vPetPos * 21.0;
+        vec3 wv = vec3(sin(pw.y * 1.3 + pw.z * 0.7), sin(pw.z * 1.1 + pw.x * 0.9), sin(pw.x * 1.2 + pw.y * 0.8)) + 0.5 * vec3(sin(pw.z * 2.7 - pw.x * 1.9), sin(pw.x * 2.3 + pw.y * 2.1), sin(pw.y * 2.9 - pw.z * 2.2));
+        wv = (viewMatrix * vec4(wv, 0.0)).xyz; wv -= dot(wv, normal) * normal;
+        normal = normalize(normal + 0.02 * wv);
+        float petNV = saturate(dot(normal, normalize(vViewPosition + vec3(1e-6))));
+        float petMilk = clamp(0.16 * (0.04 + pow(1.0 - petNV, 3.0)) + 0.3 * vEdge, 0.0, 0.6);
+        diffuseColor.rgb = vec3(petMilk * 0.55);
+      }`).replace('#include <dithering_fragment>', `#include <dithering_fragment>
       float petHaze = 0.045;
       vec3 petLight = gl_FragColor.rgb + vec3(petHaze);
-      vec3 petSeen = uLin > 0.5 ? sRGBTransferOETF(vec4(min(petLight, vec3(8.0)), 1.0)).rgb : petLight;
+      vec3 petSeen = uLin > 0.5 ? pow(min(petLight, vec3(8.0)), vec3(uG)) : petLight;
       float petA = clamp(max(max(petSeen.r, petSeen.g), petSeen.b), 0.0, 1.0);
       gl_FragColor = vec4(petLight / max(petA, 1e-3), petA);`);
   };
-  m.customProgramCacheKey = () => 'pet-v2';
+  m.customProgramCacheKey = () => 'pet-v3';
   return m;
 }
+/* the clear plastic's creases, for the «Рендер» haze: once the object is built */
+function creaseEdges(rt) { rt.group.traverse(m => { if (m.isMesh && m.material === rt.petMat && !m.userData.shared) addCreaseEdge(m.geometry); }); }
 const contactMat = (() => {
   const c = document.createElement('canvas'); c.width = 4; c.height = 64;
   const x = c.getContext('2d'), gr = x.createLinearGradient(0, 0, 0, 64);
@@ -312,4 +329,4 @@ function applyObjMaterials(o) {
   rt.innerMat.bumpScale = o.grain * 1.2; rt.innerMat.needsUpdate = true;
 }
 
-export { RT, pmrem, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, petLinear, rebuildQueue, renderer, scene, glLost, staleShadow, takeShadowStale, ui, viewport, world };
+export { RT, pmrem, applyLid, applyObjMaterials, applyTransform, aux, buildObject, camera, contactMat, controls, cvs, dirtyFaces, disposeObject, ensureFaceRT, fillLight, floor, grainCanvas, keyLight, markFace, markObj, maxAniso, petGamma, petLinear, rebuildQueue, renderer, scene, glLost, staleShadow, takeShadowStale, ui, viewport, world };

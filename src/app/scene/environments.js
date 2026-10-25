@@ -4,7 +4,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { DEG } from '../core/util.js';
 import { assets, state } from '../core/state.js';
-import { pmrem, scene } from './renderer.js';
+import { RT, pmrem, scene } from './renderer.js';
+import { renderOn } from '../core/render-flag.js';
 import { warmShaders } from './warmup.js';
 import { invalidate } from './camera.js';
 
@@ -113,7 +114,7 @@ function applyEnv() {
   const name = s.envMap;
   if (name === 'hdr' && s.envHdr !== hdrKey) { hdrTex?.dispose(); hdrKey = s.envHdr || ''; hdrTex = assets[s.envHdr] ? hdrFrom(assets[s.envHdr]) : null; }
   scene.environment = envTexture(name) || envTexture('softbox');
-  scene.environmentRotation.set(0, (s.envRot || 0) * DEG, 0);
+  scene.environmentRotation.set(0, (s.envRot || 0) * DEG, 0); turnFoil();
   warmShaders(); invalidate();
 }
 /* the reflections turning by themselves: called each frame; true when they moved */
@@ -122,7 +123,13 @@ function spinEnv(now) {
   if (!state.scene.envSpin) { spinT = null; return false; }
   if (spinT == null) spinT = now;
   scene.environmentRotation.y = ((state.scene.envRot || 0) + (now - spinT) / 1000 * 18) * DEG;   // 18° a second
+  turnFoil();
   return true;
+}
+/* in «Рендер» the tray's foil reflects the cyclorama as its own map (not the scene's): it turns with the studio too */
+function turnFoil() {
+  const y = renderOn() ? scene.environmentRotation.y : 0;
+  for (const rt of RT.values()) for (const m of [rt.bowlMat, rt.tabBackMat]) if (m?.envMap && m.envMapRotation.y !== y) m.envMapRotation.y = y;
 }
 /* a HDR file chosen by the viewer: kept as a picture of the project and put on */
 async function setHdrFile(file, addAsset) {
