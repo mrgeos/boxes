@@ -26,7 +26,7 @@ function create(ctx) {
   const FT = !window.__forceHalf && renderer.extensions.has('EXT_color_buffer_float') ? THREE.FloatType : THREE.HalfFloatType;   // the running average needs the precision
   const NS = +new URLSearchParams(location.search).get('n') || Math.min(low ? 16 : 64, FT === THREE.FloatType ? 64 : 24);   // the running mean needs float precision: half float stops at 24
   const rt = (type, o = {}) => new THREE.WebGLRenderTarget(1, 1, { type, depthBuffer: false, ...o });
-  const rtScene = rt(THREE.HalfFloatType, { samples: low ? 0 : 4, depthBuffer: true }), rtFrame = rt(THREE.HalfFloatType), rtShow = rt(THREE.HalfFloatType);
+  const rtScene = rt(THREE.HalfFloatType, { samples: low ? 0 : 4, depthBuffer: true }), rtFrame = rt(THREE.HalfFloatType);   // (the bloom reads the average through rtFrame, which the next sample overwrites anyway)
   const rtAcc = [0, 1].map(() => rt(FT, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter }));
   let cur = 0, W = 1, H = 1, accN = 0, sampleMs = 0, lightMoved = false, lastSig = '', frames = 0;
   const quad = new FullScreenQuad(null);
@@ -111,7 +111,7 @@ void main(){
   function resize(w, h) {
     W = w; H = h; accN = 0;
     const as = low ? .5 : 1;
-    for (const t of [rtScene, rtFrame, rtShow, ...rtAcc]) t.setSize(W, H);
+    for (const t of [rtScene, rtFrame, ...rtAcc]) t.setSize(W, H);
     gtao.setSize(Math.round(W * as), Math.round(H * as)); gtao.updateGtaoMaterial({ samples: low ? 12 : 24, radius: .14, thickness: .35, distanceExponent: 1 });
     bloom.setSize(W, H);
   }
@@ -127,7 +127,7 @@ void main(){
 
   // the camera shifted by a sub-pixel on top of the editor's own pan (its view offset, CSS px)
   function shift(i) {
-    const cw = viewport.clientWidth, ch = viewport.clientHeight, pr = renderer.getPixelRatio(), v = camera.view?.enabled ? camera.view : null;
+    const cw = viewport.clientWidth, ch = viewport.clientHeight, pr = W / cw, v = camera.view?.enabled ? camera.view : null;
     camera.setViewOffset(cw, ch, (v ? v.offsetX : 0) + (halton(i + 1, 2) - .5) / pr, (v ? v.offsetY : 0) + (halton(i + 1, 3) - .5) / pr, cw, ch);
   }
   const base = new THREE.Vector3(), dir = new THREE.Vector3(), U = new THREE.Vector3(), V = new THREE.Vector3();
@@ -194,20 +194,20 @@ void main(){
     sampleMs = performance.now() - t0;
   }
   /* the average -> the glow of its highlights -> the final look on the screen */
-  function display() {
+  function display(vig = LOOK.vig) {
     let glow = black;
     if (LOOK.bloom > 0) {
-      mCopy.uniforms.tMap.value = rtAcc[cur].texture; run(mCopy, rtShow);
-      bloom.strength = LOOK.bloom * 1.2; bloom.render(renderer, null, rtShow, 0, false);
+      mCopy.uniforms.tMap.value = rtAcc[cur].texture; run(mCopy, rtFrame);
+      bloom.strength = LOOK.bloom * 1.2; bloom.render(renderer, null, rtFrame, 0, false);
       glow = bloom.renderTargetsHorizontal[0].texture;
     }
-    mFinal.uniforms.tAcc.value = rtAcc[cur].texture; mFinal.uniforms.tGlow.value = glow;
+    mFinal.uniforms.tAcc.value = rtAcc[cur].texture; mFinal.uniforms.tGlow.value = glow; mFinal.uniforms.uVig.value = vig;
     run(mFinal, null);
   }
   /* a frame that changed: the scene as it is, with the final look, no sampling */
   function preview() {
     renderer.setRenderTarget(rtScene); renderer.render(scene, camera);
-    mFinal.uniforms.tAcc.value = rtScene.texture; mFinal.uniforms.tGlow.value = black;
+    mFinal.uniforms.tAcc.value = rtScene.texture; mFinal.uniforms.tGlow.value = black; mFinal.uniforms.uVig.value = LOOK.vig;
     run(mFinal, null);
   }
   /* the marks over the scene, last: a depth-only copy of the scene (clear plastic writes no depth), then the marks alone */
@@ -244,11 +244,39 @@ void main(){
     return px * (8 * ms + 4 * ms + 8 + 8 + 8 + 2 * f)   // scene (colour, depth; resolved colour), frame, show, two averages
       + px * ao * (4 + 4 + 4 + 4) + px * 8 * 2 * (1 / 3);   // GTAO: normals + depth, AO, denoised; bloom's mips
   }
+  /* A still picture for the PNG export: the buffer is already W × H (the export set it). The same samples as on screen, each one
+     after a frame's pause (the page stays alive; cancelled() stops it), no MSAA (the shift is the antialiasing, and a big
+     target must stay small), the marks hidden, and the vignette only when the picture has our background (a transparent one has
+     none to darken). The final image is left on the canvas for the caller to copy at once. Returns true, or false when
+     cancelled or the graphics card was taken away. */
+  async function still(w, h, transparent, progress, cancelled) {
+    const s = renderer.getDrawingBufferSize(new THREE.Vector2()), gl = renderer.getContext();
+    if (s.x !== w || s.y !== h) return false;
+    const msaa = rtScene.samples; rtScene.samples = 0; rtScene.dispose();
+    resize(w, h); lastSig = '';
+    const restore = ctx.hideOverlays(); let ok = false;
+    try {
+      ctx.petLinear.value = 1;
+      for (let i = 0; i < NS; i++) {
+        if (cancelled() || gl.isContextLost()) return false;
+        sample(i); accN = i + 1; progress(accN, NS);
+        if (i < NS - 1) await new Promise(r => requestAnimationFrame(r));
+      }
+      if (gl.isContextLost()) return false;
+      display(transparent ? 0 : LOOK.vigExport); ok = true;
+    } finally {
+      ctx.petLinear.value = 0; restore(); renderer.setRenderTarget(null);
+      rtScene.samples = msaa; rtScene.dispose(); accN = 0; W = 0; H = 0;   // (sized again by the next frame)
+    }
+    return ok;
+  }
+  /* the biggest still the target memory allows (about 75 bytes a pixel): fewer on a phone or half float */
+  const limit = () => ({ px: low || FT !== THREE.FloatType ? 8e6 : 12e6, side: 4096 });
   const pending = () => accN < Math.min(NS, window.__studioCap || NS);
   const status = () => ({ n: accN, N: NS });
   // turned off: the big targets are given back (they are sized again at the next frame)
   const release = () => { resize(1, 1); W = 0; H = 0; lightMoved = false; lastSig = ''; ctx.staleShadow(); window.__studio = { n: 0, N: NS, done: false, off: true }; };
-  return { frame, pending, release, status };
+  return { frame, pending, release, status, still, limit };
 }
 
 window.__bsRender = { create };

@@ -8,6 +8,7 @@ import { saveFile } from '../core/project.js';
 import { hideRings } from '../scene/move.js';
 import { hideSelBox } from '../scene/sel-box.js';
 import { hideSelLook } from '../scene/sel-look.js';
+import { stillStudio } from '../scene/render-mode.js';
 import { foldDone, foldOf, foldTimeline, setFold, stopFold } from '../scene/fold.js';
 
 function paintBackground(c, w, h) {
@@ -26,15 +27,22 @@ async function exportPNG() {
   const transparent = $('#pngTransparent').checked || state.scene.bg === 'transparent';
   const w0 = viewport.clientWidth, h0 = viewport.clientHeight, k = Math.min(pngScale, 8192 / Math.max(w0, h0));
   const W = Math.round(w0 * k), H = Math.round(h0 * k);
+  // «Рендер»: the studio's refined picture, when the size is one it can draw; else the plain one, with a word about why
+  let R = stillStudio(), note = '';   // (the word about the plain picture comes after «Сохранено», which would cover it)
+  if (R && !R.fits(W, H)) { const l = R.limit(); note = `«Рендер»: ${W}×${H} — больше, чем студийная картинка осилит (до ${Math.round(l.px / 1e6)} Мпикс, сторона до ${l.side}). Сохраняю обычный вид; выберите масштаб поменьше`; R = null; }
   const pr = renderer.getPixelRatio();
   renderer.setPixelRatio(1); renderer.setSize(W, H, false);
   for (const rt of RT.values()) for (const f of Object.values(rt.faces)) { f.flash = 0; f.mat.emissive.setRGB(0, 0, 0); }
-  const showRings = hideRings(), showSel = hideSelBox(), showLook = hideSelLook(); fitShadowToView(); renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); showRings(); showSel(); showLook();
+  if (R) {
+    fitShadowToView(); renderer.shadowMap.needsUpdate = true;
+    const res = await R.render(W, H, transparent);
+    if (res !== true) { renderer.setPixelRatio(pr); resize(); toast(res === 'cancel' ? 'Выгрузка отменена' : LOST, res === 'cancel' ? 2600 : 4200); return; }
+  } else { const showRings = hideRings(), showSel = hideSelBox(), showLook = hideSelLook(); fitShadowToView(); renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); showRings(); showSel(); showLook(); }
   const out = document.createElement('canvas'); out.width = W; out.height = H; const c = out.getContext('2d');
   if (!transparent) paintBackground(c, W, H);
   c.drawImage(renderer.domElement, 0, 0);
   renderer.setPixelRatio(pr); resize();
-  out.toBlob(b => saveFile(`${slug(activeObj()?.name)}-mockup-${W}x${H}.png`, b), 'image/png');
+  out.toBlob(b => { saveFile(`${slug(activeObj()?.name)}-mockup-${W}x${H}.png`, b); if (note) setTimeout(() => toast(note, 6500), 1800); }, 'image/png');
 }
 /* what the browser records with, or null (with a word to the user) */
 function videoType() {

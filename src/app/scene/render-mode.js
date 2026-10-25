@@ -6,7 +6,7 @@ import { TOUCH } from '../core/model.js';
 import { reapplyQuality } from './quality.js';
 import { $, OVERLAY_LAYER, toast } from '../core/util.js';
 import { script } from '../core/models3d.js';
-import { applyObjMaterials, contactMat, camera, keyLight, petLinear, renderer, scene, staleShadow, viewport } from './renderer.js';
+import { applyObjMaterials, contactMat, controls, camera, keyLight, petLinear, renderer, scene, staleShadow, viewport } from './renderer.js';
 import { invalidate } from './camera.js';
 import { hideRings, ringsShown } from './move.js';
 import { hideSelBox, selBoxShown } from './sel-box.js';
@@ -63,7 +63,8 @@ function initRenderMode(cb) {
   onChange = cb || onChange; setRenderOn(on);
   // the progress chip: «● 23/64», «✓» for a moment when the picture is done; not shown while the view moves
   chip = document.createElement('div'); chip.className = 'render-chip'; chip.setAttribute('aria-live', 'off'); chip.hidden = true;
-  chip.innerHTML = '<i aria-hidden="true"></i><span></span>';
+  chip.innerHTML = '<i aria-hidden="true"></i><span></span><button type="button" hidden>Отменить</button>';
+  chip.querySelector('button').onclick = () => { if (still) still.cancel = true; };
   $('#stage').append(chip);
   new ResizeObserver(() => chip.classList.toggle('low', $('#stage').clientWidth < 600)).observe($('#stage'));
   if (on) load();
@@ -80,7 +81,32 @@ function syncRenderChip(st) {
   }
   if (key === chipKey) { if (key === '✓') chip.classList.toggle('fade', now - chipDone > 1500); return; }
   chipKey = key; chip.hidden = !key;
-  if (key) { chip.classList.toggle('done', key === '✓'); chip.classList.remove('fade'); chip.lastChild.textContent = key; }
+  if (key) { chip.classList.toggle('done', key === '✓'); chip.classList.remove('fade'); chip.querySelector('span').textContent = key; }
 }
 
-export { active, addMarks, initRenderMode, lowProfile, pixelCap, renderState, setRender, syncRenderChip };
+/* ---------- a still picture for the PNG export (export/image.js) ----------
+   While it is drawn the loop does nothing else (the view's buffer is the picture's size), the chip shows the progress with a
+   button to stop it. */
+let still = null;
+const stillBusy = () => !!still;
+/* the studio's way to draw a still, or null when the plain export is the one to use (the mode is off or not loaded yet) */
+function stillStudio() {
+  if (!on || !studio) return null;
+  return {
+    fits(w, h) { const l = studio.limit(); return w * h <= l.px && Math.max(w, h) <= l.side; },
+    limit() { return studio.limit(); },
+    /* true: the picture is on the canvas now; 'cancel'; false: the graphics card was taken away */
+    async render(w, h, transparent) {
+      still = { cancel: false };
+      const span = chip.querySelector('span'), btn = chip.querySelector('button'), was = controls.enabled;
+      chip.className = 'render-chip export' + (chip.classList.contains('low') ? ' low' : ''); chip.hidden = false; btn.hidden = false; chipKey = ''; controls.enabled = false;
+      span.textContent = 'Рендер 0/' + studio.status().N;
+      try {
+        const ok = await studio.still(w, h, transparent, (n, N) => { span.textContent = `Рендер ${n}/${N}`; }, () => still.cancel);
+        return ok ? true : still.cancel ? 'cancel' : false;
+      } finally { still = null; controls.enabled = was; btn.hidden = true; chip.hidden = true; chip.classList.remove('export'); invalidate(); }
+    },
+  };
+}
+
+export { active, addMarks, initRenderMode, lowProfile, pixelCap, renderState, setRender, stillBusy, stillStudio, syncRenderChip };

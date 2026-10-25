@@ -31,7 +31,7 @@ import { syncItemNav } from '../ui/item-nav.js';
 import { renderBrand } from '../ui/brand-panel.js';
 import { layoutPending, objectsIn } from '../core/groups.js';
 import { applyEnv, spinEnv } from './environments.js';
-import { active as studioActive, syncRenderChip } from './render-mode.js';
+import { active as studioActive, stillBusy, syncRenderChip } from './render-mode.js';
 import { isShown } from './isolation.js';
 import { syncIsolationPlate } from '../ui/isolation-plate.js';
 
@@ -273,6 +273,7 @@ function paintFaces(ms) {
 }
 const flushFaces = () => paintFaces(Infinity);
 function resize() {
+  if (stillBusy()) return;   // the PNG export holds the buffer at the picture's size; it calls resize() itself when done
   const w = viewport.clientWidth, h = viewport.clientHeight; if (!w || !h) return;
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); applyViewOffset();
 }
@@ -303,6 +304,7 @@ function initCamera() {
   renderer.setAnimationLoop(now => {
     // seconds since the last frame: the auto-rotation turns by time, not by frames (a slow machine turns as fast)
     const gap = lastNow ? now - lastNow : 0, dt = Math.min(.25, gap / 1000); lastNow = now;
+    if (stillBusy()) return;   // a still picture is being drawn (the export): the view's buffer is not ours now
     let changed = rebuildQueue.size || stickerDirty.size || camTween || recording || now < drawUntil || drawOnce;
     drawOnce = false;
     if (dirtyFaces.size || stickerDirty.size) staleShadow();   // a face's picture may cut it (alpha) and so its shadow
