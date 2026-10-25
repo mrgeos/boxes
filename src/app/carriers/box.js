@@ -175,8 +175,8 @@ function netWindows(o, n = netLayout(o)) {
   res.leafCut = leafCut;
   return res;
 }
-function cutNetWindow(c, o, pad, k, padY = pad) {
-  const ws = netWindows(o); if (!ws.length) return;
+function cutNetWindow(c, o, pad, k, padY = pad, ws = netWindows(o)) {
+  if (!ws.length) return;
   c.save(); c.globalCompositeOperation = 'destination-out';
   if (ws.leafCut) {
     // the leaves of the handle stay: only the openings round them are cut away

@@ -2,6 +2,8 @@
 import { BLEED_MM } from './net-check.js';
 import { bleedLoops, printSheet } from './bleed.js';
 import { templateSVG } from './template.js';
+import { backNet } from './net-side.js';
+import { netLayout } from '../core/model.js';
 
 /* The dieline of an object as lines, read from its template SVG (net/template.js): that file is what the technologist
    gets, so it is the one source, and no carrier has to say its lines twice. The layer of a line comes from the colour
@@ -72,8 +74,14 @@ function parseDieline(svg) {
 }
 /* The object's dieline: { W, H (the net, mm), bleed (mm, 0 when the net has none), sheet: { W, H } (the net and its
    bleed), prims, counts: { layer: n } } */
-function dielineData(o, { bleed = BLEED_MM } = {}) {
-  const S = printSheet(o, bleed), b = S.bleed, prims = parseDieline(templateSVG(o, { bleed: 0 }));
+/* the lines seen from the back of the sheet: turned over, so left and right change places (and an arc's bulge its sign) */
+function mirrorPrims(prims, W) {
+  return prims.map(pr => pr.circle ? { ...pr, circle: { ...pr.circle, cx: W - pr.circle.cx } } : { ...pr, pts: pr.pts.map(([x, y]) => [W - x, y]), bulge: pr.bulge.map(v => -v) });
+}
+function dielineData(o, { bleed = BLEED_MM, side = 'front' } = {}) {
+  const back = side === 'back', S = printSheet(o, bleed, back ? backNet(o, netLayout(o)) : undefined), b = S.bleed;
+  let prims = parseDieline(templateSVG(o, { bleed: 0 }));
+  if (back) prims = mirrorPrims(prims, S.n.W);
   if (b) for (const loop of bleedLoops(o, S.n, b)) prims.push({ layer: 'BLEED', pts: loop, closed: true, bulge: loop.map(() => 0) });
   const counts = {}; for (const l of LAYERS) counts[l] = prims.filter(p => p.layer === l).length;
   return { W: S.n.W, H: S.n.H, bleed: b, sheet: { W: S.W, H: S.H }, prims, counts };
