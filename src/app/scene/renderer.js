@@ -5,6 +5,7 @@ import { $, DEG, S, clamp } from '../core/util.js';
 import { FINISHES, LID_COLORS, WHITE_INSIDE } from '../core/constants.js';
 import { sel } from '../core/state.js';
 import { clearLid, ensureFaces, faceKeys, faceMM, facePx, isClearFace, paintKeys } from '../core/model.js';
+import { isSheetKey } from '../core/sheet.js';
 import { buildCup } from '../carriers/cup.js';
 import { buildBag } from '../carriers/bag.js';
 import { buildTube } from '../carriers/tube.js';
@@ -101,11 +102,18 @@ const dirtyFaces = new Set();
 const rebuildQueue = new Set();
 const ui = { editor: true, net: true, layers: false, stickers: false, lib: true, brand: true };
 function markFace(o, k) {
+  // the sheet's layers print on every face, and in the sheet's own picture (made when it is wanted)
+  if (isSheetKey(k)) {
+    for (const t of faceKeys(o)) dirtyFaces.add(o.id + '|' + t);
+    if (RT.get(o.id)?.faces[k]) dirtyFaces.add(o.id + '|' + k);
+    if (o.id === sel.obj) { ui.editor = true; ui.net = true; }
+    return;
+  }
   for (const t of wrapTouch(o, k)) dirtyFaces.add(o.id + '|' + t);   // faces its layers run onto, now and before
   dirtyFaces.add(o.id + '|' + k);
   if (o.id === sel.obj) { ui.editor = true; ui.net = true; }
 }
-function markObj(o) { for (const k of paintKeys(o)) markFace(o, k); }
+function markObj(o) { for (const k of paintKeys(o)) markFace(o, k); for (const s of ['sheet:front', 'sheet:back']) if (RT.get(o.id)?.faces[s]) dirtyFaces.add(o.id + '|' + s); }
 function ensureFaceRT(o, k) {
   const rt = RT.get(o.id); let f = rt.faces[k];
   const [W, H, ppm] = facePx(o, k);

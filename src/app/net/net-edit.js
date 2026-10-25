@@ -11,6 +11,7 @@ import { commit } from '../core/project.js';
 import { drawSelection, edCursor, edDouble, edMove, edPress, edUp, hitLayer } from '../ui/face-editor.js';
 import { refreshFields } from '../ui/fields.js';
 import { inPanel, panelPath } from './net-view.js';
+import { panelFrame } from './sheet-map.js';
 import { markTop, netGeom, netView } from './net-stage.js';
 
 /* A face is shown on the net by one panel, turned by quarter turns (or any angle) and cut to a part of the face. So
@@ -28,15 +29,8 @@ let dragMap = null;
 function mapFor(o, p) {
   if (!p || p.fan || !p.key || isStickerKey(p.key)) return null;
   const fc = RT.get(o.id)?.faces[p.key]?.canvas; if (!fc?.width) return null;
-  const V = netView, k = V.k, S = cropPx(fc, p) || [0, 0, fc.width, fc.height];
-  let th, cx, cy, dw, dh;
-  if (p.ang != null) { th = p.ang; cx = V.ox + p.cx * k; cy = V.oy + p.cy * k; dw = p.fw * k; dh = p.fh * k; }
-  else {
-    const q = p.q ?? (p.rot ? 2 : 0); th = q * Math.PI / 2; cx = V.ox + (p.x + p.w / 2) * k; cy = V.oy + (p.y + p.h / 2) * k;
-    [dw, dh] = q % 2 ? [p.h * k, p.w * k] : [p.w * k, p.h * k];
-  }
-  const c = Math.cos(th), s = Math.sin(th), rx = (-S[0] / S[2] - .5) * dw, ry = (-S[1] / S[3] - .5) * dh;
-  const O = [cx + rx * c - ry * s, cy + rx * s + ry * c];
+  const V = netView, S = cropPx(fc, p) || [0, 0, fc.width, fc.height];
+  const { th, c, s, dw, O } = panelFrame(p, S, V.k, V.ox, V.oy);
   return {
     p, key: p.key, k: dw / S[2], W: fc.width, H: fc.height, th, c, s, O,
     toLocal: (x, y) => [(x - O[0]) * c + (y - O[1]) * s, -(x - O[0]) * s + (y - O[1]) * c],
