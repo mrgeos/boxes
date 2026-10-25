@@ -7,10 +7,10 @@
    the same two: `parent>child#n`, so it stays the same when the sizes change. This file holds data only (no three.js). */
 const FLIP_MS = 500, DEFAULT_FOLD_MS = 1350, STEP_MS = 700, MIN_MS = 100, MAX_MS = 20000;
 const LABEL = { front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', bottom: 'Дно', top: 'Крышка', flap: 'Язычок', tab: 'Клапан', fold: 'Загиб', lock: 'Замок',
-  ear: 'Ушко', dust: 'Пылевой клапан', iflap: 'Боковой клапан', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', earLeft: 'Левое ушко', earRight: 'Правое ушко' };
+  ear: 'Ушко', dust: 'Пылевой клапан', iflap: 'Боковой клапан', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', earLeft: 'Левое ушко', earRight: 'Правое ушко', gtri: 'Склейка', wrap: 'Стенка', lidWrap: 'Крышка: стенка' };
 const STEP = { front: 'стенки', back: 'стенки', left: 'стенки', right: 'стенки', bottom: 'дно', top: 'крышка', flap: 'язычок', tab: 'клапаны', fold: 'загибы', lock: 'замки', ear: 'ушки',
-  dust: 'пылевые клапаны', iflap: 'боковые клапаны', lidFront: 'стенки крышки', lidBack: 'стенки крышки', lidLeft: 'стенки крышки', lidRight: 'стенки крышки', earLeft: 'ушки', earRight: 'ушки' };
-const label = k => LABEL[k] || k;
+  dust: 'пылевые клапаны', iflap: 'боковые клапаны', lidFront: 'стенки крышки', lidBack: 'стенки крышки', lidLeft: 'стенки крышки', lidRight: 'стенки крышки', earLeft: 'ушки', earRight: 'ушки', gtri: 'склеено заранее', wrap: 'стенки', lidWrap: 'стенки крышки' };
+const label = k => LABEL[k] || (/^side\d+$/.test(k) ? `Грань ${k.slice(4)}` : k);
 const creaseLabel = c => `${label(c.key)} ↔ ${label(c.parentKey)}`;
 /* the names of the creases, those that read alike told apart: by the side of the parent panel they lie on, as the net shows it
    («Ушко ↔ Перед (слева)»), else by number («Загиб ↔ Левый бок 1») in the order top to bottom, left to right.
@@ -27,7 +27,7 @@ function nameCreases(creases) {
 }
 /* a step's name by what closes in it: «Стенки», «Пылевые клапаны, крышка» */
 function stepName(creases) {
-  const names = [...new Set(creases.map(c => STEP[c.key] || label(c.key).toLowerCase()))];
+  const names = [...new Set(creases.map(c => /^side\d+$/.test(c.key) ? 'грани' : STEP[c.key] || label(c.key).toLowerCase()))];
   const s = names.slice(0, 2).join(', ') + (names.length > 2 ? '…' : '');
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

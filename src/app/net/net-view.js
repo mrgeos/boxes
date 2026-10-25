@@ -7,6 +7,7 @@ import { fanOutline, fanXY } from '../carriers/cup.js';
 import { cutNetWindow, netWindowPath, netWindows } from '../carriers/box.js';
 import { cropPx, drawNetPanel } from '../faces/render.js';
 import { select } from '../core/selection.js';
+import { hasReverse } from './net-side.js';
 import { isPart } from '../core/extras.js';
 import { activeSticker } from '../stickers/placement.js';
 import { cutPath, shapePath, stickerSheet, stickerSheetCanvas } from '../stickers/sheet.js';
@@ -53,6 +54,7 @@ const NET_TEXT = {
   sticker: ['Голубой — контур реза. За ним вылет 2 мм: фон и картинки у края продолжаются туда, чтобы при неточной резке не осталось каймы. Серый пунктир — безопасная зона: текст и важное держите внутри.', 'Контур SVG', 'PNG с вылетом'],
 };
 function netTexts(st) {
+  const ob = activeObj(); $('#flatBackBtn').hidden = $('#flatBackBtn2').hidden = !(!st && ob && hasReverse(ob));   // the reverse's PNG only where it has something to print
   const [hint, svg, png] = NET_TEXT[st ? 'sticker' : 'obj'];
   $('#netHint').textContent = st?.kind === 'custom' ? hint.replace(/ Серый пунктир.*$/, ' Текст и важное держите в 2 мм от края картинки.') : hint;
   $('#tplBtn2').textContent = svg; $('#flatBtn2').textContent = png;
@@ -88,7 +90,7 @@ function paintNet(c, o, n, { ox, oy = ox, k, selKey = sel.face, accent = getComp
   for (const p of n.panels) {
     const x = ox + p.x * k, y = oy + p.y * k, w = p.w * k, h = p.h * k, fc = rt?.faces[p.key]?.canvas;
     c.save(); c.beginPath(); panelPath(c, p, ox, oy, k); c.clip();
-    if (fc && p.fan && fan) c.drawImage(fan(p, fc, w, h), x, y, w, h); else if (fc) drawNetPanel(c, fc, p, x, y, w, h, cropPx(fc, p)); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
+    if (fc && p.fan && fan) c.drawImage(fan(p, fc, w, h), x, y, w, h); else if (fc) drawNetPanel(c, fc, p, x, y, w, h, cropPx(fc, p)); else if (p.plain) { c.fillStyle = p.plain; c.fillRect(x, y, w, h); } else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
     else if (p.blank) { c.fillStyle = 'rgba(120,110,95,.14)'; c.fillRect(x, y, w, h); }
     c.restore();
     c.beginPath();
@@ -97,13 +99,14 @@ function paintNet(c, o, n, { ox, oy = ox, k, selKey = sel.face, accent = getComp
       const [ax, ay] = fanXY(p.fan, 0, 0), [bx, by] = fanXY(p.fan, 0, 1);   // seam: glue overlap to the left
       c.save(); c.setLineDash([2, 2]); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; const q = new Path2D(); q.moveTo(x + ax * k, y + ay * k); q.lineTo(x + bx * k, y + by * k); c.stroke(q); c.restore();
     } else if (p.poly || p.r || p.circle) panelPath(c, p, ox, oy, k); else c.rect(x + .5, y + .5, w - 1, h - 1);
-    c.setLineDash(p.key === selKey ? [] : [3, 3]); c.lineWidth = p.key === selKey ? 2.5 : 1; c.strokeStyle = p.key === selKey ? accentCss : 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]);
+    const on = selKey != null && p.key === selKey;
+    c.setLineDash(on ? [] : [3, 3]); c.lineWidth = on ? 2.5 : 1; c.strokeStyle = on ? accentCss : 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]);
   }
-  if (!n.part) cutNetWindow(c, o, ox, k, oy);
+  if (!n.part) cutNetWindow(c, o, ox, k, oy, n.windows);
   // a film's safe zone: 4 mm in from the cut
   if (n.tray?.safe) { c.beginPath(); n.tray.safe.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.closePath(); c.setLineDash([3, 3]); c.lineWidth = 1; c.strokeStyle = 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]); }
   for (const p of n.panels) for (const l of p.creases || []) { c.beginPath(); c.moveTo(ox + l[0] * k, oy + l[1] * k); c.lineTo(ox + l[2] * k, oy + l[3] * k); c.setLineDash([4, 3]); c.strokeStyle = 'rgba(230,0,126,.7)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]); }
-  for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.fillStyle = o.board || '#ffffff'; c.fill(); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke();
+  for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.fillStyle = n.plain || o.board || '#ffffff'; c.fill(); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke();
     if (t.glue) { c.beginPath(); t.glue.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.fillStyle = 'rgba(243,146,0,.25)'; c.fill(); }
     for (const l of t.creases || []) { c.beginPath(); c.moveTo(ox + l[0] * k, oy + l[1] * k); c.lineTo(ox + l[2] * k, oy + l[3] * k); c.setLineDash([4, 3]); c.strokeStyle = 'rgba(230,0,126,.7)'; c.stroke(); c.setLineDash([]); }
   }
@@ -113,7 +116,7 @@ function paintNet(c, o, n, { ox, oy = ox, k, selKey = sel.face, accent = getComp
     c.globalCompositeOperation = 'destination-out'; c.fill(); c.restore();
     c.beginPath(); hl.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.closePath(); c.setLineDash([3, 3]); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]);
   }
-  const ws = n.part ? [] : netWindows(o, n), line = (pts, dash) => { c.beginPath(); pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.setLineDash(dash); c.stroke(); c.setLineDash([]); };
+  const ws = n.part ? [] : n.windows || netWindows(o, n), line = (pts, dash) => { c.beginPath(); pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.setLineDash(dash); c.stroke(); c.setLineDash([]); };
   c.strokeStyle = 'rgba(0,160,227,.9)'; c.lineWidth = 1;
   for (const q of ws) if (!(ws.leafCut && q.lid)) { netWindowPath(c, q, ox, k, oy); c.stroke(); }
   // the handle cut out of the lid: its leaves lie in the openings, creased to the bridge

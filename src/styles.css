@@ -218,6 +218,9 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .np-chip:hover{background:var(--field)}
 .np-chip[aria-pressed=true]{background:var(--accent-soft);color:var(--accent)}
 .np-chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* a narrow pane (the net beside the 3D view on a small screen): tighter chips, so the row still fits */
+.netpane{container-type:inline-size}
+@container (max-width:360px){.np-chip{padding:0 7px;font-size:11.5px}}
 @media (pointer:coarse){.np-chip{height:40px;padding:0 12px}.np-ready{height:32px}}
 .np-b{all:unset;box-sizing:border-box;display:grid;place-items:center;min-width:30px;height:30px;border-radius:7px;color:var(--fg);cursor:pointer;font-size:16px;line-height:1}
 .np-b.pct{min-width:54px;font:12px var(--mono)}

@@ -12,7 +12,7 @@ import { panelPath } from './net-view.js';
    Not covered yet: the bleed inside a window or a hole, a cup's fan. */
 const rectLike = p => !p.fan && !p.poly && !p.circle && !p.r && p.ang == null;
 /* a panel that gets bleed: printed (a face of its own, or a fold's strip in the ground colour), not a fan */
-const bleeds = (o, p) => !p.fan && (!!p.fold || !!o.faces[p.key]);
+const bleeds = (o, p) => !p.fan && (!!p.fold || !!p.plain || !!o.faces[p.key]);
 
 /* ---------- on a canvas ---------- */
 /* the face's picture round the panel (x, y, w, h: the panel itself): eight pieces, the middle one left to the panel. Past the
@@ -63,14 +63,14 @@ function paintBleed(c, o, n, ox, oy, k, b = BLEED_MM, line = null, canvasOf = nu
   for (const p of n.panels) {
     if (p.fan) continue;
     const fc = canvasOf ? canvasOf(p) : rt?.faces[p.key]?.canvas;
-    if (!fc && !p.fold) continue;
+    if (!fc && !p.fold && !p.plain) continue;
     if (rectLike(p) && fc?.width) {
       const bp = Math.max(1, Math.round(b * fc.width / faceMM(o, p.key)[0]));
       drawBleed(c, fc, p, ox + p.x * k, oy + p.y * k, p.w * k, p.h * k, g, bp, cropPx(fc, p));
     } else {
       c.save(); c.beginPath(); growPath(c, p, g, ox, oy, k);
       if (p.circle) c.moveTo(ox + (p.x + p.w) * k, oy + (p.y + p.h / 2) * k);
-      panelPath(c, p, ox, oy, k); c.fillStyle = o.faces[p.key]?.bg || o.board || '#ffffff'; c.fill('evenodd'); c.restore();
+      panelPath(c, p, ox, oy, k); c.fillStyle = p.plain || o.faces[p.key]?.bg || o.board || '#ffffff'; c.fill('evenodd'); c.restore();
     }
     if (line) { c.save(); c.beginPath(); growPath(c, p, g, ox, oy, k); c.strokeStyle = line; c.lineWidth = 1; c.stroke(); c.restore(); }
   }

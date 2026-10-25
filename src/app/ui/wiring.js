@@ -93,6 +93,7 @@ function initWiring() {
   $$('.bleedOn').forEach(b => { b.checked = exportBleed(); b.onchange = () => { setExportBleed(b.checked); $$('.bleedOn').forEach(x => { x.checked = b.checked; }); }; });
   $('#tplBtn').onclick = $('#tplBtn2').onclick = () => { closeMenu(); exportTemplate(); };
   $('#flatBtn').onclick = $('#flatBtn2').onclick = () => { closeMenu(); exportFlat(); };
+  $('#flatBackBtn').onclick = $('#flatBackBtn2').onclick = () => { closeMenu(); exportFlat('back'); };
   $('#pngBtn').onclick = () => { closeMenu(); exportPNG(); };
   $('#videoBtn').onclick = () => { closeMenu(); exportVideo(); };
   $('#foldVideoBtn').onclick = () => { const back = $('#foldVideoBack').checked; closeMenu(); exportFoldVideo(back); };

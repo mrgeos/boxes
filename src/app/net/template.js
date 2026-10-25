@@ -16,6 +16,7 @@ import { saveFile } from '../core/project.js';
 import { panelPath } from './net-view.js';
 import { bleedLoops, paintBleed, printSheet } from './bleed.js';
 import { BLEED_MM } from './net-check.js';
+import { backNet, hasReverse } from './net-side.js';
 import { fluteName } from '../carriers/corrugated.js';
 import { BOX_STYLES } from '../carriers/carton-net.js';
 import { activeSticker } from '../stickers/placement.js';
@@ -227,8 +228,8 @@ function exportTemplate() {
 }
 /* The net with its design as a picture, 300 dpi (at most 6000 px a side). bleed (mm): the sheet is wider by it on every
    side and the faces run on past the cut (net/bleed.js), as in templateSVG. A canvas of the net's own size without it. */
-function printCanvas(o, bleed = 0) {
-  const S = printSheet(o, bleed), n = S.n, k = Math.min(6000 / Math.max(S.W, S.H), 300 / 25.4);
+function printCanvas(o, bleed = 0, side = 'front') {
+  const S = printSheet(o, bleed, side === 'back' ? backNet(o, netLayout(o)) : undefined), n = S.n, k = Math.min(6000 / Math.max(S.W, S.H), 300 / 25.4);
   const out = document.createElement('canvas'); out.width = Math.round(S.W * k); out.height = Math.round(S.H * k);
   const c = out.getContext('2d'), rt = RT.get(o.id);
   // stickers are applied after printing, so the print sheet leaves them out
@@ -237,7 +238,7 @@ function printCanvas(o, bleed = 0) {
   for (const p of n.panels) {
     const fc = rt.faces[p.key]?.canvas, x = p.x * k, y = p.y * k, w = p.w * k, h = p.h * k;
     c.save(); c.beginPath(); panelPath(c, p, 0, 0, k); c.clip();
-    if (fc) drawNetPanel(c, fc, p, x, y, w, h, cropPx(fc, p)); else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
+    if (fc) drawNetPanel(c, fc, p, x, y, w, h, cropPx(fc, p)); else if (p.plain) { c.fillStyle = p.plain; c.fillRect(x, y, w, h); } else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
     else if (p.blank && !bagFilm(o)) { c.fillStyle = p.reverse ? o.faces.inside?.bg || o.board : o.board; c.fillRect(x, y, w, h); }
     c.restore();
   }
@@ -245,16 +246,18 @@ function printCanvas(o, bleed = 0) {
   c.save(); c.globalCompositeOperation = 'destination-out';
   for (const p of n.panels) for (const hl of p.holes || []) { c.beginPath(); hl.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](X * k, Y * k)); c.closePath(); c.fill(); }
   c.restore();
-  for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](X * k, Y * k)); c.closePath(); c.fillStyle = o.board || '#ffffff'; c.fill(); }
-  cutNetWindow(c, o, 0, k);
+  for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](X * k, Y * k)); c.closePath(); c.fillStyle = n.plain || o.board || '#ffffff'; c.fill(); }
+  cutNetWindow(c, o, 0, k, 0, n.windows);
   markObj(o);
   return out;
 }
-function exportFlat() {
+/* the PNG of the net's front, or its back (the inside, mirrored: how the sheet lies turned over) */
+function exportFlat(side = 'front') {
   const o = activeObj(); if (!o) return toast('Выберите объект');
   const st = activeSticker(); if (st) return exportStickerPNG(o, st) || notYet();
-  const b = bleedFor(o, true);
-  printCanvas(o, b).toBlob(blob => saveFile(`${slug(o.name)}-razvertka-dizain${b ? VYLET : ''}.png`, blob), 'image/png');
+  if (side === 'back' && !hasReverse(o)) return toast('На обороте ничего нет');
+  const b = bleedFor(o, true), tag = side === 'back' ? '-oborot' : '';
+  printCanvas(o, b, side).toBlob(blob => saveFile(`${slug(o.name)}-razvertka-dizain${tag}${b ? VYLET : ''}.png`, blob), 'image/png');
 }
 
 export { exportBleed, exportFlat, exportTemplate, loadExportBleed, printCanvas, setExportBleed, templateSVG };

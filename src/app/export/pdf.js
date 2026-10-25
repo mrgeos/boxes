@@ -1,12 +1,13 @@
 // PDF для типографии: дизайн по граням, рез, биговка, клей и вылет слоями; один лист или раскладка
 import { slug } from '../core/util.js';
-import { faceKeys, faceLabel, faceMM } from '../core/model.js';
+import { faceKeys, faceLabel, faceMM, netLayout } from '../core/model.js';
 import { renderFace, drawNetPanel, cropPx, setSkipStickers } from '../faces/render.js';
 import { bagFilm } from '../carriers/bag.js';
 import { fanOutline } from '../carriers/cup.js';
 import { BLEED_MM } from '../net/net-check.js';
 import { grownPoly, paintBleed, printSheet, bleeds } from '../net/bleed.js';
 import { dielineData } from '../net/dieline.js';
+import { backNet } from '../net/net-side.js';
 import { panelPath } from '../net/net-view.js';
 
 /* A PDF written by hand (nothing to load: the file is a few kilobytes of text round the pictures). The page is the
@@ -132,17 +133,14 @@ async function panelPictures(o, S, dpi, report) {
 }
 
 /* ---------- the drawing of one net (a form, in mm with y down) ---------- */
-async function build(o, { bleed = BLEED_MM, dpi = 300, layout = null, report = null } = {}) {
-  const S = printSheet(o, bleed), n = S.n, b = S.bleed, D = dielineData(o, { bleed: b }), pdf = writer();
-  const { pics, dpis } = await panelPictures(o, S, dpi, report);
-  // catalog, pages, page: numbers first, the rest is put when known
-  const root = pdf.add('<< >>'), pages = pdf.add('<< >>'), page = pdf.add('<< >>'), info = pdf.add(`<< /Title (${slug(o.name || 'box').replace(/[^\x20-\x7E]/g, '').replace(/[()\\]/g, '') || 'box'}) /Producer (Box Studio 3D) /Creator (Box Studio 3D) >>`);
-  const ocg = {}; for (const [key, name] of LAYERS) ocg[key] = pdf.add(`<< /Type /OCG /Name <${hex16(name)}> >>`);
-  const cs = LAYERS.filter(l => l[2]).map(([key, , spot, rgb]) => `/Cs${key} [/Separation /${spot} /DeviceRGB << /FunctionType 2 /Domain [0 1] /C0 [1 1 1] /C1 [${rgb.map(n4).join(' ')}] /N 1 >>]`).join(' ');
+/* The form of one side of the sheet: its pictures, the design, the lines. sh = { S, D, pics }; the numbers of the layers
+   and the spot colours are shared by all the sides of the file. */
+function sideForm(pdf, o, sh, ocg, cs) {
+  const { S, D, pics } = sh, n = S.n, b = S.bleed;
   const images = new Map(); let im = 0;
   for (const [p, pic] of pics) { images.set(p, `Im${im++}`); pic.id = pdf.add(`<< /Type /XObject /Subtype /Image /Width ${pic.w} /Height ${pic.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode >>`, pic.data); }
   // the design: bleed rings of all panels first, then the panels, then the glue flaps
-  const colorOf = p => p.fold ? rgbOf(o.faces.front?.bg || o.board) : p.blank && !bagFilm(o) ? rgbOf(p.reverse ? o.faces.inside?.bg || o.board : o.board) : null;
+  const colorOf = p => p.plain ? rgbOf(p.plain) : p.fold ? rgbOf(o.faces.front?.bg || o.board) : p.blank && !bagFilm(o) ? rgbOf(p.reverse ? o.faces.inside?.bg || o.board : o.board) : null;
   let design = '';
   const place = p => { const pic = pics.get(p); return `q ${n3(pic.W)} 0 0 ${n3(-pic.H)} ${n3(pic.x)} ${n3(pic.y + pic.H)} cm /${images.get(p)} Do Q `; };
   if (b) for (const p of n.panels) {
@@ -156,7 +154,7 @@ async function build(o, { bleed = BLEED_MM, dpi = 300, layout = null, report = n
     if (!pics.has(p) && !col) continue;
     design += `q ${shapeOps(p, 0)}W n ${col ? `${col} rg ${shapeOps(p, 0)}f ` : place(p)}Q\n`;
   }
-  for (const t of n.tabs || []) design += `q ${rgbOf(o.board || '#ffffff')} rg ${polyOps(t.pts)}f Q\n`;
+  for (const t of n.tabs || []) design += `q ${rgbOf(n.plain || o.board || '#ffffff')} rg ${polyOps(t.pts)}f Q\n`;
   // the lines
   let lines = ''; const by = {};
   for (const pr of D.prims) (by[LAYER_OF[pr.layer]] ||= []).push(pr);
@@ -166,22 +164,39 @@ async function build(o, { bleed = BLEED_MM, dpi = 300, layout = null, report = n
   }
   const content = `q 1 0 0 1 ${n3(b)} ${n3(b)} cm\n/OC /LDesign BDC\n${design}EMC\n${lines}Q\n`;
   const res = `<< /XObject << ${[...images].map(([p, nm]) => `/${nm} ${pics.get(p).id} 0 R`).join(' ')} >> /ColorSpace << ${cs} >> /Properties << ${LAYERS.map(([k]) => `/L${k} ${ocg[k]} 0 R`).join(' ')} >> >>`;
-  const form = pdf.add(`<< /Type /XObject /Subtype /Form /BBox [0 0 ${n3(S.W)} ${n3(S.H)}] /Resources ${res} >>`, content);
-  // the page: the net once, or the copies of a sheet's layout
-  const sw = layout ? layout.sheet.w : S.W, sh = layout ? layout.sheet.h : S.H;
-  let place0 = '';
-  if (layout) for (const it of layout.items) place0 += layout.rot ? `q 0 1 -1 0 ${n3(it.x - b + S.H)} ${n3(it.y - b)} cm /F Do Q\n` : `q 1 0 0 1 ${n3(it.x - b)} ${n3(it.y - b)} cm /F Do Q\n`;
-  else place0 = '/F Do\n';
-  const stream = pdf.add('<< >>', `q ${n4(PT)} 0 0 ${n4(-PT)} 0 ${n4(sh * PT)} cm\n${place0}Q\n`);
-  const box = (x0, y0, x1, y1) => `[${[x0, y0, x1, y1].map(v => n4(v * PT)).join(' ')}]`;
-  pdf.put(page, `<< /Type /Page /Parent ${pages} 0 R /MediaBox ${box(0, 0, sw, sh)}${layout ? '' : ` /BleedBox ${box(0, 0, sw, sh)} /TrimBox ${box(b, b, b + S.n.W, b + S.n.H)}`} /Contents ${stream} 0 R /Resources << /XObject << /F ${form} 0 R >> >> >>`);
-  pdf.put(pages, `<< /Type /Pages /Kids [${page} 0 R] /Count 1 >>`);
-  const all = LAYERS.map(([k]) => `${ocg[k]} 0 R`).join(' ');
-  pdf.put(root, `<< /Type /Catalog /Pages ${pages} 0 R /OCProperties << /OCGs [${all}] /D << /Order [${all}] /ON [${all}] >> >> >>`);
-  return { bytes: pdf.finish(root, info), faces: dpis, dpi: Math.min(...dpis.map(f => f.dpi), Math.round(dpi)), bleed: b, sheet: { w: sw, h: sh } };
+  return pdf.add(`<< /Type /XObject /Subtype /Form /BBox [0 0 ${n3(S.W)} ${n3(S.H)}] /Resources ${res} >>`, content);
 }
-/* The print PDF of object o: { bytes, faces: [{ key, label, dpi }], dpi, bleed, sheet }. bleed (mm, 3), dpi (300); layout
-   (an imposition of net/impose.js): the sheet of copies instead of one net. */
+/* back: a second page, the sheet seen from behind (net/net-side.js: mirrored, with the inside faces), the same size and trim */
+async function build(o, { bleed = BLEED_MM, dpi = 300, layout = null, report = null, back = false } = {}) {
+  const sheets = [];
+  for (const side of back && !layout ? ['front', 'back'] : ['front']) {
+    const S = printSheet(o, bleed, side === 'back' ? backNet(o, netLayout(o)) : undefined), D = dielineData(o, { bleed: S.bleed, side });
+    sheets.push({ S, D, side, ...(await panelPictures(o, S, dpi, report)) });
+  }
+  const S = sheets[0].S, b = S.bleed, pdf = writer(), dpis = sheets.flatMap(h => h.side === 'back' ? h.dpis.map(f => ({ ...f, label: `${f.label} (оборот)` })) : h.dpis);
+  // catalog, pages, page: numbers first, the rest is put when known
+  const root = pdf.add('<< >>'), pages = pdf.add('<< >>'), page = pdf.add('<< >>'), info = pdf.add(`<< /Title (${slug(o.name || 'box').replace(/[^\x20-\x7E]/g, '').replace(/[()\\]/g, '') || 'box'}) /Producer (Box Studio 3D) /Creator (Box Studio 3D) >>`);
+  const ocg = {}; for (const [key, name] of LAYERS) ocg[key] = pdf.add(`<< /Type /OCG /Name <${hex16(name)}> >>`);
+  const cs = LAYERS.filter(l => l[2]).map(([key, , spot, rgb]) => `/Cs${key} [/Separation /${spot} /DeviceRGB << /FunctionType 2 /Domain [0 1] /C0 [1 1 1] /C1 [${rgb.map(n4).join(' ')}] /N 1 >>]`).join(' ');
+  const box = (x0, y0, x1, y1) => `[${[x0, y0, x1, y1].map(v => n4(v * PT)).join(' ')}]`, sw = layout ? layout.sheet.w : S.W, sh = layout ? layout.sheet.h : S.H;
+  const kids = [];
+  sheets.forEach((h, i) => {
+    const form = sideForm(pdf, o, h, ocg, cs), pg = i ? pdf.add('<< >>') : page;
+    // the page: the net once, or the copies of a sheet's layout
+    let place0 = '';
+    if (layout) for (const it of layout.items) place0 += layout.rot ? `q 0 1 -1 0 ${n3(it.x - b + S.H)} ${n3(it.y - b)} cm /F Do Q\n` : `q 1 0 0 1 ${n3(it.x - b)} ${n3(it.y - b)} cm /F Do Q\n`;
+    else place0 = '/F Do\n';
+    const stream = pdf.add('<< >>', `q ${n4(PT)} 0 0 ${n4(-PT)} 0 ${n4(sh * PT)} cm\n${place0}Q\n`);
+    pdf.put(pg, `<< /Type /Page /Parent ${pages} 0 R /MediaBox ${box(0, 0, sw, sh)}${layout ? '' : ` /BleedBox ${box(0, 0, sw, sh)} /TrimBox ${box(b, b, b + S.n.W, b + S.n.H)}`} /Contents ${stream} 0 R /Resources << /XObject << /F ${form} 0 R >> >> >>`);
+    kids.push(pg);
+  });
+  pdf.put(pages, `<< /Type /Pages /Kids [${kids.map(k => `${k} 0 R`).join(' ')}] /Count ${kids.length} >>`);
+  const all = LAYERS.map(([k]) => `${ocg[k]} 0 R`).join(' '), labels = kids.length > 1 ? ` /PageLabels << /Nums [0 << /P <${hex16('Лицо')}> >> 1 << /P <${hex16('Оборот')}> >>] >>` : '';
+  pdf.put(root, `<< /Type /Catalog /Pages ${pages} 0 R /OCProperties << /OCGs [${all}] /D << /Order [${all}] /ON [${all}] >> >>${labels} >>`);
+  return { bytes: pdf.finish(root, info), faces: dpis, dpi: Math.min(...dpis.map(f => f.dpi), Math.round(dpi)), bleed: b, sheet: { w: sw, h: sh }, pages: kids.length };
+}
+/* The print PDF of object o: { bytes, faces: [{ key, label, dpi }], dpi, bleed, sheet, pages }. bleed (mm, 3), dpi (300); layout
+   (an imposition of net/impose.js): the sheet of copies instead of one net; back: also the reverse page. */
 const printPDF = (o, opts = {}) => build(o, opts);
 
 export { printPDF };

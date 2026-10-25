@@ -11,6 +11,7 @@ import { inPanel, paintNet, panelPath, viewNet } from './net-view.js';
 import { openMenu } from '../ui/menu.js';
 import { loadNetOverlays, netOverlay, onNetOverlay, overlayHooks, setNetOverlay } from './net-overlays.js';
 import { printIssues } from './net-check.js';
+import { hasInside, loadNetSide, netFor, onNetSide, setNetSide, sideOf } from './net-side.js';
 import { canFold } from '../scene/fold.js';
 import { clickCrease, creaseAt } from '../ui/fold-steps.js';
 import { drawNetEdit, dropPanel, netCursor, netDouble, netKey, netMove, netPress, netRelease } from './net-edit.js';
@@ -20,7 +21,7 @@ import { drawNetEdit, dropPanel, netCursor, netDouble, netKey, netMove, netPress
    panel, redrawn on its own, so a hover costs no sheet redraw and touches nothing in the 3D view). The sheet is placed
    by V: k px per mm and the screen position of its corner. A click selects a panel's face as the small net does;
    a drag moves the sheet, the wheel zooms round the pointer. */
-const TOOLS = '#netZoom, #netChips, #netReady, #netEmpty';   // what lies over the sheet and takes the pointer itself
+const TOOLS = '#netZoom, #netChips, #netSide, #netReady, #netEmpty';   // what lies over the sheet and takes the pointer itself
 const PX_MM = 96 / 25.4;   // 100%: a millimetre of the sheet is a millimetre on a 96 dpi screen
 const MARGIN = 44, MIN_K = .04, MAX_K = 14;
 const V = { k: 1, ox: 0, oy: 0, fit: true };
@@ -44,7 +45,7 @@ function fitView() {
 function currentNet() {
   const o = activeObj(); if (!o) return null;
   const n = viewNet(o);
-  return n.panels.length ? { o, n } : { o, n: null };
+  return n.panels.length ? { o, n: netFor(o, n, sideOf(o)) } : { o, n: null };
 }
 function sizeCanvases() {
   const r = $('#netPane').getBoundingClientRect();
@@ -111,6 +112,9 @@ function syncReady() {
   b.lastChild.textContent = bad ? `Проверьте: ${bad}` : 'Готово к печати';
 }
 function syncChips() {
+  // the side of the sheet: where the object has an inside to print (the walls have none of their own: only the lid's and the floor's)
+  const sd = $('#netSide'); sd.hidden = !(geom && hasInside(geom.o) && !sel.part);
+  for (const b of sd.querySelectorAll('[data-side]')) b.setAttribute('aria-pressed', String(!sd.hidden && b.dataset.side === sideOf(geom.o)));
   for (const b of document.querySelectorAll('#netChips [data-ov]')) {
     b.setAttribute('aria-pressed', String(netOverlay(b.dataset.ov)));
     if (b.dataset.ov === 'folds') b.hidden = !(geom && canFold(geom.o) && !sel.part);   // (only a blank that folds has creases to show)
@@ -132,7 +136,7 @@ function syncChrome(cur) {
   $('#netEmpty').hidden = !none; $('#netEmptyText').textContent = none; $('#netTo3d').hidden = !none || effectiveMode() !== '2d';
   $('#netZoom').hidden = $('#netCap').hidden = $('#netChips').hidden = $('#netReady').hidden = !!none;
   syncReady(); syncChips();
-  if (!none) $('#netCap').textContent = `${cur.o.name} · ${fmt(cur.n.W, 1)} × ${fmt(cur.n.H, 1)} мм`;
+  if (!none) $('#netCap').textContent = `${cur.o.name} · ${fmt(cur.n.W, 1)} × ${fmt(cur.n.H, 1)} мм${cur.n.back ? ' · оборот' : ''}`;
 }
 /* redraws what changed; the loop calls drawNetStage when a face is repainted or the selection changes */
 function flush() {
@@ -255,7 +259,9 @@ function initNetStage() {
   // the space bar pans while it is held over the sheet
   addEventListener('keydown', e => { if (e.code === 'Space' && over && !/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)) { space = true; e.preventDefault(); pane.style.cursor = 'grab'; } });
   addEventListener('keyup', e => { if (e.code === 'Space' && space) { space = false; pane.style.cursor = ''; } });
-  loadNetOverlays(); syncChips();
+  loadNetSide(); loadNetOverlays(); syncChips();
+  onNetSide(() => { netDirty = baseDirty = topDirty = true; schedule(); });
+  for (const b of document.querySelectorAll('#netSide [data-side]')) b.onclick = () => setNetSide(b.dataset.side);
   onNetOverlay(() => { syncChips(); baseDirty = true; schedule(); });
   for (const b of document.querySelectorAll('#netChips [data-ov]')) b.onclick = () => setNetOverlay(b.dataset.ov, !netOverlay(b.dataset.ov));
   $('#netReady').onclick = openIssues;

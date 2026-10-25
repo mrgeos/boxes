@@ -65,6 +65,7 @@
       <label class="check" title="Лист шире развёртки на 3 мм с каждой стороны: дизайн продолжается за линию реза"><input type="checkbox" class="bleedOn"> Вылеты 3 мм</label>
       <button class="btn" id="tplBtn">Шаблон развёртки (SVG, мм)</button>
       <button class="btn" id="flatBtn">Развёртка с дизайном (PNG)</button>
+      <button class="btn" id="flatBackBtn" hidden>Оборот с дизайном (PNG)</button>
       <p class="hint">Шаблон — развёртка в натуральную величину, как на штанцформе: рез, биговка, клапаны, замки, окна и прорези. Развёртка с дизайном — та же раскладка в PNG, без наклеек (их клеят после печати). Сделайте макет поверх шаблона и загрузите его обратно в разделе «Развёртка». С вылетами файлы шире на 3 мм с каждой стороны; для загрузки макета обратно берите шаблон без них.</p>
       <hr>
       <h3>Для типографии</h3>
@@ -115,6 +116,10 @@
         <button class="np-b pct" id="nzPct" aria-label="Масштаб 100%" title="Натуральная величина (100%)">100%</button>
         <button class="np-b" id="nzIn" aria-label="Увеличить" title="Увеличить (колесо мыши)">+</button>
         <button class="np-b" id="nzFit" aria-label="Вписать в окно" title="Вписать в окно"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
+      <div class="np-chips" id="netSide" role="group" aria-label="Сторона листа" hidden>
+        <button class="np-chip" data-side="front" aria-pressed="true" title="Лицо: снаружи коробки">Лицо</button>
+        <button class="np-chip" data-side="back" aria-pressed="false" title="Оборот: внутренняя сторона листа, зеркально, как он лежит перевёрнутым">Оборот</button>
       </div>
       <div class="np-chips" id="netChips" role="group" aria-label="Что показать на развёртке">
         <button class="np-chip" data-ov="bleed" aria-pressed="false" title="Вылеты: 3 мм дизайна за линией реза">Вылеты</button>
@@ -214,6 +219,7 @@
       <div class="grid2">
         <button class="btn sm" id="tplBtn2">Шаблон SVG</button>
         <button class="btn sm" id="flatBtn2">PNG с дизайном</button>
+        <button class="btn sm" id="flatBackBtn2" hidden>PNG оборота</button>
       </div>
       <button class="btn sm" id="dielineBtn">Загрузить макет</button>
       <button class="btn sm danger" id="dielineOffBtn" hidden>Убрать макет развёртки</button>

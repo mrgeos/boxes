@@ -4,6 +4,7 @@ import { activeObj } from '../core/state.js';
 import { netLayout } from '../core/model.js';
 import { saveFile } from '../core/project.js';
 import { BLEED_MM, printIssues } from '../net/net-check.js';
+import { hasReverse } from '../net/net-side.js';
 import { printPDF } from './pdf.js';
 import { dielineDXF } from './dxf.js';
 import { zipStore } from './zip.js';
@@ -18,14 +19,14 @@ async function savePDF(o, name, opts) {
   try {
     const r = await printPDF(o, { ...opts, report: label => toast(`PDF: грань «${label}»…`, 120000) });
     const low = r.faces.filter(f => f.dpi < 295), note = ['300 dpi', ...low.map(f => `${f.label} ${f.dpi} dpi`)].join(', ');
-    if (await saveFile(name(r), new Blob([r.bytes], { type: 'application/pdf' }))) toast(`PDF: ${note}${opts.bleed === 0 || r.bleed ? '' : ' · без вылета'}${remarks(o)}`, 6000);
+    if (await saveFile(name(r), new Blob([r.bytes], { type: 'application/pdf' }))) toast(`PDF: ${r.pages > 1 ? 'лицо и оборот, ' : ''}${note}${opts.bleed === 0 || r.bleed ? '' : ' · без вылета'}${remarks(o)}`, 6000);
   } catch (e) { toast('Не удалось собрать PDF: ' + (e?.message || e), 6000); } finally { busy = false; }
 }
 /* the net of the picked object with its design, the cut and the bleed */
 function exportPDF() {
   const o = activeObj(); if (!o) return toast('Выберите объект');
   const n = netLayout(o); if (!n.panels.length) return toast('У этого объекта нет развёртки');
-  return savePDF(o, r => `${slug(o.name)}-pechat-${fmt(n.W)}x${fmt(n.H)}mm${r.bleed ? '-s-vyletom' : ''}.pdf`, { bleed: BLEED_MM });
+  return savePDF(o, r => `${slug(o.name)}-pechat-${fmt(n.W)}x${fmt(n.H)}mm${r.bleed ? '-s-vyletom' : ''}.pdf`, { bleed: BLEED_MM, back: hasReverse(o) });
 }
 /* the sheet of copies: fit is an imposition of net/impose.js (ui/impose-panel.js hands over the picked one) */
 function exportSheetPDF(fit) {

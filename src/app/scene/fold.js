@@ -158,6 +158,17 @@ function focusFoldStep(id, i) {
   setFold(id, s.start, { frame: true }); return s.start;
 }
 
+/* the outlines (world points) of the panels of a face on the rig now, for the face highlight; null when the blank is not folding */
+function foldFaceOutlines(id, key) {
+  const rt = RT.get(id); if (!rt?.rig) return null;
+  const out = [];
+  for (const n of rt.rig.nodes) {
+    if (rt.rig.panels[n.i].key !== key) continue;
+    n.content.updateWorldMatrix(true, false);
+    out.push(n.pts.map(([X, Y]) => n.content.localToWorld(new THREE.Vector3((X - n.ox) * S, 0, (Y - n.oy) * S))));
+  }
+  return out.length ? out : null;
+}
 /* for the tests: where each face's middle and normal are on the rig now, in the object's frame (mm); the model's own
    frames are RT.frames. rig: show the rig at 1 too */
 function foldPoses(id, force = null) {
@@ -169,7 +180,8 @@ function foldPoses(id, force = null) {
   for (const n of rt.rig.nodes) {
     const p = rt.rig.panels[n.i]; if (!keys.includes(p.key)) continue;
     // the face's own middle: for a panel that carries a part of the face (a half), the plane carried on to it
-    const c0 = p.crop || [0, 0, 1, 1], [X, Y] = netPoint(p, (.5 - c0[0]) / (c0[2] - c0[0]), (.5 - c0[1]) / (c0[3] - c0[1]));
+    // (a panel at any angle keeps its picture's middle in cx, cy)
+    const c0 = p.crop || [0, 0, 1, 1], [X, Y] = p.ang != null ? [p.cx, p.cy] : netPoint(p, (.5 - c0[0]) / (c0[2] - c0[0]), (.5 - c0[1]) / (c0[3] - c0[1]));
     const c = n.content.localToWorld(new THREE.Vector3((X - n.ox) * S, 0, (Y - n.oy) * S)).applyMatrix4(inv).divideScalar(S);
     const nn = new THREE.Vector3(0, 1, 0).transformDirection(n.content.matrixWorld).applyMatrix3(nm).normalize();
     out.push({ key: p.key, c: c.toArray(), n: nn.toArray() });
@@ -185,4 +197,4 @@ function hideFoldMark() {
   return () => hid.forEach(m => { m.visible = true; });
 }
 
-export { foldMarkShown, hideFoldMark, applyFold, canFold, focusFoldStep, foldDone, foldFrame, foldInfo, foldOf, foldPoses, foldTimeline, listFoldCreases, markFold, mergeFoldSteps, moveFoldStep, onFoldPlan, playFold, resetFoldCrease, resetFoldPlan, setFold, setFoldAngle, setFoldStep, setStepTime, stopFold, syncFoldVis };
+export { foldMarkShown, hideFoldMark, applyFold, canFold, focusFoldStep, foldDone, foldFaceOutlines, foldFrame, foldInfo, foldOf, foldPoses, foldTimeline, listFoldCreases, markFold, mergeFoldSteps, moveFoldStep, onFoldPlan, playFold, resetFoldCrease, resetFoldPlan, setFold, setFoldAngle, setFoldStep, setStepTime, stopFold, syncFoldVis };
