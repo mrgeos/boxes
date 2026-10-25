@@ -11,6 +11,7 @@ import { boundsOf, selectedLayers } from '../core/layers.js';
 import { tool } from '../ui/action-bar.js';
 import { recording } from './camera.js';
 import { stickerOfKey } from '../stickers/design.js';
+import { isSheetKey } from '../core/sheet.js';
 
 /* The selected layer (or sticker) gets a thin frame with corner marks, so it is clear on the model what the
    panel works on. The frame is drawn on the surface itself: each point of it is found on the meshes printed
@@ -30,7 +31,7 @@ const LIFT = .4 * S, HLIFT = 1.5 * S, STEP = 1.5;   // off the surface; sampling
 
 /* what is selected: the rectangle (its own mm, centred) and a key that changes whenever the frame would */
 function target() {
-  const o = activeObj(), rt = o && RT.get(o.id); if (!rt) return null;
+  const o = activeObj(), rt = o && RT.get(o.id); if (!rt || isSheetKey(sel.face)) return null;   // (a sheet layer is framed on the net)
   // a sticker's design open with no layer picked: the frame goes round the sticker; a layer of it is framed on it
   const st = (!activeLayer() && (stickerOfKey(o, sel.face) || activeSticker())) || null, L = !st && activeLayer();
   // several layers: one frame round them all, square to the face (its own mm)

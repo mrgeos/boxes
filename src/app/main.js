@@ -122,6 +122,8 @@ Object.assign(window.__boxStudio, { setFold: Fold.setFold, foldOf: Fold.foldOf, 
     setSheetTier: asStep((side, lid, over, id) => { const o = obj(id); return o && Sheet.setSheetTier(o, side, lid, over); }),
     // the sheet as a net: its size (mm) and panels (key, place, turn)
     sheetInfo: (side, id) => { const o = obj(id); if (!o) return null; const n = Sheet.sheetNet(o, side); return { W: n.W, H: n.H, panels: n.panels.map(({ key, x, y, w, h, q, rot, ang, crop, fan, poly, r, circle }) => ({ key, x, y, w, h, q: q ?? (rot ? 2 : 0), ang, crop, fan: !!fan, poly: !!poly, r, circle: !!circle })) }; },
+    // where the sheet's layers lie on face k (outlines in shares of the face)
+    sheetFootprints: (k, id) => { const o = obj(id); return o ? Sheet.sheetFootprints(o, k).map(g => ({ side: g.side, id: g.L.id, quad: g.quad })) : []; },
     sheetLayers: (side, id) => obj(id)?.sheet?.[side]?.layers || [],
     // the sheet side's own picture, painted now
     sheetPicture: (side, id) => { const o = obj(id); if (!o?.sheet?.[side]) return null; renderFace(o, Sheet.sheetKey(side)); return RT.get(o.id)?.faces[Sheet.sheetKey(side)]?.canvas || null; },

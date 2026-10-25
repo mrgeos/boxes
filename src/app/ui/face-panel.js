@@ -3,7 +3,7 @@ import { $, $$, esc, fmt, toast } from '../core/util.js';
 import { BLENDS, EFFECTS, ICON, SWATCHES, UV_THICK } from '../core/constants.js';
 import { activeFaceData, activeLayer, activeObj, assets, sel, state } from '../core/state.js';
 import { faceKeys, faceLabel, faceMM, facePx, isClearFace, newImage } from '../core/model.js';
-import { stickerOfKey } from '../stickers/design.js';
+import { isStickerKey, stickerOfKey } from '../stickers/design.js';
 import { activeSticker } from '../stickers/placement.js';
 import { getImg, importImageFile } from '../core/assets.js';
 import { library } from '../core/library.js';
@@ -23,17 +23,22 @@ import { commit } from '../core/project.js';
 import { bindFields, bindNum, placeField, rangeField } from './fields.js';
 import { MASKS, cropped, editMode, hasPanels, resetCrop, setClipBelow, setClipTo, setEditMode, setMask } from '../core/mask.js';
 import { invalidate } from '../scene/camera.js';
+import { SIDES, addSheetLayer, canSheet, fitNewSheetLayer, isSheetKey, layerToSheet, setSheetStretch, setSheetTier, sheetKey, sheetSide, sheetToFace, sheetToFaceLoss } from '../core/sheet.js';
 
 function renderFaceTabs() {
   const o = activeObj(), st = o && stickerOfKey(o, sel.face);
   $('#objBadge').textContent = o ? (st ? extraName(o, { kind: 'sticker', T: st }) : sel.part ? extraName(o, extraById(o, sel.part) || { kind: sel.part, T: {} }) : o.name) : '';
-  $('#objBadge').previousElementSibling.textContent = st ? 'Дизайн наклейки' : 'Дизайн грани';
   // a sticker's design is one face and is not copied onto the object's faces
-  $('#copyTarget').closest('.row').hidden = !!st;
   // the faces of the object itself, or the one face of the sleeve, carrier or sticker picked
+  const sheet = isSheetKey(sel.face);
+  $('#objBadge').previousElementSibling.textContent = st ? 'Дизайн наклейки' : sheet ? 'Дизайн развёртки' : 'Дизайн грани';
+  $('#copyTarget').closest('.row').hidden = !!st || sheet;
   const keys = o ? (st ? [sel.face] : sel.part ? [sel.part] : faceKeys(o).filter(k => !isPart(k))) : [];
-  $('#faceTabs').hidden = keys.length < 2;
-  $('#faceTabs').innerHTML = o ? keys.map(k => `<button class="chip ${k === sel.face ? 'on' : ''}" data-f="${k}">${faceLabel(o, k)}${o.faces[k].layers.length ? `<span class="cnt">${o.faces[k].layers.length}</span>` : ''}</button>`).join('') : '';
+  // the sheet's own «faces»: layers that run over the folds, on its front and (where there is an inside) its back
+  const skeys = o && !st && !sel.part ? SIDES.filter(sd => canSheet(o, sd)).map(sheetKey) : [];
+  $('#faceTabs').hidden = keys.length + skeys.length < 2;
+  const chip = (k, cls = '') => { const n = o.faces[k]?.layers.length || 0; return `<button class="chip ${cls} ${k === sel.face ? 'on' : ''}" data-f="${k}" ${cls ? `title="${k === 'sheet:back' ? 'Слои на обороте листа: видны на внутренних гранях' : 'Слои на листе: проходят через сгибы между гранями'}"` : ''}>${faceLabel(o, k)}${n ? `<span class="cnt">${n}</span>` : ''}</button>`; };
+  $('#faceTabs').innerHTML = o ? keys.map(k => chip(k)).join('') + skeys.map(k => chip(k, 'sheet')).join('') : '';
   $$('#faceTabs .chip').forEach(b => b.onclick = () => select(sel.obj, b.dataset.f, null, { flash: true }));
   const sel2 = $('#copyTarget');
   sel2.innerHTML = o ? `<option value="">Скопировать дизайн на…</option><option value="*">все внешние грани</option>` + faceKeys(o).filter(k => k !== sel.face).map(k => `<option value="${k}">${faceLabel(o, k)}</option>`).join('') : '';
@@ -68,7 +73,8 @@ function renderLayers() {
   const o = activeObj(), f = activeFaceData(), box = $('#layers');
   if (!f) { box.innerHTML = ''; return; }
   const picked = new Set(selectedIds()), rows = [], seen = new Set();
-  if (!f.layers.length) rows.push(`<div class="empty">Добавьте картинку, текст или плашку — или перетащите файл на грань в 3D.</div>`);
+  const sheet = isSheetKey(sel.face);
+  if (!f.layers.length) rows.push(`<div class="empty">${sheet ? 'Слои развёртки лежат на всём листе и идут через сгибы между гранями. Добавьте картинку, текст или плашку, или перенесите слой грани кнопкой «На развёртку».' : 'Добавьте картинку, текст или плашку — или перетащите файл на грань в 3D.'}</div>`);
   for (const L of [...f.layers].reverse()) {
     if (L.group && !seen.has(L.group)) {
       seen.add(L.group);
@@ -85,7 +91,7 @@ function renderLayers() {
       <span class="acts">${rowActs(L.visible, L.locked)}</span></div>`);
   }
   // the background: always the bottom row (a clear PET face has none)
-  if (!isClearFace(o, sel.face)) rows.push(bgRowHTML(f));
+  if (!sheet && !isClearFace(o, sel.face)) rows.push(bgRowHTML(f));
   box.innerHTML = rows.join('');
   const bgRow = $('#layers .bgrow');
   if (bgRow) {
@@ -155,6 +161,8 @@ function layerMods(o, L) {
   if (L.grad) m.push({ i: 'grad', t: L.grad.kind === 'radial' ? 'Радиальный градиент' : 'Линейный градиент', to: '#gradKind' });
   if (L.type === 'text' && Math.abs(L.arc || 0) >= 1) m.push({ i: 'arc', t: `По дуге ${Math.round(L.arc)}°`, to: '[data-k="arc"]' });
   if (L.wrap) m.push({ i: 'wrap', t: 'Переходит через рёбра', to: '[data-k="wrap"]' });
+  if (L.anchor?.box) m.push({ i: 'wrap', t: 'Растянут по группе граней', to: '#sheetStretch' });
+  if (L.over) m.push({ i: 'up', t: 'Над слоями граней', to: '#sheetOver' });
   if (L.effect && L.effect !== 'none') m.push({ i: 'fx', t: 'Отделка: ' + EFFECTS[L.effect], to: '[data-k="effect"]' });
   if (L.blend && L.blend !== 'source-over') m.push({ i: 'blend', t: 'Наложение: ' + BLENDS[L.blend], to: '[data-k="blend"]' });
   if (L.opacity < 1) m.push({ i: 'opacity', t: `Непрозрачность ${Math.round(L.opacity * 100)} %`, to: '[data-k="opacity"]' });
@@ -199,6 +207,7 @@ function rowMenu(o, f, el, cx, cy) {
     'sep',
     { label: vis ? 'Скрыть' : 'Показать', run: act('vis') },
     { label: locked ? 'Разблокировать' : 'Заблокировать', run: act('lock') },
+    ...(m => m ? ['sep', m] : [])(sheetMoveItem(o, sel.face, Ls.map(l => l.id))),
     Ls.length > 1 && 'sep', Ls.length > 1 && { label: 'Сгруппировать', key: 'Ctrl+G', run: () => layerCmd('group') },
     Ls.some(l => l.group) && { label: 'Разгруппировать', key: 'Ctrl+Shift+G', run: () => layerCmd('ungroup') },
   ], Ls.length > 1 ? `Слоёв: ${Ls.length}` : layerName(Ls[0]));
@@ -312,9 +321,10 @@ function renderLayerProps() {
   // a picture's flips sit by its turn, as two toggles
   const rot = img ? rangeField('Поворот, °', 'rot', -180, 180, 1).replace(/<\/div>$/, `<span class="flips"><button class="vx" id="flipX" aria-pressed="${!!L.flipX}" title="Отразить по горизонтали">${ICON.flipH}</button><button class="vx" id="flipY" aria-pressed="${!!L.flipY}" title="Отразить по вертикали">${ICON.flipV}</button></span></div>`).replace('class="field nfrow turn"', 'class="field nfrow turn rotf"') : rangeField('Поворот, °', 'rot', -180, 180, 1);
   const pos = `${placeField('Центр', 'x', 'y', -50, 150, .1, 100)}${rot}
-    ${!(img && L.tile) && Object.keys(RT.get(o.id)?.frames || {}).length ? '<label class="check" title="Часть слоя за краем грани печатается на соседних гранях, через сгиб. Включается сама, если тянуть слой через ребро на модели"><input type="checkbox" data-k="wrap"> Переходит через рёбра на соседние грани</label>' : ''}`;
+    ${!isSheetKey(sel.face) && !(img && L.tile) && Object.keys(RT.get(o.id)?.frames || {}).length ? '<label class="check" title="Часть слоя за краем грани печатается на соседних гранях, через сгиб. Включается сама, если тянуть слой через ребро на модели"><input type="checkbox" data-k="wrap"> Переходит через рёбра на соседние грани</label>' : ''}`;
   html += img ? `<div class="cut"><h3>Размер и положение</h3>${fitSegHTML(o, L)}${rangeField(L.tile ? 'Размер плитки, %' : 'Ширина, %', 'w', 1, 400, .1, 100)}${pos}</div>` : pos;
   html += `
+    ${isSheetKey(sel.face) ? sheetBlockHTML(L) : faceSheetOfferHTML(o, sel.face)}
     ${materialsHTML(L, effOpts)}
     ${cropHTML(o, L)}`;
   if (L.effect === 'spot-uv') L.uv ??= 'normal';
@@ -330,7 +340,7 @@ function renderLayerProps() {
     if (k === 'w' && L.type === 'image') ui.layers = true;
     markFace(activeObj(), sel.face);
   });
-  bindCrop(o, L); bindAlignBar(sec);
+  bindCrop(o, L); bindAlignBar(sec); bindSheetBlock(sec, o, L);
   if (L.type === 'text' && linkOf(L, 'font') && $('[data-k="font"]', sec)) $('[data-k="font"]', sec).value = '@' + linkOf(L, 'font');
   $('#gradKind') && ($('#gradKind').onchange = e => { setGradient(o, sel.face, activeLayer(), e.target.value || null); ui.layers = true; renderLayerProps(); commit(); });
   if (L.type === 'image') {
@@ -362,7 +372,8 @@ function materialsHTML(L, effOpts) {
   return `<div class="cut mat"><h3>Материалы</h3>
     ${rangeField('Непрозрачность', 'opacity', 0, 100, 1, 100)}
     ${colors}
-    <div class="field wide"><span class="fl">Отделка</span><select data-k="effect">${effOpts}</select></div>
+    <div class="field wide"><span class="fl">Отделка</span><select data-k="effect" ${isSheetKey(sel.face) ? 'disabled' : ''}>${effOpts}</select></div>
+    ${isSheetKey(sel.face) ? '<p class="hint">Фольга, лак и тиснение на развёртке пока не печатаются: перенесите слой на грань кнопкой «На грань».</p>' : ''}
     ${L.effect === 'spot-uv' ? `<div class="field wide"><span class="fl">Толщина лака</span><select data-k="uv">${Object.entries(UV_THICK).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select></div>` : ''}
     <div class="field wide"><span class="fl">Наложение</span><select data-k="blend">${Object.entries(BLENDS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div></div>`;
 }
@@ -412,8 +423,8 @@ function cropHTML(o, L) {
     ${m?.kind === 'rect' ? rangeField('Скругление', 'mask.r', 0, 100, 1, 100) : ''}
     ${m?.kind === 'polygon' ? rangeField('Углов', 'mask.n', 3, 16, 1) : ''}
     ${m?.kind === 'star' ? rangeField('Лучей', 'mask.n', 3, 24, 1) + rangeField('Глубина лучей, %', 'mask.inner', 5, 95, 1, 100) : ''}
-    <label class="check" title="${bottom ? 'Под этим слоем нет других' : 'Слой виден только там, где есть слой под ним (как обтравочная маска в Photoshop)'}"><input type="checkbox" id="clipBelow" ${L.clipBelow ? 'checked' : ''} ${bottom ? 'disabled' : ''}> Обтравка по слою ниже</label>
-    <div class="field wide"><span class="fl">Обрезать по</span><select id="clipTo">${opt('', 'не обрезать', L.clipTo)}${opt('face', 'краю грани', L.clipTo)}${hasPanels(o, sel.face) ? opt('panel', 'панели ленты', L.clipTo) : ''}</select></div></div>`;
+    ${isSheetKey(sel.face) ? '' : `<label class="check" title="${bottom ? 'Под этим слоем нет других' : 'Слой виден только там, где есть слой под ним (как обтравочная маска в Photoshop)'}"><input type="checkbox" id="clipBelow" ${L.clipBelow ? 'checked' : ''} ${bottom ? 'disabled' : ''}> Обтравка по слою ниже</label>
+    <div class="field wide"><span class="fl">Обрезать по</span><select id="clipTo">${opt('', 'не обрезать', L.clipTo)}${opt('face', 'краю грани', L.clipTo)}${hasPanels(o, sel.face) ? opt('panel', 'панели ленты', L.clipTo) : ''}</select></div>`}</div>`;
 }
 function bindCrop(o, L) {
   const k = sel.face, done = () => { ui.editor = true; ui.layers = true; renderLayerProps(); commit(); };
@@ -422,9 +433,59 @@ function bindCrop(o, L) {
   $('#cropReset') && ($('#cropReset').onclick = () => { resetCrop(o, k, L); setEditMode(null); done(); });
   $('#maskEdit') && ($('#maskEdit').onclick = () => toggle('mask'));
   $('#maskKind').onchange = e => { setMask(o, k, L, e.target.value || null); setEditMode(e.target.value ? 'mask' : null); done(); };
-  $('#clipBelow').onchange = e => { setClipBelow(o, k, L, e.target.checked); done(); };
-  $('#clipTo').onchange = e => { setClipTo(o, k, L, e.target.value || null); done(); };
+  $('#clipBelow') && ($('#clipBelow').onchange = e => { setClipBelow(o, k, L, e.target.checked); done(); });
+  $('#clipTo') && ($('#clipTo').onchange = e => { setClipTo(o, k, L, e.target.value || null); done(); });
 }
+/* ---------- layers of the sheet ---------- */
+/* a sheet layer: which tier it prints in, whether it fills its part of the faces' box, and the way back to a face */
+function sheetBlockHTML(L) {
+  return `<div class="cut"><h3>На развёртке</h3>
+    <label class="check" title="По умолчанию слой печатается под слоями граней, как фон. Включите, чтобы он лёг поверх них"><input type="checkbox" id="sheetOver" ${L.over ? 'checked' : ''}> Над слоями граней</label>
+    <label class="check" title="Слой заполняет свою часть группы граней и растёт вместе с ней при смене размеров коробки"><input type="checkbox" id="sheetStretch" ${L.anchor?.box ? 'checked' : ''}> Растянуть по группе</label>
+    <div class="row"><button class="btn sm" id="toFaceBtn" title="Слой станет слоем грани, под которой он лежит. Часть за краем грани печататься не будет">На грань</button></div>
+    <p class="hint">${L.anchor?.box ? 'Растянутый слой подгоняется под группу граней: размер меняется переключателем и полями, а не рамкой. ' : ''}Слой следует за гранями, под которыми лежит, когда коробка меняет размеры.</p></div>`;
+}
+/* a face's layer: it can be put on the sheet, to run over the folds */
+function faceSheetOfferHTML(o, k) {
+  if (!o || isStickerKey(k) || !canMoveToSheet(o, k)) return '';
+  return `<div class="cut"><h3>Развёртка</h3>
+    <div class="row"><button class="btn sm" id="toSheetBtn" title="Слой станет общим для листа: пройдёт через сгибы на соседние грани">На развёртку</button></div>
+    <p class="hint">Для рисунка и текста, которые идут через сгиб на соседнюю грань.</p></div>`;
+}
+const canMoveToSheet = (o, k) => !!o && faceKeys(o).includes(k) && canSheet(o, k === 'inside' || k === 'insideBottom' ? 'back' : 'front');
+function bindSheetBlock(sec, o, L) {
+  const side = sheetSide(sel.face), redraw = () => { ui.layers = true; ui.editor = true; renderLayers(); renderLayerProps(); };
+  $('#sheetOver', sec) && ($('#sheetOver', sec).onchange = e => { setSheetTier(o, side, L.id, e.target.checked); redraw(); commit(); });
+  $('#sheetStretch', sec) && ($('#sheetStretch', sec).onchange = e => { setSheetStretch(o, side, L.id, e.target.checked); redraw(); commit(); });
+  $('#toFaceBtn', sec) && ($('#toFaceBtn', sec).onclick = () => layersToFace([L.id]));
+  $('#toSheetBtn', sec) && ($('#toSheetBtn', sec).onclick = () => layersToSheet([L.id]));
+}
+/* the picked face's layers onto the sheet (they keep their look; the sheet is picked, with the layers) */
+function layersToSheet(ids) {
+  const o = activeObj(), k = sel.face; if (!o || isSheetKey(k)) return;
+  const moved = layerToSheet(o, k, ids);
+  if (!moved.length) { toast('Эту грань нельзя перенести на развёртку: она не лежит на листе плоско'); return; }
+  select(o.id, sheetKey(sideOfFaceKey(k)), null, { focus: false }); pickLayers(moved.map(l => l.id));
+  renderFaceTabs(); commit(); toast('Слой на развёртке: он идёт через сгибы. «На грань» вернёт его на грань');
+}
+/* the sheet's layers onto the face they belong to (what lies past its edge is not printed there) */
+function layersToFace(ids) {
+  const o = activeObj(), side = sheetSide(sel.face); if (!o || !isSheetKey(sel.face)) return;
+  const L0 = o.sheet?.[side]?.layers.find(l => l.id === ids[0]); if (!L0) return;
+  const k = L0.anchor?.keys?.find(q => faceKeys(o).includes(q)) || null;
+  const lost = ids.some(id => k ? sheetToFaceLoss(o, side, id, k) : true);
+  const moved = sheetToFace(o, side, ids, k);
+  if (!moved.length) { toast('Слой лежит вне граней: перенесите его на грань и попробуйте снова'); return; }
+  select(o.id, moved.key || k || faceKeys(o)[0], null, { focus: false }); pickLayers(moved.map(l => l.id));
+  renderFaceTabs(); commit();
+  toast(lost ? 'Слой на грани. Часть за краем грани не печатается; Ctrl+Z вернёт слой на развёртку' : 'Слой на грани');
+}
+/* the menu item that moves layers between a face and the sheet (null where it cannot) */
+function sheetMoveItem(o, face, ids) {
+  if (isSheetKey(face)) return { label: 'На грань', run: () => layersToFace(ids) };
+  return !isStickerKey(face) && canMoveToSheet(o, face) ? { label: 'На развёртку', run: () => layersToSheet(ids) } : null;
+}
+const sideOfFaceKey = k => (k === 'inside' || k === 'insideBottom' ? 'back' : 'front');
 /* a picture's card: what it is (its preview, name, print resolution) and a button to put another one in its place */
 function imageCardHTML(o, L) {
   const dpi = imageDpi(o, L), u = assets[L.src];
@@ -442,7 +503,8 @@ function fitSegHTML(o, L) {
 /* ---------- layer ops ---------- */
 function addLayer(L, face = sel.face, obj = activeObj()) {
   if (!obj || !face) return;
-  obj.faces[face].layers.push(L);
+  if (isSheetKey(face)) { fitNewSheetLayer(obj, sheetSide(face), L); addSheetLayer(obj, sheetSide(face), L); }
+  else obj.faces[face].layers.push(L);
   if (obj.id !== sel.obj || face !== sel.face) select(obj.id, face, L.id, { flash: true });
   else { sel.layer = L.id; renderLayers(); renderLayerProps(); renderFaceTabs(); }
   markFace(obj, face); commit();
@@ -540,4 +602,4 @@ function initFacePanel() {
   $('#imgInput').onchange = e => { const f = e.target.files[0]; if (f && pickCb) pickCb(f); };
 }
 
-export { addImageToFace, addLayer, layerCmd, bindVecColors, deleteLayer, duplicateLayer, initFacePanel, moveLayer, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers, updateFaceMeta, vecColorsHTML };
+export { addImageToFace, addLayer, layersToFace, layersToSheet, sheetMoveItem, layerCmd, bindVecColors, deleteLayer, duplicateLayer, initFacePanel, moveLayer, pickImage, renderFacePanel, renderFaceTabs, renderFonts, renderLayerProps, renderLayers, updateFaceMeta, vecColorsHTML };

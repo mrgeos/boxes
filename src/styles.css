@@ -305,6 +305,8 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .chip:hover{border-color:var(--line-2)}
 .chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
 .chip .cnt{font-family:var(--mono);font-size:10px;opacity:.75}
+.chip.sheet{border-style:dashed}
+.chip:not(.sheet)+.chip.sheet{margin-left:8px}
 .editor-wrap{position:relative;display:flex;justify-content:center;align-items:center;background-color:var(--checker-a);background-image:linear-gradient(45deg,var(--checker-b) 25%,transparent 25%,transparent 75%,var(--checker-b) 75%),linear-gradient(45deg,var(--checker-b) 25%,transparent 25%,transparent 75%,var(--checker-b) 75%);background-size:14px 14px;background-position:0 0,7px 7px;border:1px solid var(--line);border-radius:8px;padding:28px 14px 14px;min-height:140px}
 #editor{display:block;touch-action:none;max-width:100%;box-shadow:var(--shadow)}
 .face-meta{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:11px;flex-wrap:wrap}

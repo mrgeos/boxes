@@ -13,6 +13,8 @@ import { refreshTabs } from '../ui/tabs.js';
 import { extraById, isPart } from './extras.js';
 import { isStickerKey } from '../stickers/design.js';
 import { isShown } from '../scene/isolation.js';
+import { canSheet, ensureSheet, isSheetKey, sheetSide, touchSheetFace } from './sheet.js';
+import { setNetSide } from '../net/net-side.js';
 
 function select(objId, face = undefined, layerId = null, { flash = false, focus = true } = {}) {
   const changedObj = sel.obj !== objId, leftGroup = !!sel.group, part0 = sel.part;
@@ -20,12 +22,16 @@ function select(objId, face = undefined, layerId = null, { flash = false, focus 
   if (changedObj) { sel.sticker = null; sel.ribbon = null; sel.part = null; }
   const o = activeObj();
   if (o) {
-    if (face !== undefined && face && faceKeys(o).includes(face)) sel.face = face;
-    else if (!faceKeys(o).includes(sel.face)) sel.face = faceKeys(o)[0];
+    // a face of the object, or its sheet (the layers that run over the folds: core/sheet.js)
+    const ok = k => faceKeys(o).includes(k) || (isSheetKey(k) && canSheet(o, sheetSide(k)));
+    if (face !== undefined && face && ok(face)) sel.face = face;
+    else if (!ok(sel.face)) sel.face = faceKeys(o)[0];
     // the face of a sleeve or a carrier selects that part; any other face, the object itself
     if (face && faceKeys(o).includes(face)) sel.part = isPart(face) ? face : null;
+    else if (isSheetKey(sel.face)) sel.part = null;
     if (sel.part && !faceKeys(o).includes(sel.part)) sel.part = null;
     if (sel.part) sel.face = sel.part;
+    else if (isSheetKey(sel.face)) { ensureSheet(o); touchSheetFace(o, sel.face); setNetSide(sheetSide(sel.face)); }
     else if (isPart(sel.face)) sel.face = faceKeys(o).find(k => !isPart(k)) ?? sel.face;
   } else { sel.face = null; sel.part = null; }
   setLayerSelection(layerId ? [layerId] : []);

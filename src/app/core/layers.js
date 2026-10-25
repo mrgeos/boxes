@@ -244,6 +244,18 @@ function clickPick(face, L, toggle = false) {
   for (const l of unit) on ? ids.delete(l.id) : ids.add(l.id);
   return face.layers.filter(l => ids.has(l.id)).map(l => l.id);
 }
+/* the top layer of a face (W × H px) under the point (px, py), or null; a tiled picture is everywhere */
+function hitLayer(face, W, H, px, py) {
+  for (let i = face.layers.length - 1; i >= 0; i--) {
+    const L = face.layers[i]; if (!L.visible || L.locked) continue;
+    if (L.type === 'image' && L.tile) return L;
+    const [w, h] = layerBox(L, W, H);
+    const dx = px - L.x * W, dy = py - L.y * H, a = -L.rot * DEG;
+    const lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
+    if (Math.abs(lx) <= w / 2 + 2 && Math.abs(ly) <= h / 2 + 2) return L;
+  }
+  return null;
+}
 /* a text layer's words */
 function setText(o, k, L, text) { L.text = text; markFace(o, k); }
 /* the fill of a text or shape layer: plain (kind null), or a 'linear' / 'radial' gradient from its colour to grad.color */
@@ -309,4 +321,4 @@ function setImageFit(o, k, L, mode) {
   markFace(o, k);
 }
 
-export { imageFitOf, setImageFit, addBackgroundImage, bgToAllFaces, clearFace, selectBg, setFaceBg, setFaceBgGrad, activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, moveLayerToFace, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setText, setVisible, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };
+export { hitLayer, imageFitOf, setImageFit, addBackgroundImage, bgToAllFaces, clearFace, selectBg, setFaceBg, setFaceBgGrad, activeFaceKey, alignLayers, clickPick, boundsOf, copyData, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, layerAABB, moveLayers, moveLayerToFace, pasteData, placeLayers, renameItem, rotateLayers, scaleLayers, selectAllLayers, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setText, setVisible, shiftLayers, snapshot, tidyGroups, ungroupLayers, unitsOf };

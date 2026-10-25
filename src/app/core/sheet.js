@@ -3,11 +3,11 @@ import { DEG } from './util.js';
 import { faceKeys, facePx, netLayout } from './model.js';
 import { backNet, hasInside } from '../net/net-side.js';
 import { inPanel } from '../net/net-view.js';
-import { faceToSheet, flatPanel } from '../net/sheet-map.js';
+import { faceToSheet, flatPanel, sheetToFace as mapToFace } from '../net/sheet-map.js';
 import { apply } from '../faces/wrap.js';
 import { layerBox } from '../faces/render.js';
-import { markFace } from '../scene/renderer.js';
-import { tidyGroups } from './layers.js';
+import { RT, dirtyFaces, ensureFaceRT, markFace } from '../scene/renderer.js';
+import { hitLayer, tidyGroups } from './layers.js';
 
 /* A sheet layer is printed on the sheet of the net, not on one face: o.sheet = { front, back }, each { layers, groups }
    like a face (the layer editor and the painter take it as one: o.faces['sheet:front'] is a link to it, not saved).
@@ -54,8 +54,8 @@ const sizeMM = (L, W, H) => (L.type === 'image' ? { w: L.w * W } : L.type === 's
 const same = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-6);
 /* (re)takes the layer's anchor from where it lies now: keys = faces it belongs to (null: the whole sheet; undefined: the
    panel under its middle) */
-function reanchorLayer(o, side, L, keys = undefined) {
-  const n = sheetNet(o, side), W = n.W, H = n.H;
+function reanchorLayer(o, side, L, keys = undefined, net = null) {
+  const n = net || sheetNet(o, side), W = n.W, H = n.H;
   if (keys === undefined) { const p = n.panels.find(q => flatPanel(q) && inPanel(q, L.x * W, L.y * H)); keys = p ? [p.key] : null; }
   const g = groupBox(n, keys), a = L.anchor;
   L.anchor = { keys, g0: g, sz: [W, H], nx: (L.x * W - g[0]) / g[2], ny: (L.y * H - g[1]) / g[3], m: sizeMM(L, W, H) };
@@ -67,11 +67,21 @@ function settleSheet(o, side, n = sheetNet(o, side)) {
   const sh = o.sheet?.[side]; if (!sh) return;
   const W = n.W, H = n.H;
   for (const L of sh.layers) {
-    const a = L.anchor; if (!a) continue;
+    // a layer that came by another way (a paste, a copied project) takes its place from where it lies
+    if (!L.anchor) { reanchorLayer(o, side, L, undefined, n); continue; }
+    const a = L.anchor;
     const g = groupBox(n, a.keys);
     if (same(g, a.g0) && same([W, H], a.sz)) {
-      if (!a.box) { a.nx = (L.x * W - g[0]) / g[2]; a.ny = (L.y * H - g[1]) / g[3]; a.m = sizeMM(L, W, H); }
-      else a.tgt = [a.box[2] * g[2], a.box[3] * g[3]];
+      if (!a.box) {
+        // nothing changed in the box: the layer may have been edited, so the anchor takes its place; one moved over
+        // other faces belongs to those now
+        if (Math.abs(L.x * W - (g[0] + a.nx * g[2])) > 1e-6 || Math.abs(L.y * H - (g[1] + a.ny * g[3])) > 1e-6) { reanchorLayer(o, side, L, undefined, n); continue; }
+        a.m = sizeMM(L, W, H);
+      } else {
+        // a stretched layer: a shape's size is its own, a moved one keeps its place in the group
+        a.tgt = L.type === 'shape' ? [L.w * W, L.h * H] : a.tgt || [a.box[2] * g[2], a.box[3] * g[3]];
+        a.box = [(L.x * W - a.tgt[0] / 2 - g[0]) / g[2], (L.y * H - a.tgt[1] / 2 - g[1]) / g[3], a.tgt[0] / g[2], a.tgt[1] / g[3]];
+      }
       continue;
     }
     const s = a.g0[2] > 0 ? g[2] / a.g0[2] : 1;
@@ -193,10 +203,89 @@ function sheetToFace(o, side, ids, k = null) {
     else L.size = L.size * n.H / ky / H;
     L.x = u / W; L.y = v / H; L.rot = turnOf((L.rot || 0) - th / DEG);
     delete L.anchor; delete L.over; delete L.group;
-    face.layers.push(L); out.push(L); markFace(o, key);
+    face.layers.push(L); out.push(L); out.key = key; markFace(o, key);
   }
   sh.layers = sh.layers.filter(L => !out.includes(L)); tidyGroups(sh); markSheet(o);
   return out;
 }
 
-export { SIDES, addSheetLayer, dimsFor, ensureSheet, groupBox, isSheetKey, layerToSheet, linkSheet, markSheet, moveSheetLayer, reanchorLayer, removeSheetLayer, setSheetStretch, setSheetTier, settleSheet, sheetCount, sheetFaces, sheetKey, sheetMM, sheetNet, sheetPx, sheetSide, sheetToFace };
+/* ---------- picking and the editor ---------- */
+/* can the sheet's side be worked on: flat panels of faces to print on (the back: where there is an inside) */
+function canSheet(o, side = 'front') {
+  if (!o || (side === 'back' && !hasInside(o))) return false;
+  const keys = faceKeys(o);
+  return sheetNet(o, side).panels.some(p => flatPanel(p) && keys.includes(p.key));
+}
+/* the sheet's own picture exists (made when a sheet is picked) and will be painted */
+function touchSheetFace(o, k) {
+  ensureSheet(o);
+  if (!RT.get(o.id)) return;
+  if (!RT.get(o.id).faces[k]) ensureFaceRT(o, k);
+  dirtyFaces.add(o.id + '|' + k);
+}
+/* the layers as hit-tested: a stretched one by the box it fills (a stand-in with `.__L` the layer itself) */
+function proxies(layers, n) {
+  return layers.map(L => (L.anchor?.box && L.anchor.tgt ? { ...L, type: 'shape', w: L.anchor.tgt[0] / n.W, h: L.anchor.tgt[1] / n.H, rot: 0, tile: false, __L: L } : L));
+}
+/* the layer of the side's sheet under (X, Y) mm; tier: true — over the faces' layers, false — under them, null — any */
+function hitSheet(o, side, X, Y, tier = null) {
+  const sh = o.sheet?.[side]; if (!sh?.layers.length || (side === 'back' && !hasInside(o))) return null;
+  const n = sheetNet(o, side); settleSheet(o, side, n);
+  const [Ws, Hs] = dimsFor(n.W, n.H);
+  const list = proxies(sh.layers.filter(L => tier == null || !!L.over === tier), n);
+  const h = hitLayer({ layers: list }, Ws, Hs, X * Ws / n.W, Y * Hs / n.H);
+  return h ? h.__L || h : null;
+}
+/* the sheet layer on face k at the point (fx, fy) (shares of the face): { side, L } */
+function sheetAtFacePoint(o, k, fx, fy, tier = null) {
+  if (!o.sheet) return null;
+  const [Wf, Hf] = facePx(o, k);
+  for (const side of SIDES) {
+    if (!o.sheet[side]?.layers.length || (side === 'back' && !hasInside(o))) continue;
+    for (const p of panelsOf(sheetNet(o, side), k)) {
+      const [X, Y] = apply(faceToSheet(p, Wf, Hf).M, [fx * Wf, fy * Hf]), L = hitSheet(o, side, X, Y, tier);
+      if (L) return { side, L };
+    }
+  }
+  return null;
+}
+/* where the sheet layers lie on face k, as outlines in shares of the face: [{ side, L, quad }] (for the face window) */
+function sheetFootprints(o, k) {
+  const out = []; if (!o.sheet) return out;
+  const [Wf, Hf] = facePx(o, k);
+  for (const side of SIDES) {
+    const sh = o.sheet[side]; if (!sh?.layers.length || (side === 'back' && !hasInside(o))) continue;
+    const n = sheetNet(o, side), [Ws, Hs] = dimsFor(n.W, n.H); settleSheet(o, side, n);
+    for (const L of sh.layers) {
+      if (!L.visible) continue;
+      const [q] = proxies([L], n), [w, h] = layerBox(q, Ws, Hs), a = (q.rot || 0) * DEG, cs = Math.cos(a), sn = Math.sin(a);
+      const pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => [(L.x * Ws + sx * w / 2 * cs - sy * h / 2 * sn) * n.W / Ws, (L.y * Hs + sx * w / 2 * sn + sy * h / 2 * cs) * n.H / Hs]);
+      for (const p of panelsOf(n, k)) {
+        const G = mapToFace(p, Wf, Hf), quad = pts.map(([X, Y]) => { const [u, v] = apply(G, [X, Y]); return [u / Wf, v / Hf]; });
+        const us = quad.map(c => c[0]), vs = quad.map(c => c[1]);
+        if (Math.max(...us) > 0 && Math.min(...us) < 1 && Math.max(...vs) > 0 && Math.min(...vs) < 1) out.push({ side, L, quad });
+      }
+    }
+  }
+  return out;
+}
+/* a new layer of the sheet: a size that suits the biggest face panel, in its middle (unless it is put somewhere) */
+function fitNewSheetLayer(o, side, L) {
+  const n = sheetNet(o, side), keys = faceKeys(o), ps = n.panels.filter(p => flatPanel(p) && keys.includes(p.key)).sort((a, b) => b.w * b.h - a.w * a.h), big = ps[0]; if (!big) return;
+  if (L.x === .5 && L.y === .5) { L.x = (big.x + big.w / 2) / n.W; L.y = (big.y + big.h / 2) / n.H; }
+  if (L.type === 'text') L.size = Math.min(big.h * .16, 14) / n.H;
+  else if (L.type === 'image') L.w = Math.min(big.w * .6, big.h * .6 * (L.aspect || 1)) / n.W;
+  else if (L.kind === 'ellipse') { L.w = Math.min(big.w, big.h) * .3 / n.W; L.h = Math.min(big.w, big.h) * .3 / n.H; }
+  else { L.w = big.w * .5 / n.W; L.h = big.h * .2 / n.H; }
+}
+/* would moving the layer to face k lose a part of it (past the face's edge)? */
+function sheetToFaceLoss(o, side, id, k) {
+  const L = o.sheet?.[side]?.layers.find(l => l.id === id); if (!L) return false;
+  const ps = panelsOf(sheetNet(o, side), k); if (!ps.length) return true;
+  const n = sheetNet(o, side), [Ws, Hs] = dimsFor(n.W, n.H), [q] = proxies([L], n), [w, h] = layerBox(q, Ws, Hs), a = (q.rot || 0) * DEG;
+  const hw = (Math.abs(w * Math.cos(a)) + Math.abs(h * Math.sin(a))) / 2 * n.W / Ws, hh = (Math.abs(w * Math.sin(a)) + Math.abs(h * Math.cos(a))) / 2 * n.H / Hs;
+  const x0 = Math.min(...ps.map(p => p.x)), y0 = Math.min(...ps.map(p => p.y)), x1 = Math.max(...ps.map(p => p.x + p.w)), y1 = Math.max(...ps.map(p => p.y + p.h));
+  return L.x * n.W - hw < x0 - .5 || L.x * n.W + hw > x1 + .5 || L.y * n.H - hh < y0 - .5 || L.y * n.H + hh > y1 + .5;
+}
+
+export { SIDES, canSheet, fitNewSheetLayer, hitSheet, sheetAtFacePoint, sheetFootprints, sheetToFaceLoss, touchSheetFace, addSheetLayer, dimsFor, ensureSheet, groupBox, isSheetKey, layerToSheet, linkSheet, markSheet, moveSheetLayer, reanchorLayer, removeSheetLayer, setSheetStretch, setSheetTier, settleSheet, sheetCount, sheetFaces, sheetKey, sheetMM, sheetNet, sheetPx, sheetSide, sheetToFace };

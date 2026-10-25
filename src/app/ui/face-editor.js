@@ -1,7 +1,7 @@
 // Окно грани (2D-редактор)
 import { $, DEG } from '../core/util.js';
 import { activeFaceData, activeLayer, activeObj, sel } from '../core/state.js';
-import { faceMM, loopAxis } from '../core/model.js';
+import { faceKeys, faceMM, loopAxis } from '../core/model.js';
 import { layerReach } from '../faces/wrap.js';
 import { RT, markFace, ui } from '../scene/renderer.js';
 import { faceWindow, windowPath } from '../carriers/box.js';
@@ -16,7 +16,12 @@ import { stickerOfKey } from '../stickers/design.js';
 import { stickerSize } from '../stickers/placement.js';
 import { pickLayers } from '../core/selection.js';
 import { startTextEdit } from './text-edit.js';
-import { boundsOf, clickPick, groupOf, layerAABB, moveLayers, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
+import { isSheetKey, sheetAtFacePoint, sheetFootprints, sheetKey, sheetNet, sheetSide } from '../core/sheet.js';
+import { panelPath } from '../net/net-view.js';
+import { setViewMode } from './view-mode.js';
+import { openMenu } from './menu.js';
+import { select } from '../core/selection.js';
+import { boundsOf, clickPick, groupOf, hitLayer, layerAABB, moveLayers, rotateLayers, scaleLayers, selectedIds, selectedLayers, snapshot } from '../core/layers.js';
 import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
 import { rotateItem, scaleItem } from '../core/transform.js';
@@ -57,6 +62,16 @@ function drawEditor() {
   // everything below is drawn in the face's own px (times k): the margin is outside 0…dw, 0…dh
   const c = ectx, base = () => c.setTransform(dpr, 0, 0, dpr, dpr * PAD, dpr * PAD);
   base(); c.clearRect(-PAD, -PAD, cw, ch);
+  // the sheet itself: all its layers on a paper ground, the faces' panels dashed (the picture is the sheet, k px per px)
+  if (isSheetKey(sel.face)) {
+    const n = sheetNet(o, sheetSide(sel.face)), keys = faceKeys(o);
+    c.fillStyle = '#f4f1ea'; c.fillRect(0, 0, dw, dh); c.drawImage(f.canvas, 0, 0, dw, dh);
+    c.save(); c.strokeStyle = 'rgba(0,160,227,.7)'; c.setLineDash([4, 3]); c.lineWidth = 1;
+    for (const p of n.panels) if (!p.fan && keys.includes(p.key)) { c.beginPath(); panelPath(c, p, 0, 0, dw / n.W); c.stroke(); }
+    c.restore();
+    drawSelection(c, edState, o, { k, W, H, dw, dh, faceT: q => q.setTransform(dpr * k, 0, 0, dpr * k, dpr * PAD, dpr * PAD) });
+    return;
+  }
   const circle = o.type === 'tube' && sel.face !== 'wrap';
   c.save();
   if (circle) { c.beginPath(); c.arc(dw / 2, dh / 2, dw / 2, 0, Math.PI * 2); c.clip(); }
@@ -137,6 +152,15 @@ function drawEditor() {
       }
     }
     base();
+  }
+  // layers of the sheet that lie on this face: they are painted in the picture, and edited on the sheet (a click opens it)
+  for (const g of sheetFootprints(o, sel.face)) {
+    c.save(); c.strokeStyle = 'rgba(124,77,196,.85)'; c.setLineDash([3, 3]); c.lineWidth = 1; c.beginPath();
+    g.quad.forEach(([u, v], i) => c[i ? 'lineTo' : 'moveTo'](u * dw, v * dh)); c.closePath(); c.stroke(); c.setLineDash([]);
+    c.font = '600 10px Onest, system-ui, sans-serif'; c.textBaseline = 'middle';
+    const t = 'слой развёртки', tw = c.measureText(t).width + 10, tx = Math.min(dw - tw - 2, Math.max(2, Math.min(...g.quad.map(q => q[0])) * dw + 3)), ty = Math.min(dh - 14, Math.max(2, Math.min(...g.quad.map(q => q[1])) * dh + 3));
+    c.fillStyle = 'rgba(124,77,196,.9)'; c.beginPath(); c.roundRect(tx, ty, tw, 13, 6.5); c.fill(); c.fillStyle = '#fff'; c.fillText(t, tx + 5, ty + 7);
+    c.restore();
   }
   // the part of a layer past the face's edge is not printed (unless it runs over the edge or round a ring): hatched red
   const hatch = (c, L, pts, w, h) => {
@@ -240,17 +264,6 @@ function drawSelection(c, st, o, ctx) {
   } else st.handles = null;
 }
 const inPoly = ([x, y], q) => { let r = false; for (let i = 0, j = q.length - 1; i < q.length; j = i++) if ((q[i][1] > y) !== (q[j][1] > y) && x < (q[j][0] - q[i][0]) * (y - q[i][1]) / (q[j][1] - q[i][1]) + q[i][0]) r = !r; return r; };
-function hitLayer(face, W, H, px, py) {
-  for (let i = face.layers.length - 1; i >= 0; i--) {
-    const L = face.layers[i]; if (!L.visible || L.locked) continue;
-    if (L.type === 'image' && L.tile) return L;
-    const [w, h] = layerBox(L, W, H);
-    const dx = px - L.x * W, dy = py - L.y * H, a = -L.rot * DEG;
-    const lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
-    if (Math.abs(lx) <= w / 2 + 2 && Math.abs(ly) <= h / 2 + 2) return L;
-  }
-  return null;
-}
 /* smart guides: a moving box (face px) snaps its edges and centre to the face's edges and centre and to the other
    layers' ones, within 6 screen px; returns the shift to add and the lines to show */
 function snapBox(st, bx, others, W, H) {
@@ -402,15 +415,37 @@ function edDouble(s, mx, my) {
   return false;
 }
 
+/* a layer of the sheet shown on the big net (2D + 3D) and picked */
+function openOnSheet(side, id) {
+  const o = activeObj(); if (!o) return;
+  setViewMode(matchMedia('(max-width: 860px)').matches ? '2d' : 'split');
+  select(o.id, sheetKey(side), null, { focus: false }); pickLayers([id]);
+}
+
 /* hooks up the 2D editor */
 function initFaceEditor() {
-  ed.addEventListener('pointerdown', e => { const [mx, my] = edPoint(e); edPress(edSurf, e, mx, my); });
+  // a click that picks nothing of the face but lies on a layer of the sheet offers to open it there
+  let ghost = null;
+  ed.addEventListener('pointerdown', e => {
+    const [mx, my] = edPoint(e), f = activeFaceData(), o = activeObj();
+    ghost = null;
+    if (o && f && !isSheetKey(sel.face) && !hitLayer(f, edState.W, edState.H, mx / edState.k, my / edState.k) && edCursor(edSurf, e, mx, my) === 'default') {
+      const T = sheetAtFacePoint(o, sel.face, mx / edState.dw, my / edState.dh);
+      if (T) ghost = { x: e.clientX, y: e.clientY, T };
+    }
+    edPress(edSurf, e, mx, my);
+  });
   ed.addEventListener('pointermove', e => {
     const [mx, my] = edPoint(e);
     if (!edState.drag) { if (activeFaceData()) ed.style.cursor = edCursor(edSurf, e, mx, my); return; }
     edMove(edSurf, e, mx, my);
   });
-  ed.addEventListener('pointerup', () => edUp(edSurf));
+  ed.addEventListener('pointerup', e => {
+    edUp(edSurf);
+    if (!ghost || Math.hypot(e.clientX - ghost.x, e.clientY - ghost.y) > 4) { ghost = null; return; }
+    const { T } = ghost; ghost = null;
+    openMenu(e.clientX, e.clientY, [{ label: 'Открыть на развёртке', run: () => openOnSheet(T.side, T.L.id) }], 'Слой развёртки');
+  });
   ed.addEventListener('pointercancel', () => edUp(edSurf));
   ed.addEventListener('dblclick', e => { const [mx, my] = edPoint(e); edDouble(edSurf, mx, my); });
   new ResizeObserver(() => { ui.editor = true; ui.net = true; }).observe($('#editorWrap'));

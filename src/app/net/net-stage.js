@@ -3,6 +3,7 @@ import { $, fmt } from '../core/util.js';
 import { activeObj, sel } from '../core/state.js';
 import { faceKeys, faceLabel } from '../core/model.js';
 import { RT } from '../scene/renderer.js';
+import { isSheetKey, sheetKey, sheetSide } from '../core/sheet.js';
 import { fanImage, fanOutline } from '../carriers/cup.js';
 import { pickLayers, select } from '../core/selection.js';
 import { hover, onHoverFace, setHoverFace } from '../core/hover.js';
@@ -94,12 +95,16 @@ function paintTop() {
   // layers being dragged: the panel they would land on
   const drop = dropPanel();
   if (drop) { tctx.beginPath(); outline(tctx, drop); tctx.globalAlpha = .2; tctx.fillStyle = accent; tctx.fill(); tctx.globalAlpha = 1; tctx.lineWidth = 3; tctx.strokeStyle = accent; tctx.setLineDash([6, 4]); tctx.stroke(); tctx.setLineDash([]); }
+  // the sheet picked (its layers run over the folds): the whole sheet is dashed round
+  if (isSheetKey(sel.face)) {
+    tctx.save(); tctx.strokeStyle = accent; tctx.lineWidth = 1.5; tctx.setLineDash([7, 5]); tctx.strokeRect(V.ox - 3, V.oy - 3, n.W * V.k + 6, n.H * V.k + 6); tctx.restore();
+  }
   drawNetEdit(tctx, dpr);
   // the name of the picked (while no layer is, it would cover the layer's frame) or hovered panel, over its top left corner
-  const names = [...new Set([sel.layer ? null : sel.face, hov, drop?.key])].filter(k => k && keys.includes(k));
+  const names = [...new Set([sel.layer ? null : sel.face, hov, drop?.key])].filter(k => k && (keys.includes(k) || isSheetKey(k)));
   tctx.font = '600 11.5px Onest, system-ui, sans-serif'; tctx.textBaseline = 'middle';
   for (const key of names) {
-    const p = n.panels.find(q => q.key === key); if (!p) continue;
+    const p = isSheetKey(key) ? { x: -6 / V.k, y: -6 / V.k } : n.panels.find(q => q.key === key); if (!p) continue;
     const txt = faceLabel(o, key), w = tctx.measureText(txt).width + 14, x = Math.min(cw - w - 4, Math.max(4, V.ox + p.x * V.k + 6)), y = Math.min(ch - 26, Math.max(6, V.oy + p.y * V.k + 6));
     tctx.fillStyle = accent; tctx.beginPath(); tctx.roundRect(x, y, w, 20, 10); tctx.fill();
     tctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent-fg').trim() || '#fff'; tctx.fillText(txt, x + 7, y + 10.5);
@@ -260,7 +265,12 @@ function initNetStage() {
   addEventListener('keydown', e => { if (e.code === 'Space' && over && !/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)) { space = true; e.preventDefault(); pane.style.cursor = 'grab'; } });
   addEventListener('keyup', e => { if (e.code === 'Space' && space) { space = false; pane.style.cursor = ''; } });
   loadNetSide(); loadNetOverlays(); syncChips();
-  onNetSide(() => { netDirty = baseDirty = topDirty = true; schedule(); });
+  onNetSide(() => {
+    netDirty = baseDirty = topDirty = true; schedule();
+    // the sheet picked follows the side shown (its layers are edited on that side)
+    const o = activeObj();
+    if (o && isSheetKey(sel.face) && sheetSide(sel.face) !== sideOf(o)) select(o.id, sheetKey(sideOf(o)), null, { focus: false });
+  });
   for (const b of document.querySelectorAll('#netSide [data-side]')) b.onclick = () => setNetSide(b.dataset.side);
   onNetOverlay(() => { syncChips(); baseDirty = true; schedule(); });
   for (const b of document.querySelectorAll('#netChips [data-ov]')) b.onclick = () => setNetOverlay(b.dataset.ov, !netOverlay(b.dataset.ov));
