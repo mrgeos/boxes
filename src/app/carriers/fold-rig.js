@@ -1,6 +1,6 @@
 // Сборка: каркас складывания, собранный из развёртки (панели на сгибах, как в дереве)
 import * as THREE from 'three';
-import { S, clamp } from '../core/util.js';
+import { OVERLAY_LAYER, S, clamp } from '../core/util.js';
 import { clearLid, faceMM, netLayout } from '../core/model.js';
 import { dieLines } from './box-net.js';
 import { netWindows } from './box.js';
@@ -268,7 +268,7 @@ function markCrease(rig, id) {
   const n = rig.nodes.find(q => q.parent && q.id === id); if (!n) return;
   const len = Math.hypot(n.seg[2] - n.seg[0], n.seg[3] - n.seg[1]), g = new THREE.CylinderGeometry(.9 * S, .9 * S, len * S, 8);
   if (n.axis.x) g.rotateZ(Math.PI / 2); else g.rotateX(Math.PI / 2);
-  const m = new THREE.Mesh(g, markMat()); m.renderOrder = 10; m.raycast = () => {}; n.rot.add(m); rig.mark = m;
+  const m = new THREE.Mesh(g, markMat()); m.renderOrder = 10; m.layers.enable(OVERLAY_LAYER); m.raycast = () => {}; n.rot.add(m); rig.mark = m;
 }
 let _mark = null;
 const markMat = () => _mark ||= new THREE.MeshBasicMaterial({ color: 0xff9d1c, depthTest: false, transparent: true, opacity: .95 });

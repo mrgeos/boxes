@@ -14,7 +14,7 @@ import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
    The picture keeps its alpha (premultiplied): the page's own background shows through, as without the mode.
    Every pass guards against NaN and Inf (Apple's GPUs make them out of degenerate tangents): a bad texel is left out
    of the average. */
-const LOOK = { ao: .6, bloom: .3, vig: 0, vigExport: .3, grain: .12, contrast: .06, keyR: .07 };   // vig 0 on screen: the canvas is transparent over the page's own background, which a vignette would dirty; vigExport is for a picture with our background (PNG export). keyR: the light's disk, as a share of its distance
+const LOOK = { ao: .6, bloom: .3, vig: 0, vigExport: .3, grain: .12, contrast: 0, keyR: .07 };   // vig 0 on screen: the canvas is transparent over the page's own background, which a vignette would dirty; vigExport is for a picture with our background (PNG export). keyR: the light's disk, as a share of its distance // contrast: the prototype's .06 (a power on the tone-mapped value) made boards 8-26% darker than the plain view: 0
 const halton = (i, b) => { let f = 1, r = 0; while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); } return r; };
 const BAD = 'bool bad(vec3 v){ return !(abs(v.x) < 1e5 && abs(v.y) < 1e5 && abs(v.z) < 1e5); }   // true for NaN and Inf too';
 const VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';

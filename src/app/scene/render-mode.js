@@ -1,11 +1,12 @@
 // Режим «Рендер»: переключатель и связь с загрузчиком студийной картинки (отдельный файл box-studio-render.js, грузится по требованию)
 import * as THREE from 'three';
 import { state } from '../core/state.js';
+import { setRenderOn } from '../core/render-flag.js';
 import { TOUCH } from '../core/model.js';
 import { reapplyQuality } from './quality.js';
 import { $, OVERLAY_LAYER, toast } from '../core/util.js';
 import { script } from '../core/models3d.js';
-import { contactMat, camera, keyLight, petLinear, renderer, scene, staleShadow, viewport } from './renderer.js';
+import { applyObjMaterials, contactMat, camera, keyLight, petLinear, renderer, scene, staleShadow, viewport } from './renderer.js';
 import { invalidate } from './camera.js';
 import { hideRings, ringsShown } from './move.js';
 import { hideSelBox, selBoxShown } from './sel-box.js';
@@ -17,6 +18,9 @@ import { hideSelLook, selLookShown } from './sel-look.js';
    choice is this browser's, like the quality level. This module is only the switch and the hand-over of the editor's
    parts to that file. */
 const KEY = 'bs3d-render';
+/* more marks over the scene, from parts that this module must not import (the order they load in): { hide() → restore, shown() } */
+const extraMarks = [];
+const addMarks = (hide, shown) => { extraMarks.push({ hide, shown }); };
 let on = false, studio = null, loading = false, onChange = () => {}, chip = null, chipDone = 0, chipKey = '';
 try { on = localStorage.getItem(KEY) === '1'; } catch { /* private mode */ }
 
@@ -38,8 +42,8 @@ async function load() {
       exposure: () => state.scene.exposure,
       staleShadow,
       // the marks over the scene: hidden while it is sampled, drawn last on top of the result
-      hideOverlays: () => { const a = hideRings(), b = hideSelBox(), c = hideSelLook(); return () => { a(); b(); c(); }; },
-      overlaysShown: () => ringsShown() || selBoxShown() || selLookShown(),
+      hideOverlays: () => { const a = hideRings(), b = hideSelBox(), c = hideSelLook(), d = extraMarks.map(m => m.hide()); return () => { a(); b(); c(); d.forEach(f => f()); }; },
+      overlaysShown: () => ringsShown() || selBoxShown() || selLookShown() || extraMarks.some(m => m.shown()),
     });
   } catch (e) {
     console.warn('render', e);
@@ -49,13 +53,14 @@ async function load() {
   loading = false; onChange(); invalidate();
 }
 function setRender(v) {
-  on = !!v;
+  on = !!v; setRenderOn(on);
   try { localStorage.setItem(KEY, on ? '1' : '0'); } catch { /* private mode */ }
   if (on) load(); else studio?.release();
+  for (const o of state.objects) if (o.type === 'tray') applyObjMaterials(o);   // the tray's foil takes the studio's own look and reflections
   reapplyQuality(); invalidate(); onChange();
 }
 function initRenderMode(cb) {
-  onChange = cb || onChange;
+  onChange = cb || onChange; setRenderOn(on);
   // the progress chip: «● 23/64», «✓» for a moment when the picture is done; not shown while the view moves
   chip = document.createElement('div'); chip.className = 'render-chip'; chip.setAttribute('aria-live', 'off'); chip.hidden = true;
   chip.innerHTML = '<i aria-hidden="true"></i><span></span>';
@@ -78,4 +83,4 @@ function syncRenderChip(st) {
   if (key) { chip.classList.toggle('done', key === '✓'); chip.classList.remove('fade'); chip.lastChild.textContent = key; }
 }
 
-export { active, initRenderMode, lowProfile, pixelCap, renderState, setRender, syncRenderChip };
+export { active, addMarks, initRenderMode, lowProfile, pixelCap, renderState, setRender, syncRenderChip };

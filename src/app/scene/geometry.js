@@ -85,6 +85,50 @@ function loopSurface(loops, i0, i1, cap) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setIndex(I); g.computeVertexNormals();
   return g;
 }
+/* How sharp the surface turns at each vertex (0…1), as the vertex attribute `edge`: the angle between the normals of the
+   faces that meet there, through a smoothstep. Clear plastic whitens at its creases in the «Рендер» mode (petMat in
+   scene/renderer.js). Vertices at one place count as one (a seam), whatever the index. Big meshes are left out. */
+function addCreaseEdge(geo, maxTris = 60000) {
+  const pos = geo.attributes.position; if (!pos || geo.attributes.edge) return;
+  const idx = geo.index, tris = idx ? idx.count / 3 : pos.count / 3;
+  if (tris > maxTris) return;
+  const at = j => idx ? idx.getX(j) : j, Q = 1e4, rec = new Map(), rid = new Int32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    const k = Math.round(pos.getX(i) * Q) + ',' + Math.round(pos.getY(i) * Q) + ',' + Math.round(pos.getZ(i) * Q);
+    if (!rec.has(k)) rec.set(k, rec.size);
+    rid[i] = rec.get(k);
+  }
+  const sum = new Float32Array(rec.size * 3), ang = new Float32Array(rec.size), fn = new Float32Array(tris * 3);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let t = 0; t < tris; t++) {
+    const i0 = at(t * 3), i1 = at(t * 3 + 1), i2 = at(t * 3 + 2);
+    a.fromBufferAttribute(pos, i0); b.fromBufferAttribute(pos, i1).sub(a); c.fromBufferAttribute(pos, i2).sub(a); b.cross(c);
+    if (b.lengthSq() < 1e-18) continue;
+    b.normalize(); fn.set([b.x, b.y, b.z], t * 3);
+    for (const i of [i0, i1, i2]) { const r = rid[i] * 3; sum[r] += b.x; sum[r + 1] += b.y; sum[r + 2] += b.z; }
+  }
+  for (let t = 0; t < tris; t++) for (let v = 0; v < 3; v++) {
+    const r = rid[at(t * 3 + v)], l = Math.hypot(sum[r * 3], sum[r * 3 + 1], sum[r * 3 + 2]);
+    if (!l) { ang[r] = Math.PI; continue; }
+    const d = (sum[r * 3] * fn[t * 3] + sum[r * 3 + 1] * fn[t * 3 + 1] + sum[r * 3 + 2] * fn[t * 3 + 2]) / l;
+    ang[r] = Math.max(ang[r], Math.acos(Math.max(-1, Math.min(1, d))));
+  }
+  const out = new Float32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) out[i] = THREE.MathUtils.smoothstep(ang[rid[i]], .12, .5);
+  geo.setAttribute('edge', new THREE.BufferAttribute(out, 1));
+}
+/* a tangent [x, y, z, w] for a vertex with normal N: T (the direction of the texture's u) made square to N, and w the
+   handedness so that cross(N, T) · w points along B (the texture's v). Real tangents, because three.js derives the frame
+   from screen-space derivatives otherwise, which are degenerate in places and give NaN on some GPUs (Apple's) for a
+   normal-mapped or anisotropic material */
+function tangentOf(N, T, B) {
+  const d = N[0] * T[0] + N[1] * T[1] + N[2] * T[2]; T = [T[0] - N[0] * d, T[1] - N[1] * d, T[2] - N[2] * d];
+  let l = Math.hypot(...T);
+  if (l < 1e-9) { T = Math.abs(N[0]) < .9 ? [1, 0, 0] : [0, 0, 1]; const e = N[0] * T[0] + N[1] * T[1] + N[2] * T[2]; T = [T[0] - N[0] * e, T[1] - N[1] * e, T[2] - N[2] * e]; l = Math.hypot(...T) || 1; }
+  T = [T[0] / l, T[1] / l, T[2] / l];
+  const c = [N[1] * T[2] - N[2] * T[1], N[2] * T[0] - N[0] * T[2], N[0] * T[1] - N[1] * T[0]];
+  return [...T, c[0] * B[0] + c[1] * B[1] + c[2] * B[2] < 0 ? -1 : 1];
+}
 /* a grid over a surface f(u, v) (mm), offset by off (mm) into a part's own space */
 function gridGeo(f, nu, nv, off = [0, 0, 0], r = [0, 1, 0, 1], vtop = null) {
   const P = [], UV = [], I = [];
@@ -137,4 +181,4 @@ function mergeStatic(rt) {
   }
 }
 
-export { gridGeo, loopSurface, mergeStatic, seg, notchPts, planeGeo, planeGeoHole, quadGeo, ribbonGeo, rrLoop, rrectPts, surfFrame };
+export { addCreaseEdge, tangentOf, gridGeo, loopSurface, mergeStatic, seg, notchPts, planeGeo, planeGeoHole, quadGeo, ribbonGeo, rrLoop, rrectPts, surfFrame };
