@@ -39,6 +39,8 @@ import { hover } from './core/hover.js';
 import { netHandles } from './net/net-edit.js';
 import { labelRects, netOverlay, setNetOverlay } from './net/net-overlays.js';
 import { printIssues } from './net/net-check.js';
+import { clearLayerWarn, setLayerPin } from './core/pins.js';
+import { placeUnplaced, setDims, setLidType } from './core/transfer.js';
 import { hasReverse, setNetSide, sideOf } from './net/net-side.js';
 import { initFaceHi } from './scene/face-hi.js';
 import { initViewMode, setViewMode, viewMode } from './ui/view-mode.js';
@@ -112,6 +114,13 @@ Object.assign(window.__boxStudio, { setFold: Fold.setFold, foldOf: Fold.foldOf, 
   const mk = (type, props = {}) => Object.assign(type === 'image' ? newImage(props.src, props.aspect || 1) : type === 'shape' ? newShape(props.kind) : newText(props.text), props);
   Object.assign(window.__boxStudio, {
     projectJSON: () => projectJSON(false), loadProject, undo, redo,
+    // layer pins and the transfer of a design (core/pins.js, core/transfer.js): by object id, each change one step
+    setLayerPin: asStep((id, k, lid, pin) => { const o = obj(id); return !!o && setLayerPin(o, k, lid, pin); }),
+    clearLayerWarn: asStep((id, k, lid) => { const o = obj(id); return !!o && clearLayerWarn(o, k, lid); }),
+    setDims: asStep((id, d) => { const o = obj(id); return !!o && setDims(o, d); }),
+    setLidType: asStep((id, lt) => { const o = obj(id); return !!o && setLidType(o, lt); }),
+    placeUnplaced: asStep((id, i, k) => { const o = obj(id); return !!o && placeUnplaced(o, i, k); }),
+    transferIssues: id => { const o = obj(id); return o ? printIssues(o).filter(i => i.kind === 'transfer' || i.kind === 'unplaced') : []; },
     newSheetLayer: mk,
     addSheetLayer: asStep((side, L, opts, id) => { const o = obj(id); return o && Sheet.addSheetLayer(o, side, L, opts); }),
     removeSheetLayer: asStep((side, lid, id) => { const o = obj(id); return o && Sheet.removeSheetLayer(o, side, lid); }),

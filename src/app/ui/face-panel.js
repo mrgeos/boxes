@@ -20,7 +20,7 @@ import { RT, markFace, ui } from '../scene/renderer.js';
 import { pickLayers, select } from '../core/selection.js';
 import { addBackgroundImage, bgToAllFaces, clearFace, imageFitOf, selectBg, setFaceBg, setFaceBgGrad, setImageFit, alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setVisible, shiftLayers } from '../core/layers.js';
 import { commit } from '../core/project.js';
-import { clearLayerWarn, warnOf, warnText } from '../core/pins.js';
+import { clearLayerWarn, setLayerPin, warnOf, warnText } from '../core/pins.js';
 import { placeUnplaced } from '../core/transfer.js';
 import { bindFields, bindNum, placeField, rangeField } from './fields.js';
 import { MASKS, cropped, editMode, hasPanels, resetCrop, setClipBelow, setClipTo, setEditMode, setMask } from '../core/mask.js';
@@ -332,6 +332,12 @@ function renderLayerProps() {
   const pos = `${placeField('Центр', 'x', 'y', -50, 150, .1, 100)}${rot}
     ${!isSheetKey(sel.face) && !(img && L.tile) && Object.keys(RT.get(o.id)?.frames || {}).length ? '<label class="check" title="Часть слоя за краем грани печатается на соседних гранях, через сгиб. Включается сама, если тянуть слой через ребро на модели"><input type="checkbox" data-k="wrap"> Переходит через рёбра на соседние грани</label>' : ''}`;
   html += img ? `<div class="cut"><h3>Размер и положение</h3>${fitSegHTML(o, L)}${rangeField(L.tile ? 'Размер плитки, %' : 'Ширина, %', 'w', 1, 400, .1, 100)}${pos}</div>` : pos;
+  // what the layer holds when the face changes size
+  const opts = (a) => a.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  if (!isSheetKey(sel.face)) html += `<div class="cut"><h3>При смене размера</h3>
+    <div class="field wide"><span class="fl">По горизонтали</span><select data-pin="x">${opts([['scale', 'Растягивать'], ['start', 'От левого края'], ['end', 'От правого края'], ['center', 'От центра']])}</select></div>
+    <div class="field wide"><span class="fl">По вертикали</span><select data-pin="y">${opts([['scale', 'Растягивать'], ['start', 'От верха'], ['end', 'От низа'], ['center', 'От центра']])}</select></div>
+    <label class="check"><input type="checkbox" data-pin="size"> Размер в мм (не масштабировать)</label></div>`;
   html += `
     ${isSheetKey(sel.face) ? sheetBlockHTML(L) : faceSheetOfferHTML(o, sel.face)}
     ${materialsHTML(L, effOpts)}
@@ -350,6 +356,11 @@ function renderLayerProps() {
     markFace(activeObj(), sel.face);
   });
   bindCrop(o, L); bindAlignBar(sec); bindSheetBlock(sec, o, L);
+  $$('[data-pin]', sec).forEach(el => {
+    const ax = el.dataset.pin;
+    if (ax === 'size') el.checked = L.pin?.size === 'fixed'; else el.value = L.pin?.[ax] || 'scale';
+    el.onchange = () => { setLayerPin(o, sel.face, L.id, { [ax]: ax === 'size' ? (el.checked ? 'fixed' : 'scale') : el.value }); commit(); };
+  });
   if (wn) $('#warnOk').onclick = () => { clearLayerWarn(o, sel.face, L.id); renderLayers(); renderLayerProps(); commit(); };
   if (L.type === 'text' && linkOf(L, 'font') && $('[data-k="font"]', sec)) $('[data-k="font"]', sec).value = '@' + linkOf(L, 'font');
   $('#gradKind') && ($('#gradKind').onchange = e => { setGradient(o, sel.face, activeLayer(), e.target.value || null); ui.layers = true; renderLayerProps(); commit(); });
