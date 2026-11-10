@@ -394,7 +394,7 @@ function buildHandleBox(o, rt, { addG, add, film }) {
     const tw = B.tw * S / 2, ins = B.th * .35 * S, tg = new THREE.Group(); tg.position.set(-sx * T, -tL, 0); uh.add(tg);
     const tm = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape([V2(-tw, 0), V2(tw, 0), V2(tw - ins, -B.th * S), V2(-tw + ins, -B.th * S)])), rt.foldMat);
     tm.rotation.set(0, ry, 0); tm.castShadow = true; tm.userData = { objId: o.id, face: null }; tg.add(tm);
-    const tong = { m: tg, sx, al: Math.atan(1.6 * T / (B.th * S)), slot: null }; rt.hb.tongues.push(tong);
+    const tong = { m: tg, sx, al: 15 * P / 180, slot: null }; rt.hb.tongues.push(tong);
     // the ears on its sides, beyond the dust flaps, folded in (they turn with the flap)
     if (B.ears) {
       const er = Math.min(B.r, B.earW / 2.5, B.earL / 2.5) * S, eg = new THREE.ShapeGeometry(new THREE.Shape(v2(cornerPoly(-B.earL * S / 2, 0, B.earL * S / 2, B.earW * S, [0, 0, er, er])))), pos = eg.attributes.position;

@@ -87,8 +87,9 @@ const casketFold = {
   hinge(par, ch, T) { return ch.key === 'tab' ? { ang: 90, a: -T, slide: -2 * T } : { ang: 90, a: 0 }; },
 };
 /* the cake box with a handle: a strip front, lid, back, floor (hung on the floor), glue flap on the floor's edge. The ends that
-   open have a flap each on the lid and the floor (the lid's over the floor's... they meet halfway) and dust flaps on the
-   front and back walls, which close first. The handle's leaves are cut out of the lid and stand up on the bridge. */
+   open have a long flap on the lid and a short one on the floor, which overlap (the lid's lies outside); the lid's flap has a
+   tongue that slants in through a slot in the floor's flap, and ears on its sides that fold in; dust flaps on the front and back
+   walls close first. The handle's leaves are cut out of the lid and stand up on the bridge. */
 const handleFold = {
   T: o => hbDims(o).t,
   roots: ps => [ps.findIndex(p => p.key === 'bottom')],
@@ -102,11 +103,13 @@ const handleFold = {
       return o.handle.up !== false ? { ang: -(90 + lean), a: T, d: -T, rank: 6 } : { ang: -1.15, a: 0, rank: 6 };
     }
     if (k === 'glue') return { ang: 90, a: -T, d: -T, slide: -2 * T };
-    // the end opens as the model's does (applyLid): the upper flap swings up 150°, the lower down 90°, the dust flaps 90°, the tongue straightens
-    const f = lid => clamp(lid / 125, 0, 1), a = lid => clamp(f(lid) / .6, 0, 1), b = lid => clamp((f(lid) - .5) / .5, 0, 1);
-    if (k === 'tab') return { ang: 10, a: 0, opens: lid => 10 * Math.min(1, a(lid) / .02) };   // the tongue slants in behind the lower flap, through its slot
-    if (k === 'dust') return { ang: 90, a: -T, d: -2 * T, rank: 4, opens: lid => 90 * b(lid) };
-    if (k === 'rightBottom' || k === 'leftBottom') return { ang: 90, a: 0, rank: 5, opens: lid => 90 * a(lid) };
+    // the end opens as the model's does (applyLid): the upper flap swings up 150° first, then the lower one down 90°, then the dust flaps 90°;
+    // the tongue straightens as the upper flap lifts
+    const f = lid => clamp(lid / 125, 0, 1), a = lid => clamp(f(lid) / .4, 0, 1), c = lid => clamp((f(lid) - .3) / .3, 0, 1), b = lid => clamp((f(lid) - .6) / .4, 0, 1);
+    if (k === 'tab') return { ang: 15, a: -2 * T, opens: lid => 15 * Math.min(1, a(lid) / .15) };   // slants in behind the lower flap, through its slot
+    if (k === 'dust') return { ang: 90, a: -2.5 * T, d: -2 * T, rank: 4, opens: lid => 90 * b(lid) };
+    if (k === 'ear') return { ang: 90, a: -T, rank: 5.5 };   // folded in, against the inside of the wall
+    if (k === 'rightBottom' || k === 'leftBottom') return { ang: 90, a: -T, d: -T, rank: 5, opens: lid => 90 * c(lid) };   // inside the upper flap
     if (k === 'rightTop' || k === 'leftTop') return { ang: 90, a: 0, rank: 6, opens: lid => 150 * a(lid) };
     return { ang: 90, a: 0 };
   },

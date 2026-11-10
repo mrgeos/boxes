@@ -119,6 +119,7 @@ function modelInput(k) {
   }
   if (k === 'handle.shape') applyHandlePreset(o.handle, o.handle.shape);
   if (k === 'tray.out') { applyLid(o); return; }
+  if (k.startsWith('hbEnd.')) { ensureFaces(o); rebuildQueue.add(o.id); ui.net = ui.editor = true; updateFaceMeta(); return; }
   if (k === 'hbSides' || k === 'tray.fin' || k === 'product.cake') { ensureFaces(o); rebuildQueue.add(o.id); ui.net = true; select(o.id, sel.face); renderModel(); updateFaceMeta(); return; }
   if (k.startsWith('handle.') || k.startsWith('frontWin.')) {
     ensureFaces(o); rebuildQueue.add(o.id); ui.net = ui.editor = true; updateFaceMeta();
@@ -369,6 +370,9 @@ function renderModel() {
     ${box && o.lidType !== 'none' && (!isShape(o) || o.lidType === 'hexagon') ? rangeField(o.lidType === 'telescope' || o.lidType === 'hexagon' ? 'Поднять крышку' : o.lidType === 'handle' ? 'Открыть торец' : o.lidType === 'f0201' ? 'Открыть клапаны' : o.lidType === 'drawer' ? 'Выдвинуть ящик' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
     ${box && (o.lidType === 'flap' || o.lidType === 'tuck' || o.lidType === 'f0427') ? rangeField('Клапан, мм', 'flapH', 3, 300, 1) : ''}
     ${box && o.lidType === 'handle' ? `<div class="field wide"><span class="fl">Открывается</span><select data-k="hbSides">${Object.entries(HB_SIDES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+      + `<div class="sec-h"><h2>Торец</h2></div>` + rangeField('Верхний клапан, %', 'hbEnd.top', 30, 95, 1, 100) + rangeField('Нижний клапан, %', 'hbEnd.bottom', 10, 90, 1, 100)
+      + rangeField('Язычок: ширина, %', 'hbEnd.tongueW', 10, 90, 1, 100) + rangeField('Язычок: высота, мм', 'hbEnd.tongueH', 4, 40, .5)
+      + `<label class="check"><input type="checkbox" data-k="hbEnd.ears"> Ушки на верхнем клапане</label>` + rangeField('Скругление углов, мм', 'hbEnd.r', 0, 30, .5)
       + rangeField('Выдвинуть подложку, мм', 'tray.out', 0, o.dims.w, 1)
       + `<div class="field wide"><span class="fl">Подложка</span><select data-k="tray.fin">${Object.entries(TRAY_FIN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + `<div class="field wide"><span class="fl">Торт</span><div class="row"><button class="btn sm" id="prodBtn">${o.product?.src ? 'Заменить фото…' : 'Фото торта (PNG)…'}</button>${o.product?.src ? '<button class="btn sm" id="prodOff">Убрать</button>' : ''}</div></div>`
@@ -390,7 +394,7 @@ function renderModel() {
         + `<label class="check"><input type="checkbox" data-k="frontWin.join"> Окно спереди переходит на крышку (одно окно через ребро)</label>`
         + (o.frontWin.join && !bridgeMM(o) && !winMM(o) ? rangeField('Окно спереди: заход на крышку, мм', 'frontWin.d', 5, 800, 1) : '')
         + (o.frontWin.join ? `<p class="hint">Окно на передней стенке поднимается до ребра и продолжается на крышке ${bridgeMM(o) ? 'до перемычки' : winMM(o) ? 'до заднего края окна в крышке' : 'на заданную глубину'}, ширина — как у окна спереди.</p>` : '') : '')
-      + `<p class="hint">Коробка открывается с торца: верхний клапан откидывается вверх, нижний — вниз, они сходятся посередине на замке «язычок в прорезь»; за ними внутренние крылышки от передней и задней стенок. Подложка с тортом выдвигается через открытый торец. Ручка — два лепестка: они поднимаются от краёв перемычки поперёк окна и сходятся вверху.</p>` : ''}
+      + `<p class="hint">Коробка открывается с торца: длинный верхний клапан ложится поверх короткого нижнего, язычок верхнего входит в прорезь нижнего; по бокам верхнего клапана ушки заходят внутрь, за ними внутренние крылышки от передней и задней стенок. Клапаны — в процентах высоты коробки (вместе длиннее высоты: так они ложатся внахлёст, не меньше 10 мм), ширина язычка — в процентах глубины. Подложка с тортом выдвигается через открытый торец. Ручка — два лепестка: они поднимаются от краёв перемычки поперёк окна и сходятся вверху.</p>` : ''}
     ${box && o.lidType === 'flap' ? `<label class="check"><input type="checkbox" data-k="earsOn"> Боковые ушки клапана</label>` : ''}
     ${box && o.lidType === 'flap' && o.earsOn ? `<label class="check"><input type="checkbox" data-k="earFull"> Ушки на всю глубину коробки</label>` : ''}
     ${box && o.lidType === 'flap' && o.earsOn && !o.earFull ? rangeField('Длина ушек, мм', 'earLen', 5, 800, 1) : ''}
