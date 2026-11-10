@@ -218,7 +218,8 @@ function hbNet(o) {
     slots.push([sx, cyb - B.tw / 2 - 1, sx, cyb + B.tw / 2 + 1]);
   }
   let W = XL + w + XR, H = 2 * h + 2 * d + 12;
-  const gap = 15, y = H + gap; let x = 0, rowH = 0;
+  // the separate parts lie well clear of the sheet: the tray is not cut from it
+  const gap = 15, y = H + 30; let x = 0, rowH = 0;
   const part = (key, pw, ph, extra = {}) => { panels.push({ key, x, y, w: pw, h: ph, part: true, ...extra(x, y) }); x += pw + gap; rowH = Math.max(rowH, ph); };
   const leaves = lidLeaves(o);
   // without a bridge the leaves are separate parts
@@ -226,22 +227,10 @@ function hbNet(o) {
     const [pw, ph] = faceMM(o, k), sp = handleShape(pw, ph, o.handle).extractPoints(10);
     part(k, pw, ph, (px, py) => { const m = v => [px + pw / 2 + v.x, py + ph / 2 - v.y]; return { poly: sp.shape.map(m), holes: sp.holes.map(hl => hl.map(m)) }; });
   }
-  part('tray', B.trW, B.trD, () => ({}));
-  let sheetLeaves = null;
-  if (leaves) {
-    // the leaves lie in the lid (turned 180° on the sheet: +x of the box on the left); their faces are printed on
-    // the back of the sheet, drawn here as the back is seen: the lid mirrored, beside the tray
-    const onLid = ([lx, ly]) => [XL + w / 2 - lx, h + d / 2 + ly], half = bridgeMM(o) / 2;
-    sheetLeaves = leaves.map(l => ({ key: l.key, outer: l.outer.map(onLid), cut: l.cut.map(onLid), hole: l.hole && l.hole.map(onLid), creases: l.creases.map(([a, b, c, e]) => [...onLid([a, b]), ...onLid([c, e])]) }));
-    const bx = x, by = y, back = ([lx, ly]) => [bx + w / 2 + lx, by + d / 2 + ly];
-    panels.push({ key: 'reverse', blank: 'оборот крышки', part: true, reverse: true, x: bx, y: by, w, h: d });
-    for (const l of leaves) {
-      const front = l.sz > 0;
-      panels.push({ key: l.key, part: true, reverse: true, x: bx + w / 2 - l.w / 2, y: front ? by + d / 2 - half - l.h : by + d / 2 + half, w: l.w, h: l.h, q: front ? 0 : 2,
-        poly: l.cut.map(back), holes: l.hole ? [l.hole.map(back)] : [] });
-    }
-    x += w + gap; rowH = Math.max(rowH, d);
-  }
+  part('tray', B.trW, B.trD, () => ({ note: 'отдельная деталь' }));
+  // the leaves lie in the lid (turned 180° on the sheet: +x of the box on the left); the lid's own print is on their other side
+  const onLid = ([lx, ly]) => [XL + w / 2 - lx, h + d / 2 + ly];
+  const sheetLeaves = leaves && leaves.map(l => ({ key: l.key, outer: l.outer.map(onLid), cut: l.cut.map(onLid), hole: l.hole && l.hole.map(onLid), creases: l.creases.map(([a, b, c, e]) => [...onLid([a, b]), ...onLid([c, e])]) }));
   W = Math.max(W, x - gap); H = y + rowH;
   // the leaves on the back of the sheet, where they lie in the lid (the sheet turned over: x mirrored about the sheet's
   // middle): what is printed there is the outside of the standing handle, so these panels carry the handle's faces
@@ -296,13 +285,9 @@ function handleBoxSVG(o, n, f, label) {
     body += `<rect x="${f(q.x)}" y="${f(q.y)}" width="${f(q.w)}" height="${f(q.h)}" rx="${f(Math.min(q.radii[0], q.w / 2, q.h / 2))}" fill="none" ${CUT}/>`;
   }
   const poly = q => `<polygon points="${q.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${CUT}/>`;
-  for (const p of n.panels.filter(p => p.part && !p.reverse)) body += p.poly ? poly(p.poly) + (p.holes || []).map(poly).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" ${CUT}/>`;
-  // the back of the sheet where the leaves are printed: not cut, only a guide for the print on the reverse
-  const GUIDE = 'stroke="#9a9a9a" stroke-width="0.3" stroke-dasharray="1.5 1.5"';
-  for (const p of n.panels.filter(p => p.reverse)) body += p.poly ? `<polygon points="${p.poly.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${GUIDE}/>` + (p.holes || []).map(h => `<polygon points="${h.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${GUIDE}/>`).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" ${GUIDE}/>`;
+  for (const p of n.panels.filter(p => p.part)) body += p.poly ? poly(p.poly) + (p.holes || []).map(poly).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" ${CUT}/>`;
   for (const p of n.panels) {
-    if (p.reverse && p.blank) body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + 6)}" font-family="Arial, sans-serif" font-size="4" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(p.blank.toUpperCase())} — ВИД С ОБОРОТА</text>`;
-    else if (p.blank) { if (p.blank.length) body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.max(2.5, Math.min(p.w, p.h) * .12))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle"${p.h > p.w ? ` transform="rotate(-90 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''}>${esc(p.blank.toUpperCase())}</text>`; }
+    if (p.blank) { if (p.blank.length) body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.max(2.5, Math.min(p.w, p.h) * .12))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle"${p.h > p.w ? ` transform="rotate(-90 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''}>${esc(p.blank.toUpperCase())}</text>`; }
     else body += label(p);
   }
   return body;

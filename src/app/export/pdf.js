@@ -140,7 +140,7 @@ function sideForm(pdf, o, sh, ocg, cs) {
   const images = new Map(); let im = 0;
   for (const [p, pic] of pics) { images.set(p, `Im${im++}`); pic.id = pdf.add(`<< /Type /XObject /Subtype /Image /Width ${pic.w} /Height ${pic.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode >>`, pic.data); }
   // the design: bleed rings of all panels first, then the panels, then the glue flaps
-  const colorOf = p => p.plain ? rgbOf(p.plain) : p.fold ? rgbOf(o.faces.front?.bg || o.board) : p.blank && !bagFilm(o) ? rgbOf(p.reverse ? o.faces.inside?.bg || o.board : o.board) : null;
+  const colorOf = p => p.plain ? rgbOf(p.plain) : p.fold ? rgbOf(o.faces.front?.bg || o.board) : p.blank && !bagFilm(o) ? rgbOf(o.board) : null;
   let design = '';
   const place = p => { const pic = pics.get(p); return `q ${n3(pic.W)} 0 0 ${n3(-pic.H)} ${n3(pic.x)} ${n3(pic.y + pic.H)} cm /${images.get(p)} Do Q `; };
   if (b) for (const p of n.panels) {
