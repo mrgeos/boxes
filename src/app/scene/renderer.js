@@ -287,12 +287,12 @@ function applyLid(o) {
   }
   if (rt.trayLid) trayLidAt(o, rt);
   if (rt.hb) {
-    // handle box end: the upper flap swings up, the lower one down onto the table, then the dust flaps open
-    const f = clamp(o.lid / 125, 0, 1), a = clamp(f / .6, 0, 1), b = clamp((f - .5) / .5, 0, 1), T = clamp(o.thickness, .3, 40) * S;
-    for (const { u, l, sx } of rt.hb.flaps) { u.rotation.z = sx * a * 150 * DEG; l.rotation.z = -sx * a * 90 * DEG; }
+    // handle box end: the upper flap lies outside, so it swings up first, then the lower one down onto the table, then the dust flaps open
+    const f = clamp(o.lid / 125, 0, 1), a = clamp(f / .4, 0, 1), c = clamp((f - .3) / .3, 0, 1), b = clamp((f - .6) / .4, 0, 1);
+    for (const { u, l, sx } of rt.hb.flaps) { u.rotation.z = sx * a * 150 * DEG; l.rotation.z = -sx * c * 90 * DEG; }
     for (const { g: d, sx, zs } of rt.hb.dust) d.rotation.y = -sx * zs * b * 90 * DEG;
-    // the tongue is tucked through the slot (behind the lower flap) while closed, straight once open
-    for (const { m, sx, y } of rt.hb.tongues) { m.position.set(a > .02 ? 0 : -sx * 1.6 * T, y, 0); }
+    // the tongue is tucked through the slot (slanting in behind the lower flap) while closed, straight once the flap lifts
+    for (const { m, sx, al, slot } of rt.hb.tongues) { m.rotation.z = -sx * al * (1 - clamp(a / .15, 0, 1)); slot.visible = a > .02; }
     if (rt.hb.tray) rt.hb.tray.position.x = rt.hb.dir * clamp(o.tray?.out ?? 0, 0, o.dims.w) * S;
   }
   if (rt.rsc) applyRsc(o);
