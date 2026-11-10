@@ -50,10 +50,11 @@ function reflowLayers(layers, from, to, ax = null) {
     // the face mark the layer had before (kept, to come back to)
     const prev = redo ? had.prev : had?.kind === 'face' ? { kind: 'face', from: had.from } : null;
     const b0 = boxMM(L, fw, fh), cx0 = redo ? had.want[0] : L.x * fw, cy0 = redo ? had.want[1] : L.y * fh;
-    // was it inside its face (inside the safe zone, or just the face), and not a backdrop
-    const inside = (m) => cx0 - b0.ex >= m - .5 && cx0 + b0.ex <= fw - m + .5 && cy0 - b0.ey >= m - .5 && cy0 + b0.ey <= fh - m + .5;
-    const backdrop = b0.ex * 2 >= fw * .9 && b0.ey * 2 >= fh * .9 || (L.type === 'image' && L.tile);
-    const margin = redo ? had.margin : backdrop || L.clipTo ? null : inside(SAFE_MM) ? SAFE_MM : inside(0) ? 0 : null;
+    // per axis: was it inside its face (inside the safe zone, or just the face), and not a backdrop; the margin it keeps
+    const inside = (c, e, size, m) => c - e >= m - .5 && c + e <= size - m + .5;
+    const backdrop = b0.ex * 2 >= fw * .9 && b0.ey * 2 >= fh * .9 || (L.type === 'image' && L.tile) || L.clipTo;
+    const axM = (c, e, size, skip) => backdrop || skip ? null : inside(c, e, size, SAFE_MM) ? SAFE_MM : inside(c, e, size, 0) ? 0 : null;
+    const margin = redo ? had.margin : [axM(cx0, b0.ex, fw, ax === 'x'), axM(cy0, b0.ey, fh, ax === 'y')];
     // the size in mm kept: the share is recomputed on the new face
     if (p.size === 'fixed') {
       if (L.type === 'text') L.size *= fh / th; else { L.w *= fw / tw; if (L.type === 'shape') L.h *= fh / th; }
@@ -63,14 +64,12 @@ function reflowLayers(layers, from, to, ax = null) {
     const place = (mode, c0, s0, s1, e0, e1) => mode === 'start' ? c0 - e0 + e1 : mode === 'end' ? s1 - (s0 - c0 - e0) - e1 : mode === 'center' ? s1 / 2 + c0 - s0 / 2 : c0 / s0 * s1;
     let cx = place(p.x, cx0, fw, tw, b0.ex, b1.ex), cy = place(p.y, cy0, fh, th, b0.ey, b1.ey), k = 1, moved = false;
     const want = [cx, cy];
-    if (margin != null) {
-      const m = margin, fitK = (e, s) => (s - 2 * m) / (2 * e);
-      k = Math.min(1, ax === 'x' ? 1 : fitK(b1.ex, tw), ax === 'y' ? 1 : fitK(b1.ey, th));
-      const ex = b1.ex * k, ey = b1.ey * k;
-      const nx = ax === 'x' ? cx : Math.min(Math.max(cx, m + ex), tw - m - ex), ny = ax === 'y' ? cy : Math.min(Math.max(cy, m + ey), th - m - ey);
-      moved = Math.abs(nx - cx) > .01 || Math.abs(ny - cy) > .01; cx = nx; cy = ny;
-      if (k < 1) scaleSize(L, k);
-    }
+    const [mx, my] = margin, fitK = (e, size, m) => m == null ? 1 : (size - 2 * m) / (2 * e);
+    k = Math.min(1, fitK(b1.ex, tw, mx), fitK(b1.ey, th, my));
+    const clamp = (c, e, size, m) => m == null ? c : Math.min(Math.max(c, m + e * k), size - m - e * k);
+    const nx = clamp(cx, b1.ex, tw, mx), ny = clamp(cy, b1.ey, th, my);
+    moved = Math.abs(nx - cx) > .01 || Math.abs(ny - cy) > .01; cx = nx; cy = ny;
+    if (k < 1) scaleSize(L, k);
     L.x = cx / tw; L.y = cy / th;
     if (k < 1 || moved) setWarn(L, { kind: k < 1 ? 'shrunk' : 'moved', k, want, margin, prev });
     else if (prev) setWarn(L, prev); else if (redo) delete L.warn; else if (had) setWarn(L, had);
