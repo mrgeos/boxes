@@ -64,6 +64,8 @@ function backNet(o, n) {
     if (p.cx != null) { m.cx = W - p.cx; m.ang = -p.ang; }
     return m;
   });
+  // a handle box's leaves: their outside is the back of the sheet (carriers/handle-box.js: hbNet)
+  if (n.leafBack) panels.push(...n.leafBack);
   const out = { ...n, panels, back: true, plain, windows: n.part ? [] : mirrorWindows(netWindows(o, n), W) };
   if (n.tabs) out.tabs = n.tabs.map(t => ({ ...t, pts: mp(W, t.pts), ...(t.glue ? { glue: mp(W, t.glue) } : {}), ...(t.creases ? { creases: t.creases.map(l => ml(W, l)) } : {}) }));
   if (n.slots) out.slots = n.slots.map(l => ml(W, l));

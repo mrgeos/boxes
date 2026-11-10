@@ -243,7 +243,12 @@ function hbNet(o) {
     x += w + gap; rowH = Math.max(rowH, d);
   }
   W = Math.max(W, x - gap); H = y + rowH;
-  return { W, H, panels, hb: true, tabs, slots, leaves: sheetLeaves };
+  // the leaves on the back of the sheet, where they lie in the lid (the sheet turned over: x mirrored about the sheet's
+  // middle): what is printed there is the outside of the standing handle, so these panels carry the handle's faces
+  const cx = W - XL - w / 2, half = bridgeMM(o) / 2, onBack = ([lx, ly]) => [cx + lx, h + d / 2 + ly];
+  const leafBack = leaves && leaves.map(l => ({ key: l.key, x: cx - l.w / 2, y: l.sz > 0 ? h + d / 2 - half - l.h : h + d / 2 + half, w: l.w, h: l.h,
+    q: l.sz > 0 ? 0 : 2, poly: l.cut.map(onBack), holes: l.hole ? [l.hole.map(onBack)] : [] }));
+  return { W, H, panels, hb: true, tabs, slots, leaves: sheetLeaves, leafBack };
 }
 /* the handle box's die in SVG: an edge two panels share is a crease, any other edge is cut (except the
    tongues' bases, which crease); tongues, slots, windows and the separate parts */
