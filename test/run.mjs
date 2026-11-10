@@ -110,6 +110,36 @@ await test('выгрузка: развёртка с дизайном (PNG) и с
   await ctx.close();
 });
 
+await test('перенос дизайна: смена размера и конструкции не теряет слои', async () => {
+  const { ctx, page, errors } = await openEditor(browser);
+  await addPreset(page, 'mailer');
+  const run = (f, ...a) => page.evaluate(async ([f, a]) => {
+    const B = window.__boxStudio, o = B.state.objects[0], r = new Function('B', 'o', 'a', f)(B, o, a);
+    await new Promise(ok => setTimeout(ok, 300)); await new Promise(ok => { const t = () => B.rebuildQueue.size ? setTimeout(t, 50) : ok(); t(); });
+    return r;
+  }, [f, a]);
+  const shape = (id, w, h) => `{ id: '${id}', type: 'shape', kind: 'rect', w: ${w}, h: ${h}, fill: '#0a7aa1', radius: 0, stroke: 0, x: .5, y: .5, rot: 0, opacity: 1, blend: 'source-over', effect: 'none', visible: true }`;
+  const count = `((o.unplaced?.reduce((s, u) => s + u.layers.length, 0) || 0) + Object.values(o.faces).reduce((s, f) => s + f.layers.length, 0))`;
+  // a plate of 30 × 20 mm kept in mm, 5 mm from the bottom of the front: the face shrinks, the plate does not
+  await run(`B.setLidType(o.id, 'flat'); B.setDims(o.id, { w: 100, h: 200, d: 60 });`);
+  await run(`const [W, H] = B.faceMM(o, 'front'), L = ${shape('P', '30 / W', '20 / H')}; L.y = (H - 15) / H; o.faces.front.layers.push(L); B.setLayerPin(o.id, 'front', 'P', { x: 'center', y: 'end', size: 'fixed' });`);
+  await run(`B.setDims(o.id, { w: 80, h: 150, d: 50 });`);
+  const p = await run(`const [W, H] = B.faceMM(o, 'front'), L = o.faces.front.layers[0]; return { w: L.w * W, h: L.h * H, bottom: H - (L.y + L.h / 2) * H };`);
+  assert.ok(Math.abs(p.w - 30) < .2 && Math.abs(p.h - 20) < .2 && Math.abs(p.bottom - 5) < .2, `плашка держит мм: ${JSON.stringify(p)}`);
+  // the lid's flap is gone with the construction: its layer moves to the top, marked, and is in the check; undo brings it back
+  await run(`B.setLidType(o.id, 'f0427'); o.faces.flap.layers.push(${shape('F', .3, .3)}); B.setLayerPin(o.id, 'flap', 'F', { size: 'scale' });`);
+  const n = await run(`return ${count}`);
+  await run(`B.setLidType(o.id, 'flat');`);
+  const t = await run(`return { n: ${count}, top: o.faces.top.layers.find(l => l.id === 'F')?.warn, issues: B.transferIssues(o.id).length };`);
+  assert.equal(t.n, n, 'число слоёв то же');
+  assert.deepEqual([t.top?.kind, t.top?.from], ['face', 'flap']);
+  assert.ok(t.issues >= 1, 'перенос есть в проверке макета');
+  await run(`B.undo();`);
+  assert.equal(await run(`return o.faces.flap.layers.some(l => l.id === 'F') && !o.faces.top.layers.some(l => l.id === 'F');`), true, 'отмена возвращает слой на клапан');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 await browser.close();
 const failed = results.filter(r => !r[1]);
 console.log(failed.length ? `\n${failed.length} из ${results.length} тестов не прошли` : `\nВсе ${results.length} тестов прошли`);
