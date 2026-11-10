@@ -19,7 +19,7 @@ import { rrectPts } from '../scene/geometry.js';
    shows. The blank lies printed side up; it turns over first (the first FLIP of the way) and then folds away from the
    print, which is how a box is made: the print ends outside. A panel is a flat shape in the plane y = 0 (x across the
    sheet, z down it); its board lies below it (−y). Lengths mm, scaled by S in the geometry and positions. */
-const FLIP = .2, SPAN = .45;
+const FLIP = .2, SPAN = .45, OPEN_AT = .85;
 const sm = x => x * x * (3 - 2 * x), rad = a => a * Math.PI / 180;
 /* A family says how its blank folds: the roots (the panels that keep their place: the bottom, a telescope lid), and for
    each crease the turn (ang, degrees, + away from the print, − toward it), where the crease lies (a: mm off the print
@@ -268,12 +268,15 @@ function buildRig(o, rt) {
     const axis = q2 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0), fin = new THREE.Vector3((u - .5) * fw, top ? tree.fam.topY?.(o, T) ?? H + T : 0, (top ? v - .5 : .5 - v) * fd);
     const qf = new THREE.Quaternion().setFromAxisAngle(axis, top ? 0 : Math.PI);
     const F = new THREE.Group(), R = new THREE.Group(); F.add(R); R.position.set(-c.x * S, 0, -c.z * S); group.add(F);
-    roots.push({ node: rn, F, R, flip: !top, late: top ? .3 : 0, axis, hh: q2 ? (x1 - x0) / 2 : (y1 - y0) / 2, flat: [(x0 + x1) / 2 - Gx, (y0 + y1) / 2 - Gy], to: fin.clone().add(c.clone().applyQuaternion(qf)) });
+    roots.push({ node: rn, F, R, flip: !top, late: top ? .3 : 0, axis, hh: q2 ? (x1 - x0) / 2 : (y1 - y0) / 2, flat: [(x0 + x1) / 2 - Gx, (y0 + y1) / 2 - Gy], to: fin.clone().add(c.clone().applyQuaternion(qf)),
+      // a lid that is a root of its own opens as the model's does: a separate lid lifts off, a casket's lid swings on its hinge
+      lid: top ? (rt.lidGroup ? 'lift' : rt.lidPivot ? 'swing' : null) : null });
     rn.rotG = R;
   }
   for (const n of nodes) {
     const p = panels[n.i], par = n.parent, ox = n.ox, oy = n.oy;
     n.ang = rad(n.ang0); n.from = rad(n.from0); n.pts = pieces[n.i].pts;
+    n.lid = !!par && p.key === 'top' && !!rt.lidPivot;   // (the lid of a hinged box opens at its crease)
     n.content = new THREE.Group();
     if (!par) { n.rot = n.content; n.root.rotG.add(n.content); }
     else {
@@ -317,7 +320,7 @@ function buildRig(o, rt) {
     for (const hl of filmed) { const fm = mesh(n.content, flatGeo(hl, [], ox, oy, -T / 2, false, null), rt.filmMat, {}, { renderOrder: 2 }); fm.castShadow = false; fm.raycast = () => {}; }
   }
   const rank = Math.max(1, ...nodes.map(n => n.rank));
-  return { group, nodes, roots, meshes, T, rank, panels, steps: null };
+  return { group, nodes, roots, meshes, T, rank, panels, steps: null, lid: 0, o, rt };
 }
 /* is the point inside the polygon */
 function inside(poly, [x, y]) {
@@ -333,6 +336,8 @@ function inside(poly, [x, y]) {
    nearest the roots first, while each root moves to where it ends */
 function poseRig(rig, t) {
   const u = sm(clamp(t / FLIP, 0, 1)), phi = Math.PI * u, { T } = rig, ft = clamp((t - FLIP) / (1 - FLIP), 0, 1);
+  // at the end of the way the lid opens to where the model has it (rig.lid, degrees, is o.lid), so that at 100 % the rig and the model are the same
+  const open = rig.lid > 0 ? sm(clamp((t - OPEN_AT) / (1 - OPEN_AT), 0, 1)) : 0;
   for (const r of rig.roots) {
     r.F.quaternion.setFromAxisAngle(r.axis, r.flip ? phi : 0);
     // the blank turns over where it lies, then slides to where the box stands as it folds (a lid comes last, to set on the base)
@@ -340,6 +345,7 @@ function poseRig(rig, t) {
     // turning over, the blank lifts so no part dips under the floor
     const y = r.flip ? T * Math.max(Math.cos(phi), 0) + r.hh * Math.abs(Math.sin(phi)) : T + (r.to.y - T) * w;
     r.F.position.set(x * S, y * S, z * S);
+    if (r.lid && open > 0) openRoot(rig, r, open);
   }
   const D = rig.rank;
   for (const n of rig.nodes) {
@@ -348,11 +354,23 @@ function poseRig(rig, t) {
     let prog;
     if (rig.steps) prog = sm(clamp((ft - n.sc.s) / n.sc.len, 0, 1));
     else prog = sm(clamp((ft - (n.rank - 1) * (1 - SPAN) / Math.max(1, D - 1)) / SPAN, 0, 1));
-    n.rot.quaternion.setFromAxisAngle(n.axis, n.sign * (n.from + (n.ang - n.from) * prog));
+    n.rot.quaternion.setFromAxisAngle(n.axis, n.sign * (n.from + (n.ang - n.from) * prog - (n.lid ? rad(rig.lid) * open * prog : 0)));
     // a tab that is pressed on: it hovers off its place while it comes, and settles at the end of its step
     if (n.slide) n.content.position.y = (n.a + n.slide * sm(clamp(prog / .35, 0, 1)) * (1 - sm(clamp((prog - .6) / .4, 0, 1)))) * S;
   }
   rig.group.updateMatrixWorld(true);
+}
+/* a lid that is a root of its own, opened by `k` (0…1 of o.lid) the way the model does it (applyLid in scene/renderer.js):
+   a separate lid lifts, slides back and tilts about the middle of its rim; a casket's lid swings about its hinge */
+function openRoot(rig, r, k) {
+  const { o, rt } = rig, F = r.F;
+  let tilt, lift = new THREE.Vector3(), P;
+  if (r.lid === 'lift') {
+    const f = clamp(rig.lid / 125, 0, 1) * k, H = o.dims.h * S, LH = clamp(o.lidH, 3, o.dims.h) * S, base = rt.lidBase ?? H;
+    tilt = -f * .32; P = new THREE.Vector3(0, base, 0); lift.set(0, f * (Math.min(LH, base) + H * .35 + .3), -f * o.dims.d * S * .18);
+  } else { tilt = -rad(rig.lid) * k; P = rt.lidPivot.position.clone(); }
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tilt);
+  F.position.sub(P).applyQuaternion(q).add(P).add(lift); F.quaternion.premultiply(q);
 }
 /* the project's plan (resolved: carriers/fold-plan.js) into the rig: each crease's angle, and its step's time slice */
 function applyPlan(rig, plan, sl) {

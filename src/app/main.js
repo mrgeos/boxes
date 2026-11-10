@@ -103,7 +103,7 @@ window.__boxStudio = { dielineData, dielineDXF, printPDF, templateSVG, printCanv
 /* what an agent (and the tests) can do with the assembly: the view (setFold, playFold) and the plan, which is the
    product's data, so each change of it is one step of the history */
 const asStep = f => (...a) => { const r = f(...a); if (r) commit(); return r; };
-Object.assign(window.__boxStudio, { setFold: Fold.setFold, foldOf: Fold.foldOf, canFold: Fold.canFold, playFold: Fold.playFold, foldPoses: Fold.foldPoses, floorMesh: () => floor,
+Object.assign(window.__boxStudio, { setFold: Fold.setFold, foldOf: Fold.foldOf, canFold: Fold.canFold, playFold: Fold.playFold, foldPoses: Fold.foldPoses, foldDrift: Fold.foldDrift, floorMesh: () => floor,
   getFoldPlan: Fold.foldInfo, listFoldCreases: Fold.listFoldCreases, focusFoldStep: Fold.focusFoldStep, foldTimeline: Fold.foldTimeline,
   setFoldAngle: asStep(Fold.setFoldAngle), setFoldStep: asStep(Fold.setFoldStep), moveFoldStep: asStep(Fold.moveFoldStep), mergeFoldSteps: asStep(Fold.mergeFoldSteps),
   setStepTime: asStep(Fold.setStepTime), resetFoldCrease: asStep(Fold.resetFoldCrease), resetFoldPlan: asStep(Fold.resetFoldPlan) });
