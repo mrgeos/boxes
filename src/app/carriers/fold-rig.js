@@ -102,10 +102,12 @@ const handleFold = {
       return o.handle.up !== false ? { ang: -(90 + lean), a: T, d: -T, rank: 6 } : { ang: -1.15, a: 0, rank: 6 };
     }
     if (k === 'glue') return { ang: 90, a: -T, d: -T, slide: -2 * T };
-    if (k === 'tab') return { ang: 10, a: 0 };   // the tongue slants in behind the lower flap, through its slot
-    if (k === 'dust') return { ang: 90, a: -T, d: -2 * T, rank: 4 };
-    if (k === 'rightBottom' || k === 'leftBottom') return { ang: 90, a: 0, rank: 5 };
-    if (k === 'rightTop' || k === 'leftTop') return { ang: 90, a: 0, rank: 6 };
+    // the end opens as the model's does (applyLid): the upper flap swings up 150°, the lower down 90°, the dust flaps 90°, the tongue straightens
+    const f = lid => clamp(lid / 125, 0, 1), a = lid => clamp(f(lid) / .6, 0, 1), b = lid => clamp((f(lid) - .5) / .5, 0, 1);
+    if (k === 'tab') return { ang: 10, a: 0, opens: lid => 10 * Math.min(1, a(lid) / .02) };   // the tongue slants in behind the lower flap, through its slot
+    if (k === 'dust') return { ang: 90, a: -T, d: -2 * T, rank: 4, opens: lid => 90 * b(lid) };
+    if (k === 'rightBottom' || k === 'leftBottom') return { ang: 90, a: 0, rank: 5, opens: lid => 90 * a(lid) };
+    if (k === 'rightTop' || k === 'leftTop') return { ang: 90, a: 0, rank: 6, opens: lid => 150 * a(lid) };
     return { ang: 90, a: 0 };
   },
 };
@@ -267,7 +269,7 @@ function foldTree(o) {
     n.ox = (n.seg[0] + n.seg[2]) / 2; n.oy = (n.seg[1] + n.seg[3]) / 2;
     const pts = pieces[n.i].pts; n.mx = pts.reduce((q, v) => q + v[0], 0) / pts.length; n.my = pts.reduce((q, v) => q + v[1], 0) / pts.length;
     const h = fam.hinge(panels[par.i], p, T, o, { dx: Math.sign(n.mx - n.ox), dy: Math.sign(n.my - n.oy) }, n.depth);
-    n.ang0 = h.ang; n.from0 = h.from ?? 0; n.a = h.a; n.d = h.d ?? 0; n.slide = h.slide ?? 0; n.rank = h.rank ?? par.rank + 1;
+    n.ang0 = h.ang; n.from0 = h.from ?? 0; n.a = h.a; n.d = h.d ?? 0; n.slide = h.slide ?? 0; n.rank = h.rank ?? par.rank + 1; n.opens = h.opens;
   }
   // a crease is told by its two panels and its place among those with the same two (top to bottom, left to right)
   const groups = new Map();
@@ -392,7 +394,7 @@ function poseRig(rig, t) {
     let prog;
     if (rig.steps) prog = sm(clamp((ft - n.sc.s) / n.sc.len, 0, 1));
     else prog = sm(clamp((ft - (n.rank - 1) * (1 - SPAN) / Math.max(1, D - 1)) / SPAN, 0, 1));
-    n.rot.quaternion.setFromAxisAngle(n.axis, n.sign * (n.from + (n.ang - n.from) * prog - (n.lid ? rad(rig.lid) * open * prog : 0)));
+    n.rot.quaternion.setFromAxisAngle(n.axis, n.sign * (n.from + (n.ang - n.from) * prog - (n.lid ? rad(rig.lid) * open * prog : 0) - (n.opens ? rad(n.opens(rig.lid)) * open * prog : 0)));
     // a tab that is pressed on: it hovers off its place while it comes, and settles at the end of its step
     if (n.slide) n.content.position.y = (n.a + n.slide * sm(clamp(prog / .35, 0, 1)) * (1 - sm(clamp((prog - .6) / .4, 0, 1)))) * S;
   }
