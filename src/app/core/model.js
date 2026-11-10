@@ -9,7 +9,7 @@ import { TORTE_COLORS, applyTortePreset, torteGeom } from '../carriers/torte.js'
 import { carryDims, carryOn, carrySheet, defaultCarry } from '../carriers/carry.js';
 import { PB_KEYS, defaultPaperBag, pbNet } from '../carriers/paperbag.js';
 import { lidDimsMM, winMM, windowPlace } from '../carriers/box.js';
-import { HANDLE_KEYS, HB_END_KEYS, applyHandlePreset, defaultFrontWin, defaultHandle, hbDims, hbNet, hbOpen } from '../carriers/handle-box.js';
+import { HANDLE_KEYS, HB_END_KEYS, applyHandlePreset, defaultFrontWin, defaultHbEnd, defaultHandle, hbDims, hbNet, hbOpen } from '../carriers/handle-box.js';
 import { SLEEVE_GLUE, defaultSleeve, defaultSleeveHandle, sleeveDims, sleeveOn, sleeveSheet, upgradeSleeve } from '../carriers/sleeve.js';
 import { boxNet } from '../carriers/box-net.js';
 import { defaultTissue, tissueOn } from '../carriers/tissue.js';
@@ -110,7 +110,7 @@ function ensureFaces(o) {
     o.sleeve.handle ??= defaultSleeveHandle(); o.sleeve.handle.rf ??= 10;
     if (o.handle.rTop == null) applyHandlePreset(o.handle, o.handle.shape || 'arch');   // projects from before adjustable handles
     o.frontWin ??= defaultFrontWin(o.dims);
-    if (o.lidType === 'handle') { o.hbSides ??= 'right'; o.tray ??= { out: 0, fin: 'board' }; o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 0, cake: true }; }
+    if (o.lidType === 'handle') { o.hbSides ??= 'right'; o.hbEnd ??= defaultHbEnd(); o.tray ??= { out: 0, fin: 'board' }; o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 0, cake: true }; }
   }
   if (o.type === 'torte') { o.lidD ??= Math.round(o.dims.w * .88); o.baseH ??= Math.round(clamp(o.dims.w * .075, 10, 25)); o.lidR ??= Math.round(o.lidD * .06); o.lidDraft ??= .03; o.baseColor ??= TORTE_COLORS[0][0]; o.baseFin ??= 'metal'; o.carry ??= defaultCarry(o); }
   if (o.type === 'paperbag') o.pb ??= defaultPaperBag(o.dims);
@@ -226,7 +226,7 @@ function faceMM(o, k) {
   const tele = o.lidType === 'telescope', inLid = tele && o.lidMat === 'clear' && o.lidFit === 'inside';
   const lw = inLid ? w - 2 * (wallMM(o) + .6) : w + 2 * o.thickness + 1, ld = inLid ? d - 2 * (wallMM(o) + .6) : d + 2 * o.thickness + 1;
   if (HANDLE_KEYS.includes(k)) return [clamp(o.handle?.w ?? 100, 20, w), clamp(o.handle?.h ?? 50, 15, 300)];
-  if (o.lidType === 'handle' && HB_END_KEYS.includes(k)) return [d, h / 2];
+  if (o.lidType === 'handle' && HB_END_KEYS.includes(k)) { const B = hbDims(o); return [d, k.endsWith('Top') ? B.tl : B.bl]; }
   if (k === 'tray') { const B = hbDims(o); return [B.trW, B.trD]; }
   if (o.lidType === 'flap' && ['flap', 'earLeft', 'earRight', 'top', 'inside'].includes(k)) {
     const ld = lidDimsMM(o);

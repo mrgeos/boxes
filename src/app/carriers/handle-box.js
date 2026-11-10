@@ -162,16 +162,32 @@ const HB_SIDES = { right: 'Справа', left: 'Слева', both: 'С обеи
 const TRAY_FIN = { board: 'Картон (с печатью)', gold: 'Золото', silver: 'Серебро' };
 const hbOpen = o => { const s = o.hbSides || 'right'; return { right: s !== 'left', left: s !== 'right' }; };
 const HB_END_KEYS = ['rightTop', 'rightBottom', 'leftTop', 'leftBottom'];
+/* the end's settings (o.hbEnd) with defaults: the upper flap's and the lower flap's lengths (fractions of the height), the
+   tongue's width (fraction of the depth) and height (mm), ears on the upper flap's sides, the corner radius (mm) */
+const defaultHbEnd = () => ({ top: .77, bottom: .4, tongueW: .5, tongueH: 18, ears: true, r: 6 });
 function hbDims(o) {
-  const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4);
-  return { w, h, d, t, dl: Math.round(clamp(d * .3, 15, h * .9)), tw: clamp(d * .22, 12, 45), th: clamp(h * .1, 6, 16), slot: 3,
+  const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4), E = { ...defaultHbEnd(), ...o.hbEnd };
+  // the flaps overlap by at least 10 mm: the lower one is lengthened when they would not
+  let top = clamp(E.top, .3, .95), bottom = clamp(E.bottom, .1, .9);
+  if (top + bottom < 1 + 10 / h) { bottom = Math.min(.9, 1 + 10 / h - top); if (top + bottom < 1 + 10 / h) top = Math.min(.95, 1 + 10 / h - bottom); }
+  const dl = Math.round(clamp(d * .3, 15, h * .9)), tl = top * h, bl = bottom * h, r = clamp(E.r, 0, 30);
+  const tw = clamp(E.tongueW * d, 12, Math.max(12, d - 2 * (r + 5))), th = clamp(E.tongueH, 4, tl * .3);
+  // ears on the upper flap's sides, beyond the dust flaps: width off the flap, length along it, distance from its free end
+  const room = tl - dl - 4 - (r + 1), earL = Math.min(47, tl * .3, room), earW = Math.min(20, dl * .4);
+  const ears = E.ears !== false && earL >= 8 && earW >= 3, earG = ears ? Math.min(tl * .22, room - earL) + r + 1 : 0;
+  return { w, h, d, t, dl, top, bottom, tl, bl, ovl: tl + bl - h, tw, th, r, ears, earL, earW, earG,
     trW: Math.max(10, w - 2 * t - 2), trD: Math.max(10, d - 2 * t - 2), trT: 1.5 };
+}
+/* a rectangle's outline (net mm) with its four corners (top left, top right, bottom right, bottom left) rounded by r[i] */
+function rrPoly(x0, y0, x1, y1, r) {
+  const P = Math.PI, arc = (cx, cy, rr, a0, a1, px, py) => rr > .01 ? arcPts(cx, cy, rr, a0, a1, 6) : [[px, py]];
+  return [...arc(x0 + r[0], y0 + r[0], r[0], P, P * 1.5, x0, y0), ...arc(x1 - r[1], y0 + r[1], r[1], P * 1.5, P * 2, x1, y0), ...arc(x1 - r[2], y1 - r[2], r[2], 0, P / 2, x1, y1), ...arc(x0 + r[3], y1 - r[3], r[3], P / 2, P, x0, y1)];
 }
 /* the die: a vertical strip front, lid, back, floor, glue flap; the right end's parts on the sheet's left
    (the sheet is seen from outside, so +x of the box is on the left), the left end's parts on the right */
 function hbNet(o) {
-  const B = hbDims(o), { w, h, d, dl } = B, op = hbOpen(o), keys = faceKeys(o), half = h / 2;
-  const XL = op.right ? Math.max(half, dl) : d, XR = op.left ? Math.max(half, dl) : d, x0 = XL + w;
+  const B = hbDims(o), { w, h, d, dl, tl, bl, r } = B, op = hbOpen(o), keys = faceKeys(o);
+  const XL = op.right ? Math.max(tl + B.th, dl) : d, XR = op.left ? Math.max(tl + B.th, dl) : d, x0 = XL + w;
   const panels = [
     { key: 'front', x: XL, y: 0, w, h, rot: true }, { key: 'top', x: XL, y: h, w, h: d, rot: true },
     { key: 'back', x: XL, y: h + d, w, h }, { key: 'bottom', x: XL, y: 2 * h + d, w, h: d, rot: true },
@@ -180,13 +196,25 @@ function hbNet(o) {
   for (const side of ['right', 'left']) {
     const R = side === 'right', ex = R ? XL : x0, out = R ? -1 : 1;   // the strip edge on this side, and the way out
     if (!op[side]) { panels.push({ key: side, x: R ? XL - d : x0, y: h + d, w: d, h }); continue; }
-    panels.push({ key: side + 'Top', x: R ? XL - half : x0, y: h, w: half, h: d, q: R ? 1 : 3 },
-      { key: side + 'Bottom', x: R ? XL - half : x0, y: 2 * h + d, w: half, h: d, q: R ? 3 : 1 });
-    for (const y of [0, h + d]) panels.push({ key: 'dust', blank: 'клапан', x: R ? XL - dl : x0, y, w: dl, h });
-    // tongue on the upper flap's free edge, slot near the lower flap's free edge
-    const fe = ex + out * half, cy = h + d / 2, cyb = 2 * h + d + d / 2, ins = B.th * .35;
+    // a flap lies from the strip's edge outwards: its free end has rounded corners (top left, top right, bottom right, bottom left)
+    const free = hang => R ? [hang, 0, 0, hang] : [0, hang, hang, 0], fx = len => R ? ex - len : ex;
+    // the upper flap on the lid, the lower one on the floor (the upper lies over the lower); `joins` keeps neighbours that only touch from being creases
+    panels.push({ key: side + 'Top', x: fx(tl), y: h, w: tl, h: d, q: R ? 1 : 3, joins: ['top', 'tab', 'ear'], poly: rrPoly(fx(tl), h, fx(tl) + tl, h + d, free(r)) },
+      { key: side + 'Bottom', x: fx(bl), y: 2 * h + d, w: bl, h: d, q: R ? 3 : 1, joins: ['bottom'], poly: rrPoly(fx(bl), 2 * h + d, fx(bl) + bl, 2 * h + 2 * d, free(r)) });
+    // the dust flaps: on the front and on the back wall
+    for (const [y, wall] of [[0, 'front'], [h + d, 'back']]) panels.push({ key: 'dust', blank: 'клапан', x: fx(dl), y, w: dl, h, joins: [wall], poly: rrPoly(fx(dl), y, fx(dl) + dl, y + h, free(Math.min(r, dl / 3))) });
+    // the ears on the upper flap's sides, beyond the dust flaps, folded in
+    if (B.ears) {
+      const er = Math.min(r, B.earW / 2.5, B.earL / 2.5), ex0 = R ? ex - tl + B.earG : ex + tl - B.earG - B.earL;
+      for (const up of [true, false]) {
+        const y0 = up ? h - B.earW : h + d, y1 = up ? h : h + d + B.earW;
+        panels.push({ key: 'ear', blank: 'ушко', x: ex0, y: y0, w: B.earL, h: B.earW, joins: [side + 'Top'], poly: rrPoly(ex0, y0, ex0 + B.earL, y1, up ? [er, er, 0, 0] : [0, 0, er, er]) });
+      }
+    }
+    // the tongue on the upper flap's free edge, the slot in the lower flap as far from its free edge as the flaps overlap
+    const fe = ex + out * tl, cy = h + d / 2, cyb = 2 * h + d + d / 2, ins = B.th * .35, sx = ex + out * bl - out * B.ovl;
     tabs.push({ on: side + 'Top', base: [fe, cy - B.tw / 2, fe, cy + B.tw / 2], pts: [[fe, cy - B.tw / 2], [fe + out * B.th, cy - B.tw / 2 + ins], [fe + out * B.th, cy + B.tw / 2 - ins], [fe, cy + B.tw / 2]] });
-    slots.push([fe - out * B.slot, cyb - B.tw / 2 - 1, fe - out * B.slot, cyb + B.tw / 2 + 1]);
+    slots.push([sx, cyb - B.tw / 2 - 1, sx, cyb + B.tw / 2 + 1]);
   }
   let W = XL + w + XR, H = 2 * h + 2 * d + 12;
   const gap = 15, y = H + gap; let x = 0, rowH = 0;
@@ -221,15 +249,21 @@ function hbNet(o) {
 function handleBoxSVG(o, n, f, label) {
   const line = (l, st) => `<line x1="${f(l[0])}" y1="${f(l[1])}" x2="${f(l[2])}" y2="${f(l[3])}" ${st}/>`;
   const CUT = 'stroke="#00a0e3" stroke-width="0.3"', FOLD = 'stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"';
-  const ps = n.panels.filter(p => !p.part), edges = p => [[p.x, p.y, p.x + p.w, p.y], [p.x, p.y + p.h, p.x + p.w, p.y + p.h], [p.x, p.y, p.x, p.y + p.h], [p.x + p.w, p.y, p.x + p.w, p.y + p.h]];
-  const cut = [], fold = new Map(), near = (a, b) => Math.abs(a - b) < 1e-6;
+  // a panel's outline as segments (a rounded one from its points); an edge two panels share is a crease only when they are joined
+  const ps = n.panels.filter(p => !p.part), edges = p => p.poly ? p.poly.map((a, i) => [...a, ...p.poly[(i + 1) % p.poly.length]]) : [[p.x, p.y, p.x + p.w, p.y], [p.x, p.y + p.h, p.x + p.w, p.y + p.h], [p.x, p.y, p.x, p.y + p.h], [p.x + p.w, p.y, p.x + p.w, p.y + p.h]];
+  const cut = [], fold = new Map(), near = (a, b) => Math.abs(a - b) < 1e-6, joined = (p, q) => (!p.joins || p.joins.includes(q.key)) && (!q.joins || q.joins.includes(p.key));
   for (const p of ps) for (const [x1, y1, x2, y2] of edges(p)) {
-    const hor = near(y1, y2); let parts = [[hor ? x1 : y1, hor ? x2 : y2]];
+    const hor = near(y1, y2);
+    if (!hor && !near(x1, x2)) { cut.push([x1, y1, x2, y2]); continue; }   // a corner's arc
+    let parts = [[hor ? Math.min(x1, x2) : Math.min(y1, y2), hor ? Math.max(x1, x2) : Math.max(y1, y2)]];
     const sub = (s0, s1) => { parts = parts.flatMap(([u, v]) => [[u, Math.min(v, s0)], [Math.max(u, s1), v]].filter(([a, b]) => b - a > .01)); };
     for (const q of ps) if (q !== p) for (const [a1, b1, a2, b2] of edges(q)) {
       if (hor ? near(b1, b2) && near(b1, y1) : near(a1, a2) && near(a1, x1)) {
-        const s0 = Math.max(hor ? x1 : y1, hor ? a1 : b1), s1 = Math.min(hor ? x2 : y2, hor ? a2 : b2);
-        if (s1 - s0 > .01) { fold.set(`${hor}|${s0.toFixed(2)}|${s1.toFixed(2)}|${(hor ? y1 : x1).toFixed(2)}`, hor ? [s0, y1, s1, y1] : [x1, s0, x1, s1]); sub(s0, s1); }
+        const s0 = Math.max(hor ? Math.min(x1, x2) : Math.min(y1, y2), hor ? Math.min(a1, a2) : Math.min(b1, b2)), s1 = Math.min(hor ? Math.max(x1, x2) : Math.max(y1, y2), hor ? Math.max(a1, a2) : Math.max(b1, b2));
+        if (s1 - s0 > .01) {
+          if (joined(p, q)) { fold.set(`${hor}|${s0.toFixed(2)}|${s1.toFixed(2)}|${(hor ? y1 : x1).toFixed(2)}`, hor ? [s0, y1, s1, y1] : [x1, s0, x1, s1]); sub(s0, s1); }
+          else if (ps.indexOf(q) < ps.indexOf(p)) sub(s0, s1);   // a cut two panels share is drawn once
+        }
       }
     }
     for (const t of n.tabs) { const [bx, b0, , b1] = t.base; if (!hor && near(bx, x1)) { fold.set('tab' + bx + b0, [bx, b0, bx, b1]); sub(b0, b1); } }
@@ -381,4 +415,4 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   }
 }
 
-export { HANDLE_KEYS, HANDLE_SHAPES, HB_END_KEYS, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, buildHandleBox, defaultFrontWin, defaultHandle, frontWinMM, handleBoxSVG, hbDims, hbNet, hbOpen, joinWinMM, lidLeaves, lidOpenings };
+export { defaultHbEnd, HANDLE_KEYS, HANDLE_SHAPES, HB_END_KEYS, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, buildHandleBox, defaultFrontWin, defaultHandle, frontWinMM, handleBoxSVG, hbDims, hbNet, hbOpen, joinWinMM, lidLeaves, lidOpenings };
