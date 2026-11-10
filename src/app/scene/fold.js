@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { S, clamp } from '../core/util.js';
 import { state } from '../core/state.js';
-import { faceKeys } from '../core/model.js';
+import { faceKeys, outerKeys } from '../core/model.js';
 import { netPoint } from '../carriers/box-net.js';
 import { FLIP, SPAN, applyPlan, buildRig, canFold, disposeRig, foldCreases, markCrease, poseRig } from '../carriers/fold-rig.js';
 import { FLIP_MS, foldMs, mergeSteps, moveStep, pruneEmpty, resetCrease, resolvePlan, setCrease, setCreaseStep, setTime, slices } from '../carriers/fold-plan.js';
@@ -81,6 +81,34 @@ function setFold(id, t, { frame = false } = {}) {
   applyFold(o);
   if (frame && was >= 1 && rt.fold < 1) foldFrame(id);
   return true;
+}
+/* the 3D box against the box its blank folds into: for each outer printed face (the inner sides differ by design: the
+   model insets them by the wall) both have, how far (mm) the corners of the face's
+   frame lie apart. The rig is built on the side and posed at 1, the model's lid is closed meanwhile; both are put back, so
+   the scene and the user's fold are as they were. null when the blank cannot fold. Each corner is the face's extreme
+   in x, y and z in the object's frame, so a window cut in a face does not count (its outline does) */
+function foldDrift(id) {
+  const o = objById(id), rt = RT.get(id); if (!o || !rt || !canFold(o)) return null;
+  const rig = buildRig(o, rt); if (!rig) return null;
+  const { plan, sl } = planOf(o), lid = o.lid, rigs = [rig.group, rt.rig?.group];
+  rt.group.add(rig.group); applyPlan(rig, plan, sl); poseRig(rig, 1);
+  o.lid = 0; applyLid(o); rt.group.updateMatrixWorld(true);
+  const inv = rt.group.matrixWorld.clone().invert(), keys = outerKeys(o), model = new Map(), made = new Map(), v = new THREE.Vector3();
+  rt.group.traverse(m => {
+    const key = m.isMesh && !m.userData.wall && m.userData.face; if (!key || !keys.includes(key)) return;
+    let up = m.parent; while (up && !rigs.includes(up)) up = up.parent;
+    if (rt.rig && up === rt.rig.group) return;
+    const into = up ? made : model, box = into.get(key) || into.set(key, [[1e9, 1e9, 1e9], [-1e9, -1e9, -1e9]]).get(key), pos = m.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld).applyMatrix4(inv).divideScalar(S);
+      for (let a = 0; a < 3; a++) { box[0][a] = Math.min(box[0][a], v.getComponent(a)); box[1][a] = Math.max(box[1][a], v.getComponent(a)); }
+    }
+  });
+  rt.group.remove(rig.group); disposeRig(rig);
+  o.lid = lid; applyLid(o); rt.group.updateMatrixWorld(true);
+  const out = [];
+  for (const [face, b] of made) { const m = model.get(face); if (m) out.push({ face, mm: Math.max(...[0, 1].flatMap(k => [0, 1, 2].map(a => Math.abs(b[k][a] - m[k][a])))) }); }
+  return out;
 }
 function stopFold(id) { anims.get(id)?.(); }
 /* ----- the time of the fold: the turn-over takes FLIP_MS, then the steps take their own (default: DEFAULT_FOLD_MS in all) ----- */
@@ -197,4 +225,4 @@ function hideFoldMark() {
   return () => hid.forEach(m => { m.visible = true; });
 }
 
-export { foldMarkShown, hideFoldMark, applyFold, canFold, focusFoldStep, foldDone, foldFaceOutlines, foldFrame, foldInfo, foldOf, foldPoses, foldTimeline, listFoldCreases, markFold, mergeFoldSteps, moveFoldStep, onFoldPlan, playFold, resetFoldCrease, resetFoldPlan, setFold, setFoldAngle, setFoldStep, setStepTime, stopFold, syncFoldVis };
+export { foldMarkShown, hideFoldMark, applyFold, canFold, focusFoldStep, foldDone, foldFaceOutlines, foldDrift, foldFrame, foldInfo, foldOf, foldPoses, foldTimeline, listFoldCreases, markFold, mergeFoldSteps, moveFoldStep, onFoldPlan, playFold, resetFoldCrease, resetFoldPlan, setFold, setFoldAngle, setFoldStep, setStepTime, stopFold, syncFoldVis };
