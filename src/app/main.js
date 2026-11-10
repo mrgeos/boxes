@@ -17,7 +17,9 @@ import { addMarks, setRender } from './scene/render-mode.js';
 import { initContextLoss } from './scene/context-loss.js';
 import * as THREE from 'three';
 import { sel, state } from './core/state.js';
-import { faceMM } from './core/model.js';
+import { faceMM, newImage, newShape, newText } from './core/model.js';
+import * as Sheet from './core/sheet.js';
+import { renderFace } from './faces/render.js';
 import { sleeveDims, sleeveSheet } from './carriers/sleeve.js';
 import { libLoadBrowser, library } from './core/library.js';
 import { loadMyModels } from './core/model-library.js';
@@ -37,6 +39,8 @@ import { hover } from './core/hover.js';
 import { netHandles } from './net/net-edit.js';
 import { labelRects, netOverlay, setNetOverlay } from './net/net-overlays.js';
 import { printIssues } from './net/net-check.js';
+import { clearLayerWarn, setLayerPin } from './core/pins.js';
+import { placeUnplaced, setDims, setLidType } from './core/transfer.js';
 import { hasReverse, setNetSide, sideOf } from './net/net-side.js';
 import { initFaceHi } from './scene/face-hi.js';
 import { initViewMode, setViewMode, viewMode } from './ui/view-mode.js';
@@ -61,7 +65,7 @@ import { initIsolationPlate } from './ui/isolation-plate.js';
 import { initFoldBar } from './ui/fold-bar.js';
 import { initFoldSteps } from './ui/fold-steps.js';
 import * as Fold from './scene/fold.js';
-import { commit } from './core/project.js';
+import { commit, projectJSON, redo, undo } from './core/project.js';
 
 /* boot: hook up the parts in the order they were built, then load the project (the shadow filter first: before any
    material is built) */
@@ -103,3 +107,34 @@ Object.assign(window.__boxStudio, { setFold: Fold.setFold, foldOf: Fold.foldOf, 
   getFoldPlan: Fold.foldInfo, listFoldCreases: Fold.listFoldCreases, focusFoldStep: Fold.focusFoldStep, foldTimeline: Fold.foldTimeline,
   setFoldAngle: asStep(Fold.setFoldAngle), setFoldStep: asStep(Fold.setFoldStep), moveFoldStep: asStep(Fold.moveFoldStep), mergeFoldSteps: asStep(Fold.mergeFoldSteps),
   setStepTime: asStep(Fold.setStepTime), resetFoldCrease: asStep(Fold.resetFoldCrease), resetFoldPlan: asStep(Fold.resetFoldPlan) });
+/* sheet layers (core/sheet.js): printed on the net's sheet over the folds between faces; the actions work on the data and
+   take the object by id (the picked one by default) */
+{
+  const obj = id => state.objects.find(q => q.id === (id ?? sel.obj)) || null;
+  const mk = (type, props = {}) => Object.assign(type === 'image' ? newImage(props.src, props.aspect || 1) : type === 'shape' ? newShape(props.kind) : newText(props.text), props);
+  Object.assign(window.__boxStudio, {
+    projectJSON: () => projectJSON(false), loadProject, undo, redo,
+    // layer pins and the transfer of a design (core/pins.js, core/transfer.js): by object id, each change one step
+    setLayerPin: asStep((id, k, lid, pin) => { const o = obj(id); return !!o && setLayerPin(o, k, lid, pin); }),
+    clearLayerWarn: asStep((id, k, lid) => { const o = obj(id); return !!o && clearLayerWarn(o, k, lid); }),
+    setDims: asStep((id, d) => { const o = obj(id); return !!o && setDims(o, d); }),
+    setLidType: asStep((id, lt) => { const o = obj(id); return !!o && setLidType(o, lt); }),
+    placeUnplaced: asStep((id, i, k) => { const o = obj(id); return !!o && placeUnplaced(o, i, k); }),
+    transferIssues: id => { const o = obj(id); return o ? printIssues(o).filter(i => i.kind === 'transfer' || i.kind === 'unplaced') : []; },
+    newSheetLayer: mk,
+    addSheetLayer: asStep((side, L, opts, id) => { const o = obj(id); return o && Sheet.addSheetLayer(o, side, L, opts); }),
+    removeSheetLayer: asStep((side, lid, id) => { const o = obj(id); return o && Sheet.removeSheetLayer(o, side, lid); }),
+    layerToSheet: asStep((k, ids, opts, id) => { const o = obj(id); const r = o ? Sheet.layerToSheet(o, k, ids, opts) : []; return r.length ? r : null; }),
+    sheetToFace: asStep((side, ids, k, id) => { const o = obj(id); const r = o ? Sheet.sheetToFace(o, side, ids, k) : []; return r.length ? r : null; }),
+    setSheetStretch: asStep((side, lid, on, box, id) => { const o = obj(id); return o && Sheet.setSheetStretch(o, side, lid, on, box); }),
+    moveSheetLayer: asStep((side, lid, at, id) => { const o = obj(id); return o && Sheet.moveSheetLayer(o, side, lid, at); }),
+    setSheetTier: asStep((side, lid, over, id) => { const o = obj(id); return o && Sheet.setSheetTier(o, side, lid, over); }),
+    // the sheet as a net: its size (mm) and panels (key, place, turn)
+    sheetInfo: (side, id) => { const o = obj(id); if (!o) return null; const n = Sheet.sheetNet(o, side); return { W: n.W, H: n.H, panels: n.panels.map(({ key, x, y, w, h, q, rot, ang, crop, fan, poly, r, circle }) => ({ key, x, y, w, h, q: q ?? (rot ? 2 : 0), ang, crop, fan: !!fan, poly: !!poly, r, circle: !!circle })) }; },
+    // where the sheet's layers lie on face k (outlines in shares of the face)
+    sheetFootprints: (k, id) => { const o = obj(id); return o ? Sheet.sheetFootprints(o, k).map(g => ({ side: g.side, id: g.L.id, quad: g.quad })) : []; },
+    sheetLayers: (side, id) => obj(id)?.sheet?.[side]?.layers || [],
+    // the sheet side's own picture, painted now
+    sheetPicture: (side, id) => { const o = obj(id); if (!o?.sheet?.[side]) return null; renderFace(o, Sheet.sheetKey(side)); return RT.get(o.id)?.faces[Sheet.sheetKey(side)]?.canvas || null; },
+  });
+}

@@ -13,7 +13,8 @@ import { select, selectGroup, selectLayer } from '../core/selection.js';
 import { commit } from '../core/project.js';
 import { refreshFields } from './fields.js';
 import { renderModel } from './model-panel.js';
-import { addImageToFace, deleteLayer, duplicateLayer, moveLayer, renderFaceTabs, renderLayerProps, renderLayers } from './face-panel.js';
+import { netLayerAt } from '../net/net-edit.js';
+import { addImageToFace, deleteLayer, duplicateLayer, moveLayer, sheetMoveItem, renderFaceTabs, renderLayerProps, renderLayers } from './face-panel.js';
 import { bgToAllFaces, clearFace } from '../core/layers.js';
 import { deleteSticker, duplicateSticker, extraMenu, renderStickers } from './stickers-panel.js';
 import { swapImage } from './library-panel.js';
@@ -67,6 +68,7 @@ function layerItems(o, face, L) {
     { label: 'Выше по слоям', disabled: i >= f.layers.length - 1, run: on(() => moveLayer(L.id, 1)) },
     { label: 'Ниже по слоям', disabled: i <= 0, run: on(() => moveLayer(L.id, -1)) },
     L.type === 'image' && { label: 'Заменить картинку из библиотеки', disabled: !library.length, sub: libraryItems(on(() => {})) },
+    ...(m => m ? ['sep', { ...m, run: on(m.run) }] : [])(sheetMoveItem(o, face, [L.id])),
   ];
 }
 /* the latest pictures of the library; `before` selects what gets the picture */
@@ -218,6 +220,14 @@ function initContextMenus() {
     e.preventDefault(); const r = el.getBoundingClientRect(); rowMenu(el, r.left + 24, r.bottom);
   });
   ed.addEventListener('contextmenu', e => { e.preventDefault(); editorMenu(e); });
+  // the big net: the menu of the layer under the pointer (as in the face window)
+  const pane = $('#netPane');
+  pane.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    if (e.target.closest('#netZoom, #netChips, #netSide, #netReady, #netEmpty')) return;
+    const r = pane.getBoundingClientRect(), hit = netLayerAt(e.clientX - r.left, e.clientY - r.top); if (!hit) return;
+    openMenu(e.clientX, e.clientY, layerItems(hit.o, hit.face, hit.L), layerTitle(hit.L));
+  });
 }
 
 export { initContextMenus, lidAction, toggleLid, turn };

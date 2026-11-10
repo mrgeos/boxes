@@ -6,11 +6,14 @@ import { RT } from '../scene/renderer.js';
 import { cropPx, drawLayer, layerBox } from '../faces/render.js';
 import { isStickerKey } from '../stickers/design.js';
 import { pickLayers, select } from '../core/selection.js';
-import { boundsOf, moveLayerToFace, moveLayers, selectedLayers, snapshot } from '../core/layers.js';
+import { boundsOf, clickPick, moveLayerToFace, moveLayers, selectedLayers, snapshot } from '../core/layers.js';
 import { commit } from '../core/project.js';
 import { drawSelection, edCursor, edDouble, edMove, edPress, edUp, hitLayer } from '../ui/face-editor.js';
 import { refreshFields } from '../ui/fields.js';
 import { inPanel, panelPath } from './net-view.js';
+import { panelFrame } from './sheet-map.js';
+import { sideOf } from './net-side.js';
+import { dimsFor, hitSheet, isSheetKey, sheetKey, sheetSide } from '../core/sheet.js';
 import { markTop, netGeom, netView } from './net-stage.js';
 
 /* A face is shown on the net by one panel, turned by quarter turns (or any angle) and cut to a part of the face. So
@@ -28,19 +31,22 @@ let dragMap = null;
 function mapFor(o, p) {
   if (!p || p.fan || !p.key || isStickerKey(p.key)) return null;
   const fc = RT.get(o.id)?.faces[p.key]?.canvas; if (!fc?.width) return null;
-  const V = netView, k = V.k, S = cropPx(fc, p) || [0, 0, fc.width, fc.height];
-  let th, cx, cy, dw, dh;
-  if (p.ang != null) { th = p.ang; cx = V.ox + p.cx * k; cy = V.oy + p.cy * k; dw = p.fw * k; dh = p.fh * k; }
-  else {
-    const q = p.q ?? (p.rot ? 2 : 0); th = q * Math.PI / 2; cx = V.ox + (p.x + p.w / 2) * k; cy = V.oy + (p.y + p.h / 2) * k;
-    [dw, dh] = q % 2 ? [p.h * k, p.w * k] : [p.w * k, p.h * k];
-  }
-  const c = Math.cos(th), s = Math.sin(th), rx = (-S[0] / S[2] - .5) * dw, ry = (-S[1] / S[3] - .5) * dh;
-  const O = [cx + rx * c - ry * s, cy + rx * s + ry * c];
+  const V = netView, S = cropPx(fc, p) || [0, 0, fc.width, fc.height];
+  const { th, c, s, dw, O } = panelFrame(p, S, V.k, V.ox, V.oy);
   return {
     p, key: p.key, k: dw / S[2], W: fc.width, H: fc.height, th, c, s, O,
     toLocal: (x, y) => [(x - O[0]) * c + (y - O[1]) * s, -(x - O[0]) * s + (y - O[1]) * c],
     toScreen: (x, y) => [O[0] + x * c - y * s, O[1] + x * s + y * c],
+  };
+}
+/* the sheet itself as a surface: sheet px (the sheet layers' own px) ↔ the pane's CSS px, no turn */
+function sheetMap(o, side) {
+  const g = netGeom(); if (!g || g.o.id !== o.id || sideOf(o) !== side) return null;
+  const V = netView, [Ws, Hs] = dimsFor(g.n.W, g.n.H), O = [V.ox, V.oy];
+  return {
+    p: null, key: sheetKey(side), k: V.k * g.n.W / Ws, W: Ws, H: Hs, th: 0, c: 1, s: 0, O,
+    toLocal: (x, y) => [x - O[0], y - O[1]],
+    toScreen: (x, y) => [O[0] + x, O[1] + y],
   };
 }
 const bind = m => { st.k = m.k; st.W = m.W; st.H = m.H; };
@@ -49,11 +55,29 @@ const toSheet = (x, y) => [(x - netView.ox) / netView.k, (y - netView.oy) / netV
 /* the map of the picked face: of the panel the picked layers' middle is over, else its first */
 function activeMap() {
   const g = netGeom(), o = activeObj(); if (!g || !o || g.o.id !== o.id || !sel.face || isStickerKey(sel.face)) return null;
+  if (isSheetKey(sel.face)) return sheetMap(o, sheetSide(sel.face));
   const maps = panelsOf(sel.face).map(p => mapFor(o, p)).filter(Boolean); if (!maps.length) return null;
   if (maps.length === 1) return maps[0];
   const b = boundsOf(selectedLayers(), maps[0].W, maps[0].H);
   if (b) for (const m of maps) { const [X, Y] = toSheet(...m.toScreen((b[0] + b[2]) / 2 * m.k, (b[1] + b[3]) / 2 * m.k)); if (inPanel(m.p, X, Y)) return m; }
   return maps[0];
+}
+/* the top layer under a pane point, in the order the print has them: the sheet's layers over the faces', the face's own,
+   the sheet's under: { sheet: true, side, L } or { sheet: false, P, m, f, L } (a layer prints only where a face does) */
+function topAt(o, x, y) {
+  const P = facePanelAt(x, y); if (!P) return null;
+  const side = sideOf(o), [X, Y] = toSheet(x, y);
+  const over = hitSheet(o, side, X, Y, true); if (over) return { sheet: true, side, L: over, P };
+  const m = mapFor(o, P), f = o.faces[P.key];
+  if (m && f) { const [lx, ly] = m.toLocal(x, y), L = hitLayer(f, m.W, m.H, lx / m.k, ly / m.k); if (L) return { sheet: false, P, m, f, L }; }
+  const under = hitSheet(o, side, X, Y, false); return under ? { sheet: true, side, L: under, P } : null;
+}
+/* picks a sheet layer found under the pointer (its sheet first), as a click on a face's layer picks that face */
+function pickSheetLayer(o, T, e) {
+  const k = sheetKey(T.side), already = sel.face === k && selectedLayers().includes(T.L);
+  if (sel.face !== k) select(o.id, k, null, { focus: false });
+  if (!already && !(e.shiftKey || e.ctrlKey || e.metaKey)) pickLayers(clickPick(o.faces[k], T.L));
+  return sheetMap(o, T.side);
 }
 /* the face panel under a pane point */
 function facePanelAt(x, y) {
@@ -71,9 +95,9 @@ function drawNetEdit(c, dpr) {
   bind(m);
   const T = (k = 1) => q => q.setTransform(dpr * m.c * k, dpr * m.s * k, -dpr * m.s * k, dpr * m.c * k, dpr * m.O[0], dpr * m.O[1]);
   // layers being carried: the part past their panel (which clips the print) shows faintly, over the other panels too
-  if (st.drag?.mode === 'move' && st.drag.moved) {
+  if (st.drag?.mode === 'move' && st.drag.moved && m.p) {
     c.save();
-    c.setTransform(dpr, 0, 0, dpr, 0, 0); c.beginPath(); c.rect(-1e5, -1e5, 2e5, 2e5); panelPath(c, m.p, netView.ox, netView.oy, netView.k); c.clip('evenodd');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0); c.beginPath(); c.rect(-1e5, -1e5, 2e5, 2e5); if (m.p) panelPath(c, m.p, netView.ox, netView.oy, netView.k); c.clip('evenodd');
     T(m.k)(c);
     for (const L of selectedLayers()) if (L.visible) drawLayer(c, L, m.W, m.H, null, .45);
     c.restore();
@@ -82,13 +106,13 @@ function drawNetEdit(c, dpr) {
   drawSelection(c, st, o, {
     k: m.k, W: m.W, H: m.H, dw: m.W * m.k, dh: m.H * m.k, faceT: T(m.k),
     // the frame is solid over the panel and faint past it
-    inside: q => { const t = q.getTransform(); q.setTransform(dpr, 0, 0, dpr, 0, 0); q.beginPath(); panelPath(q, m.p, netView.ox, netView.oy, netView.k); q.setTransform(t); q.clip(); },
+    inside: m.p && (q => { const t = q.getTransform(); q.setTransform(dpr, 0, 0, dpr, 0, 0); q.beginPath(); panelPath(q, m.p, netView.ox, netView.oy, netView.k); q.setTransform(t); q.clip(); }),
   });
   c.restore();
 }
 /* the panel a drag of layers would drop them on (not their own face), or null */
 function dropPanel(d = st.drag) {
-  if (d?.mode !== 'move' || !d.moved) return null;
+  if (d?.mode !== 'move' || !d.moved || isSheetKey(sel.face)) return null;
   const o = activeObj(), m = dragMap, Ls = selectedLayers(); if (!o || !m || !Ls.length) return null;
   const b = boundsOf(Ls, m.W, m.H), [X, Y] = toSheet(...m.toScreen((b[0] + b[2]) / 2 * m.k, (b[1] + b[3]) / 2 * m.k));
   const p = facePanelAt(netView.ox + X * netView.k, netView.oy + Y * netView.k);
@@ -105,10 +129,15 @@ function netPress(e, x, y) {
     bind(A);
     if (edPress(surf, e, ...A.toLocal(x, y))) { dragMap = A; return true; }
   }
-  const P = facePanelAt(x, y); if (!P) return false;
-  const m = mapFor(o, P), f = o.faces[P.key]; if (!m || !f) return false;
-  const [lx, ly] = m.toLocal(x, y);
-  if (!hitLayer(f, m.W, m.H, lx / m.k, ly / m.k)) return false;
+  const T = topAt(o, x, y); if (!T) return false;
+  // a layer of the sheet (over the folds): the sheet is picked, and the layer edited there
+  if (T.sheet) {
+    const M = pickSheetLayer(o, T, e); if (!M) return false;
+    st.handles = null; bind(M);
+    if (edPress(surf, e, ...M.toLocal(x, y))) { dragMap = M; return true; }
+    return false;
+  }
+  const { P, m } = T, [lx, ly] = m.toLocal(x, y);
   // a layer of another face (or the other half of this one): that face is picked first
   if (P.key !== sel.face) select(o.id, P.key, null, { focus: false });
   st.handles = null; bind(m);
@@ -133,13 +162,19 @@ function dropLayers(d) {
 function netCursor(e, x, y) {
   const o = activeObj(), A = activeMap(); if (!o) return 'default';
   if (A && st.handles && activeFaceData()) { bind(A); const c = edCursor(surf, e, ...A.toLocal(x, y)); if (c !== 'default') return c; }
-  const P = facePanelAt(x, y), m = P && mapFor(o, P), f = P && o.faces[P.key];
-  if (m && f) { const [lx, ly] = m.toLocal(x, y); if (hitLayer(f, m.W, m.H, lx / m.k, ly / m.k)) return 'move'; }
-  return 'default';
+  return topAt(o, x, y) ? 'move' : 'default';
 }
 /* a double click: a text is typed in place, a picture is cropped */
 function netDouble(e, x, y) {
   const o = activeObj(), P = facePanelAt(x, y); if (!o) return false;
+  const T = topAt(o, x, y);
+  // the sheet's layer under the pointer, or the picked one of the sheet
+  if (T?.sheet || (isSheetKey(sel.face) && P && activeLayer())) {
+    if (T?.sheet && !(sel.face === sheetKey(T.side) && selectedLayers().includes(T.L))) { select(o.id, sheetKey(T.side), null, { focus: false }); pickLayers([T.L.id]); }
+    const M = activeMap(); if (!M) return false;
+    surf.el = $('#netPane'); bind(M);
+    return edDouble(surf, ...M.toLocal(x, y));
+  }
   const m = P && mapFor(o, P), f = P && o.faces[P.key];
   if (!m || !f) return false;
   const [lx, ly] = m.toLocal(x, y);
@@ -183,4 +218,13 @@ function netHandles() {
   return { corners: h.corners?.map(at), rot: h.rot && at(h.rot), grips: h.grips?.map(at), center: h.center && at(h.center) };
 }
 
-export { mapFor, drawNetEdit, dropPanel, netCursor, netDouble, netFacePoint, netKey, netMove, netPress, netHandles, netQuad, netRelease };
+/* a right click at a pane point: the layer under it is picked, and its menu is the one of its list row (null: none there) */
+function netLayerAt(x, y) {
+  const o = activeObj(), T = o && topAt(o, x, y); if (!T) return null;
+  if (T.sheet) { pickSheetLayer(o, T, { shiftKey: false }); return { o, face: sheetKey(T.side), L: T.L }; }
+  if (T.P.key !== sel.face) select(o.id, T.P.key, null, { focus: false });
+  if (!selectedLayers().includes(T.L)) pickLayers(clickPick(T.f, T.L));
+  return { o, face: T.P.key, L: T.L };
+}
+
+export { mapFor, netLayerAt, drawNetEdit, dropPanel, netCursor, netDouble, netFacePoint, netKey, netMove, netPress, netHandles, netQuad, netRelease };

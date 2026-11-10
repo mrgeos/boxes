@@ -3,6 +3,7 @@ import { clamp } from '../core/util.js';
 import { getImg } from '../core/assets.js';
 import { newImage, newText } from '../core/model.js';
 import { stickerSize } from './placement.js';
+import { sheetFaces } from '../core/sheet.js';
 
 /* A sticker's design is a face of its own, as big as the sticker: st.design = { bg, bgGrad?, layers } like
    o.faces[k], edited by the same layer editor and painted by the same code. It is reached as o.faces['st:<id>'] (a
@@ -13,8 +14,8 @@ const isStickerKey = k => typeof k === 'string' && k.startsWith('st:');
 const stickerOfKey = (o, k) => isStickerKey(k) ? o.stickers?.find(st => 'st:' + st.id === k) || null : null;
 /* the object's sticker designs as [key, face], for whatever goes over all the faces' layers */
 const stickerFaces = o => (o.stickers || []).filter(st => st.design).map(st => [stickerKey(st), st.design]);
-/* the object's faces and its stickers' designs, as [key, face] */
-const faceEntries = o => [...Object.entries(o.faces), ...stickerFaces(o)];
+/* the object's faces, its stickers' designs and its sheet's layers, as [key, face] */
+const faceEntries = o => [...Object.entries(o.faces), ...stickerFaces(o), ...sheetFaces(o)];
 const aspectOf = id => { const im = getImg(id); return im ? im.naturalWidth / im.naturalHeight : 1; };
 const keep = (L, st) => Object.assign(L, st.recolor ? { recolor: st.recolor } : {}, st.keyout ? { keyout: st.keyout } : {});
 /* Stickers made before had fixed fields (colour, a background picture, a logo, one text): they become the same

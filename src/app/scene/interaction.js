@@ -27,6 +27,7 @@ import { layerBox } from '../faces/render.js';
 import { tool } from '../ui/action-bar.js';
 import { placeLibImage } from '../ui/library-panel.js';
 import { ed, edPoint, edState, hitLayer } from '../ui/face-editor.js';
+import { sheetAtFacePoint, sheetKey } from '../core/sheet.js';
 import { importModelFiles } from '../ui/wiring.js';
 import { exitIsolation, isShown, isolated } from './isolation.js';
 import { isolateAction } from '../ui/isolation-plate.js';
@@ -405,8 +406,19 @@ function initInteraction() {
       return;
     }
     if (sel.sticker || sel.ribbon) { sel.sticker = sel.ribbon = null; ui.stickers = true; }
-    let hitL = null;
-    if (h.face && h.uv && !h.wall) { const [W, H] = facePx(o, h.face); hitL = hitLayer(o.faces[h.face], W, H, h.uv.x * W, (1 - h.uv.y) * H); }
+    let hitL = null, sheetL = null;
+    if (h.face && h.uv && !h.wall) {
+      // in the order of the print: the sheet's layers over the face's own, the face's, the sheet's under
+      const [W, H] = facePx(o, h.face), fx = h.uv.x, fy = 1 - h.uv.y;
+      sheetL = sheetAtFacePoint(o, h.face, fx, fy, true);
+      if (!sheetL) { hitL = hitLayer(o.faces[h.face], W, H, fx * W, fy * H); if (!hitL) sheetL = sheetAtFacePoint(o, h.face, fx, fy, false); }
+    }
+    if (sheetL) {
+      const k = sheetKey(sheetL.side), add = e.shiftKey || e.ctrlKey || e.metaKey, same = o.id === sel.obj && sel.face === k;
+      if (same) pickLayers(clickPick(o.faces[k], sheetL.L, add));
+      else { select(o.id, k, null, { flash: false }); pickLayers(clickPick(o.faces[k], sheetL.L)); }
+      setTab('design'); return;
+    }
     const layerId = hitL?.id ?? null, same = o.id === sel.obj && h.face === sel.face, add = e.shiftKey || e.ctrlKey || e.metaKey;
     // a layer of a group picks the group (a layer inside it once the group is entered); Shift / Ctrl adds or takes off
     if (hitL && same) pickLayers(clickPick(o.faces[h.face], hitL, add));

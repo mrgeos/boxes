@@ -20,6 +20,7 @@ import { renderFonts, renderLayerProps } from '../ui/face-panel.js';
 import { renderAll } from '../ui/wiring.js';
 import { faceEntries } from '../stickers/design.js';
 import { exitIsolation } from '../scene/isolation.js';
+import { ensureSheet, isSheetKey, touchSheetFace } from './sheet.js';
 
 const hist = { stack: [], i: -1 };
 const snapshot = () => JSON.stringify({ name: state.name, brand: state.brand, objects: state.objects, scene: state.scene, fonts: state.fonts, groups: state.groups, tree: state.tree });
@@ -40,6 +41,8 @@ function restore(s) {
   for (const o of state.objects) buildObject(o);
   layoutAll();
   if (!activeObj()) sel.obj = state.objects[0]?.id ?? null;
+  // the sheet picked stays picked: its record is there again (empty, if the step undone had none)
+  if (isSheetKey(sel.face) && activeObj()) { ensureSheet(activeObj()); touchSheetFace(activeObj(), sel.face); }
   if (sel.group && !state.groups.some(g => g.id === sel.group)) sel.group = null;
   sel.multi = sel.multi.filter(id => state.groups.some(g => g.id === id) || state.objects.some(o => o.id === id));
   const f = activeFaceData(); if (!f || !f.layers.some(l => l.id === sel.layer)) sel.layer = null;

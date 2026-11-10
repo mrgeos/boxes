@@ -13,6 +13,8 @@ import { STICKER_FX, placementsFor, stickerDirty } from '../stickers/placement.j
 import { stickerOfKey } from '../stickers/design.js';
 import { drawSticker, stickerMask, stickerShadow } from '../stickers/film.js';
 import { drawWrapped, wrapsOnto } from './wrap.js';
+import { paintSheet, renderSheetFace } from './sheet-paint.js';
+import { isSheetKey } from '../core/sheet.js';
 import { clipBase, clipRect, cropOf, cropped, maskPath } from '../core/mask.js';
 import { boardFin } from '../carriers/board.js';
 import * as THREE from 'three';
@@ -259,6 +261,13 @@ function textIndexAt(L, W, H, px, py) {
    instead, as the face looks on the sheet, and does nothing else (no texture, no 3D material): what the print files of
    a large sheet are made of (export/pdf.js). */
 function renderFace(o, k, target = null) {
+  // the sheet's own picture (all its layers, on a clear ground)
+  if (isSheetKey(k)) {
+    if (!RT.get(o.id) || !o.faces[k]) return;
+    const f = target || ensureFaceRT(o, k); renderSheetFace(o, k, f, f.canvas.width, f.canvas.height);
+    if (!target) f.tex.needsUpdate = true;
+    return;
+  }
   const rt = RT.get(o.id), st = stickerOfKey(o, k); if (!rt || !(st?.design || faceKeys(o).includes(k))) return;
   const f = target || ensureFaceRT(o, k), face = o.faces[k], ctx = f.ctx;
   if (f.mat) f.mat.visible = true;   // (a clear face waits hidden for its picture)
@@ -311,6 +320,7 @@ function renderFace(o, k, target = null) {
   // a part that came over an edge sits in the stack at its place in its own face (the bottom layer of a face is
   // under the bottom layer of this one), so a pattern spread over several faces stays under the logos of each
   const items = [...own, ...wrapsOnto(o, k)].map((it, i) => ({ it, i })).sort((a, b) => a.it.z - b.it.z || (!!b.it.from - !!a.it.from) || a.i - b.i).map(x => x.it);
+  paintSheet(ctx, o, k, W, H, false);   // the sheet's layers under the face's own
   for (const it of items) {
     const L = it.L; if (!L.visible) continue;
     if (L.type === 'text') ensureFont(L);
@@ -318,6 +328,7 @@ function renderFace(o, k, target = null) {
     // on foil, what is printed is ink, not metal: those layers go to the finish map too
     else { draw(ctx, it, W, H); if (L.effect !== 'none' || fin.foilBase) fxl.push(it); }
   }
+  paintSheet(ctx, o, k, W, H, true);   // and over them
   if (fin.kraft && !clear) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = fin.kraft; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   if (grain > 0 && !clear) {
     const grainPat = f.pat || (f.pat = ctx.createPattern(grainCanvas, 'repeat'));
