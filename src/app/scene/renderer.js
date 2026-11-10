@@ -7,6 +7,7 @@ import { sel } from '../core/state.js';
 import { clearLid, ensureFaces, faceKeys, faceMM, facePx, isClearFace, paintKeys } from '../core/model.js';
 import { isSheetKey } from '../core/sheet.js';
 import { buildCup } from '../carriers/cup.js';
+import { hbOpens } from '../carriers/handle-box.js';
 import { buildBag } from '../carriers/bag.js';
 import { buildTube } from '../carriers/tube.js';
 import { buildDome, domeGeom } from '../carriers/dome.js';
@@ -288,11 +289,12 @@ function applyLid(o) {
   if (rt.trayLid) trayLidAt(o, rt);
   if (rt.hb) {
     // handle box end: the upper flap lies outside, so it swings up first, then the lower one down onto the table, then the dust flaps open
-    const f = clamp(o.lid / 125, 0, 1), a = clamp(f / .4, 0, 1), c = clamp((f - .3) / .3, 0, 1), b = clamp((f - .6) / .4, 0, 1);
-    for (const { u, l, sx } of rt.hb.flaps) { u.rotation.z = sx * a * 150 * DEG; l.rotation.z = -sx * c * 90 * DEG; }
-    for (const { g: d, sx, zs } of rt.hb.dust) d.rotation.y = -sx * zs * b * 90 * DEG;
+    // only the end (or ends) hbSides names opens
+    const f = clamp(o.lid / 125, 0, 1), a = clamp(f / .4, 0, 1), c = clamp((f - .3) / .3, 0, 1), b = clamp((f - .6) / .4, 0, 1), on = hbOpens(o), m = sx => (sx > 0 ? on.right : on.left) ? 1 : 0;
+    for (const { u, l, sx } of rt.hb.flaps) { u.rotation.z = sx * m(sx) * a * 150 * DEG; l.rotation.z = -sx * m(sx) * c * 90 * DEG; }
+    for (const { g: d, sx, zs } of rt.hb.dust) d.rotation.y = -sx * zs * m(sx) * b * 90 * DEG;
     // the tongue is tucked through the slot (slanting in behind the lower flap) while closed, straight once the flap lifts
-    for (const { m, sx, al, slot } of rt.hb.tongues) { m.rotation.z = -sx * al * (1 - clamp(a / .15, 0, 1)); slot.visible = a > .02; }
+    for (const { m: tg, sx, al, slot } of rt.hb.tongues) { tg.rotation.z = -sx * al * (1 - clamp(m(sx) * a / .15, 0, 1)); slot.visible = m(sx) * a > .02; }
     if (rt.hb.tray) rt.hb.tray.position.x = rt.hb.dir * clamp(o.tray?.out ?? 0, 0, o.dims.w) * S;
   }
   if (rt.rsc) applyRsc(o);

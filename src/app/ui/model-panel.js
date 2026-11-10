@@ -369,7 +369,7 @@ function renderModel() {
     ${box && isShape(o) ? `<p class="hint">${SHAPE_HINT[o.lidType]}</p>` : ''}
     ${box && o.lidType !== 'none' && (!isShape(o) || o.lidType === 'hexagon') ? rangeField(o.lidType === 'telescope' || o.lidType === 'hexagon' ? 'Поднять крышку' : o.lidType === 'handle' ? 'Открыть торец' : o.lidType === 'f0201' ? 'Открыть клапаны' : o.lidType === 'drawer' ? 'Выдвинуть ящик' : 'Открыть крышку, °', 'lid', 0, 125, 1) : ''}
     ${box && (o.lidType === 'flap' || o.lidType === 'tuck' || o.lidType === 'f0427') ? rangeField('Клапан, мм', 'flapH', 3, 300, 1) : ''}
-    ${box && o.lidType === 'handle' ? `<div class="field wide"><span class="fl">Открывается</span><select data-k="hbSides">${Object.entries(HB_SIDES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
+    ${box && o.lidType === 'handle' ? `<div class="field wide"><span class="fl">Какой торец открывать</span><select data-k="hbSides">${Object.entries(HB_SIDES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + `<div class="sec-h"><h2>Торец</h2></div>` + rangeField('Верхний клапан, %', 'hbEnd.top', 30, 95, 1, 100) + rangeField('Нижний клапан, %', 'hbEnd.bottom', 10, 90, 1, 100)
       + rangeField('Язычок: ширина, %', 'hbEnd.tongueW', 10, 90, 1, 100) + rangeField('Язычок: высота, мм', 'hbEnd.tongueH', 4, 40, .5)
       + `<label class="check"><input type="checkbox" data-k="hbEnd.ears"> Ушки на верхнем клапане</label>` + rangeField('Скругление углов, мм', 'hbEnd.r', 0, 30, .5)

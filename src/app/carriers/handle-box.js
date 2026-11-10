@@ -160,7 +160,9 @@ function buildHandle(o, rt, pivot, T, zc, addG, lidMat = null) {
    cake slides out through the open end. */
 const HB_SIDES = { right: 'Справа', left: 'Слева', both: 'С обеих сторон' };
 const TRAY_FIN = { board: 'Картон (с печатью)', gold: 'Золото', silver: 'Серебро' };
-const hbOpen = o => { const s = o.hbSides || 'right'; return { right: s !== 'left', left: s !== 'right' }; };
+/* both ends close with tuck flaps, as on a real cake box; hbSides only says which end the «Открыть торец» slider opens */
+const hbOpen = () => ({ right: true, left: true });
+const hbOpens = o => { const s = o.hbSides || 'right'; return { right: s !== 'left', left: s !== 'right' }; };
 const HB_END_KEYS = ['rightTop', 'rightBottom', 'leftTop', 'leftBottom'];
 /* the end's settings (o.hbEnd) with defaults: the upper flap's and the lower flap's lengths (fractions of the height), the
    tongue's width (fraction of the depth) and height (mm), ears on the upper flap's sides, the corner radius (mm) */
@@ -186,8 +188,8 @@ function cornerPoly(x0, y0, x1, y1, r) {
 /* the die: a vertical strip front, lid, back, floor, glue flap; the right end's parts on the sheet's left
    (the sheet is seen from outside, so +x of the box is on the left), the left end's parts on the right */
 function hbNet(o) {
-  const B = hbDims(o), { w, h, d, dl, tl, bl, r } = B, op = hbOpen(o), keys = faceKeys(o);
-  const XL = op.right ? Math.max(tl + B.th, dl) : d, XR = op.left ? Math.max(tl + B.th, dl) : d, x0 = XL + w;
+  const B = hbDims(o), { w, h, d, dl, tl, bl, r } = B, keys = faceKeys(o);
+  const XL = Math.max(tl + B.th, dl), XR = XL, x0 = XL + w;
   const panels = [
     { key: 'front', x: XL, y: 0, w, h, rot: true }, { key: 'top', x: XL, y: h, w, h: d, rot: true },
     { key: 'back', x: XL, y: h + d, w, h }, { key: 'bottom', x: XL, y: 2 * h + d, w, h: d, rot: true },
@@ -195,20 +197,19 @@ function hbNet(o) {
   const tabs = [], slots = [];
   for (const side of ['right', 'left']) {
     const R = side === 'right', ex = R ? XL : x0, out = R ? -1 : 1;   // the strip edge on this side, and the way out
-    if (!op[side]) { panels.push({ key: side, x: R ? XL - d : x0, y: h + d, w: d, h }); continue; }
     // a flap lies from the strip's edge outwards: its free end has rounded corners (top left, top right, bottom right, bottom left)
     const free = hang => R ? [hang, 0, 0, hang] : [0, hang, hang, 0], fx = len => R ? ex - len : ex;
     // the upper flap on the lid, the lower one on the floor (the upper lies over the lower); `joins` keeps neighbours that only touch from being creases
     panels.push({ key: side + 'Top', x: fx(tl), y: h, w: tl, h: d, q: R ? 1 : 3, joins: ['top', 'tab', 'ear'], poly: cornerPoly(fx(tl), h, fx(tl) + tl, h + d, free(r)) },
       { key: side + 'Bottom', x: fx(bl), y: 2 * h + d, w: bl, h: d, q: R ? 3 : 1, joins: ['bottom'], poly: cornerPoly(fx(bl), 2 * h + d, fx(bl) + bl, 2 * h + 2 * d, free(r)) });
     // the dust flaps: on the front and on the back wall
-    for (const [y, wall] of [[0, 'front'], [h + d, 'back']]) panels.push({ key: 'dust', blank: 'клапан', x: fx(dl), y, w: dl, h, joins: [wall], poly: cornerPoly(fx(dl), y, fx(dl) + dl, y + h, free(Math.min(r, dl / 3))) });
+    for (const [y, wall] of [[0, 'front'], [h + d, 'back']]) panels.push({ key: 'dust', side, blank: 'клапан', x: fx(dl), y, w: dl, h, joins: [wall], poly: cornerPoly(fx(dl), y, fx(dl) + dl, y + h, free(Math.min(r, dl / 3))) });
     // the ears on the upper flap's sides, beyond the dust flaps, folded in
     if (B.ears) {
       const er = Math.min(r, B.earW / 2.5, B.earL / 2.5), ex0 = R ? ex - tl + B.earG : ex + tl - B.earG - B.earL;
       for (const up of [true, false]) {
         const y0 = up ? h - B.earW : h + d, y1 = up ? h : h + d + B.earW;
-        panels.push({ key: 'ear', blank: 'ушко', x: ex0, y: y0, w: B.earL, h: B.earW, joins: [side + 'Top'], poly: cornerPoly(ex0, y0, ex0 + B.earL, y1, up ? [er, er, 0, 0] : [0, 0, er, er]) });
+        panels.push({ key: 'ear', side, blank: 'ушко', x: ex0, y: y0, w: B.earL, h: B.earW, joins: [side + 'Top'], poly: cornerPoly(ex0, y0, ex0 + B.earL, y1, up ? [er, er, 0, 0] : [0, 0, er, er]) });
       }
     }
     // the tongue on the upper flap's free edge, the slot in the lower flap as far from its free edge as the flaps overlap
@@ -302,8 +303,8 @@ function handleBoxSVG(o, n, f, label) {
   return body;
 }
 function buildHandleBox(o, rt, { addG, add, film }) {
-  const B = hbDims(o), W = B.w * S, H = B.h * S, D = B.d * S, T = B.t * S, P = Math.PI, g = rt.group, F = k => rt.faces[k].mat, op = hbOpen(o);
-  rt.hb = { flaps: [], dust: [], tongues: [], tray: null, dir: op.right ? 1 : -1 };
+  const B = hbDims(o), W = B.w * S, H = B.h * S, D = B.d * S, T = B.t * S, P = Math.PI, g = rt.group, F = k => rt.faces[k].mat;
+  rt.hb = { flaps: [], dust: [], tongues: [], tray: null, dir: hbOpens(o).right ? 1 : -1 };
   rt.lidPivot = rt.lidGroup = null;
   // front wall, with its window
   const J = joinWinMM(o), fwn = !J && frontWinMM(o), fHole = fwn && rrectPts(0, fwn.cy * S - H / 2, fwn.ww * S, fwn.wh * S, fwn.r * S);
@@ -382,11 +383,6 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   };
   for (const sx of [1, -1]) {
     const side = sx > 0 ? 'right' : 'left', ry = sx * P / 2;
-    if (!op[side]) {
-      add(g, D, H, F(side), [sx * W / 2, H / 2, 0], [0, ry, 0], { face: side });
-      add(g, D - 2 * T, H - 2 * T, rt.innerMat, [sx * (W / 2 - T), H / 2, 0], [0, -ry, 0], { face: 'inside', wall: true });
-      continue;
-    }
     // the upper flap hangs from the lid's edge and lies outside; the lower one rises from the floor's edge, a board's thickness further in
     const uh = new THREE.Group(); uh.position.set(sx * W / 2, H, 0); g.add(uh);
     flap(uh, tL, true, ry, sx, side + 'Top');
@@ -438,4 +434,4 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   }
 }
 
-export { defaultHbEnd, HANDLE_KEYS, HANDLE_SHAPES, HB_END_KEYS, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, buildHandleBox, defaultFrontWin, defaultHandle, frontWinMM, handleBoxSVG, hbDims, hbNet, hbOpen, joinWinMM, lidLeaves, lidOpenings };
+export { defaultHbEnd, hbOpens, HANDLE_KEYS, HANDLE_SHAPES, HB_END_KEYS, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, buildHandleBox, defaultFrontWin, defaultHandle, frontWinMM, handleBoxSVG, hbDims, hbNet, hbOpen, joinWinMM, lidLeaves, lidOpenings };

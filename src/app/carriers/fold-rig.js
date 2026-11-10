@@ -11,7 +11,7 @@ import { rigidT } from './rigid.js';
 import { hexDims, pyramidSides } from './shapes.js';
 import { nameCreases } from './fold-plan.js';
 import { rrectPts } from '../scene/geometry.js';
-import { bridgeMM, hbDims } from './handle-box.js';
+import { bridgeMM, hbDims, hbOpens } from './handle-box.js';
 
 /* The «Сборка» slider shows the blank folding into the box. While it is below 100 % the object shows this rig instead
    of its model: every panel of the blank is a flat piece (the print on one side, the board's inner side on the other,
@@ -105,7 +105,9 @@ const handleFold = {
     if (k === 'glue') return { ang: 90, a: -T, d: -T, slide: -2 * T };
     // the end opens as the model's does (applyLid): the upper flap swings up 150° first, then the lower one down 90°, then the dust flaps 90°;
     // the tongue straightens as the upper flap lifts
-    const f = lid => clamp(lid / 125, 0, 1), a = lid => clamp(f(lid) / .4, 0, 1), c = lid => clamp((f(lid) - .3) / .3, 0, 1), b = lid => clamp((f(lid) - .6) / .4, 0, 1);
+    // only the end hbSides names opens: the side from the panel (dust, ear), the flap a tongue is on, or the key (rightTop …)
+    const side = ch.side || String(ch.on || k).replace(/(Top|Bottom)$/, ''), shut = (side === 'right' || side === 'left') && !hbOpens(o)[side];
+    const f = lid => shut ? 0 : clamp(lid / 125, 0, 1), a = lid => clamp(f(lid) / .4, 0, 1), c = lid => clamp((f(lid) - .3) / .3, 0, 1), b = lid => clamp((f(lid) - .6) / .4, 0, 1);
     if (k === 'tab') return { ang: 15, a: -2 * T, opens: lid => 15 * Math.min(1, a(lid) / .15) };   // slants in behind the lower flap, through its slot
     if (k === 'dust') return { ang: 90, a: -2.5 * T, d: -2 * T, rank: 4, opens: lid => 90 * b(lid) };
     if (k === 'ear') return { ang: 90, a: -T, rank: 5.5 };   // folded in, against the inside of the wall
