@@ -374,8 +374,8 @@ function buildBox(o, rt) {
       if (EL > 0) for (const sx of [-1, 1]) strip(D / 2 - z0, [sx * (W / 2 + lift), cy, (D / 2 + z0) / 2], [0, sx * P / 2, 0]);
     }
   } else if (lt === 'tuck') {
-    // tuck flap hangs inside the front wall
-    const TF = clamp(o.flapH, 3, o.dims.h - 2 * o.thickness) * S, TW = W - 2 * WT - 2 * eps, z = D - WT - eps;
+    // tuck flap hangs inside the front wall; the blank cuts it as wide as the box, the model keeps a clearance (it lies within the walls' thickness)
+    const TF = clamp(o.flapH, 3, o.dims.h - 2 * o.thickness) * S, TW = W - 2 * eps, z = D - WT - eps;
     add(pivot, TW, TF, F('flap'), [0, -TF / 2, z], [0, 0, 0], { face: 'flap' });
     add(pivot, TW, TF, rt.innerMat, [0, -TF / 2, z - T], [0, P, 0], { face: 'inside', wall: true });
     add(pivot, TW, T, rt.edgeMat, [0, -TF, z - T / 2], [P / 2, 0, 0]);

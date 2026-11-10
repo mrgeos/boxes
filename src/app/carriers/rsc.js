@@ -36,15 +36,16 @@ function buildRsc(o, rt, { addG, add }) {
   for (const sz of [-1, 1]) add(g, W, T, rt.foldMat, [0, H, sz * (D / 2 - T / 2)], [-P / 2, 0, 0]);
   for (const sx of [-1, 1]) add(g, T, D - 2 * T, rt.foldMat, [sx * (W / 2 - T / 2), H - T, 0], [-P / 2, 0, 0]);
   // outer flaps (front and back): the halves of `top` above, of `inside` below; they meet in the middle
-  const L = D / 2, flaps = { outer: [], inner: [] };
+  // (the outer flaps are as wide as the blank cuts them: a thickness short of the walls on each side, the slots between the flaps)
+  const L = D / 2, FW = W - 2 * T, flaps = { outer: [], inner: [] };
   for (const sz of [1, -1]) {
     const pv = new THREE.Group(); pv.position.set(0, H, sz * D / 2); g.add(pv);
     const front = sz > 0, zc = -sz * L / 2;
     const q = o.dims.d / 4;   // the face's middle is the seam: a quarter of the depth off each half's own
-    addG(pv, halfPlane(W, L, front ? 0 : .5, front ? .5 : 1), F('top'), [0, 0, zc], [-P / 2, 0, 0], { face: 'top', frameOff: [0, front ? q : -q] });
-    addG(pv, halfPlane(W, L, front ? .5 : 0, front ? 1 : .5), F('inside'), [0, -T, zc], [P / 2, 0, 0], { face: 'inside', frameOff: [0, front ? -q : q] });
-    add(pv, W, T, rt.edgeMat, [0, -T / 2, -sz * L], [0, front ? 0 : P, 0]);
-    for (const sx of [-1, 1]) add(pv, L, T, rt.edgeMat, [sx * W / 2, -T / 2, zc], [0, sx * P / 2, 0]);
+    addG(pv, halfPlane(FW, L, front ? 0 : .5, front ? .5 : 1), F('top'), [0, 0, zc], [-P / 2, 0, 0], { face: 'top', frameOff: [0, front ? q : -q] });
+    addG(pv, halfPlane(FW, L, front ? .5 : 0, front ? 1 : .5), F('inside'), [0, -T, zc], [P / 2, 0, 0], { face: 'inside', frameOff: [0, front ? -q : q] });
+    add(pv, FW, T, rt.edgeMat, [0, -T / 2, -sz * L], [0, front ? 0 : P, 0]);
+    for (const sx of [-1, 1]) add(pv, L, T, rt.edgeMat, [sx * FW / 2, -T / 2, zc], [0, sx * P / 2, 0]);
     flaps.outer.push({ g: pv, sz });
   }
   // inner flaps (sides), under the outer ones: the board's outer side up
@@ -59,7 +60,7 @@ function buildRsc(o, rt, { addG, add }) {
   // the bottom: the outer bottom flaps carry the halves of `bottom`
   for (const sz of [1, -1]) {
     const front = sz > 0;
-    addG(g, halfPlane(W, L, front ? .5 : 0, front ? 1 : .5), F('bottom'), [0, 0, sz * L / 2], [P / 2, 0, 0], { face: 'bottom', frameOff: [0, (front ? -1 : 1) * o.dims.d / 4] });
+    addG(g, halfPlane(FW, L, front ? .5 : 0, front ? 1 : .5), F('bottom'), [0, 0, sz * L / 2], [P / 2, 0, 0], { face: 'bottom', frameOff: [0, (front ? -1 : 1) * o.dims.d / 4] });
   }
   // tape across the top seam and down the sides
   rt.rscTape = null;

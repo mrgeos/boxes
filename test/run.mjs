@@ -77,6 +77,11 @@ if (presets.length) await test(`все заготовки (${presets.length}): �
     // the DXF is read from that SVG: a line of the cut the reader does not know would be lost without a word (a formed lid has none)
     const dxf = await page.evaluate(() => window.__boxStudio.dielineDXF(window.__boxStudio.state.objects[0], { bleed: 0 }));
     if (/<[^>]*stroke="#00a0e3"(?![^>]*stroke-dasharray)/.test(svg)) assert.match(dxf, /\n(LINE|POLYLINE|CIRCLE)\n8\nCUT\n/, `${id}: в DXF нет линий реза`);
+    // the blank folded up is the 3D box: no printed face lies off by more than 0.5 mm (null: the blank does not fold)
+    const drift = await page.evaluate(() => { const B = window.__boxStudio; return B.foldDrift(B.state.objects[0].id); });
+    // the lock bottoms (cartonCrash, cartonSnap) stack two flaps 2T apart on the blank, the model draws one plane (PLAN.md)
+    const off = (drift || []).filter(x => x.mm > .5 && !(/^carton(Crash|Snap)$/.test(id) && x.face === 'bottom'));
+    assert.deepEqual(off, [], `${id}: сложенный крой не совпадает с 3D (грань, мм)`);
     assert.deepEqual(errors, [], `${id}: ошибки в консоли`);
   }
   await ctx.close();
