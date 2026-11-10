@@ -1,6 +1,6 @@
 // Правила слоёв: пересчёт долей грани при смене её размера
 import { DEG } from './util.js';
-import { faceKeys, faceMM, loopAxis } from './model.js';
+import { faceKeys, faceLabel, faceMM, loopAxis } from './model.js';
 import { layerBox } from '../faces/render.js';
 import { markFace, ui } from '../scene/renderer.js';
 import { SAFE_MM } from '../net/net-check.js';
@@ -18,6 +18,8 @@ function warnOf(L) {
   if (L.warn && L.warn.sig !== sigOf(L)) delete L.warn;
   return L.warn || null;
 }
+const WARN_TEXT = { shrunk: 'Уменьшен, чтобы поместиться', moved: 'Сдвинут внутрь грани' };
+const warnText = (o, w) => w.kind === 'face' ? `Перенесён с грани «${faceLabel(o, w.from)}»` : WARN_TEXT[w.kind];
 function clearLayerWarn(o, k, id) {
   const L = o.faces[k]?.layers.find(l => l.id === id);
   if (!L?.warn) return false;
@@ -82,4 +84,4 @@ function reflowObject(o) {
   return out;
 }
 
-export { clearLayerWarn, reflowLayers, reflowObject, setLayerPin, setWarn, warnOf };
+export { clearLayerWarn, reflowLayers, reflowObject, setLayerPin, setWarn, warnOf, warnText };

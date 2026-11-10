@@ -127,7 +127,7 @@ function syncChips() {
 }
 /* the list of what is wrong, at (x, y); a pick selects that layer on its face */
 function showIssues(o, list, x, y) {
-  const items = list.length ? list.map(it => ({ label: it.text, run: () => { select(o.id, it.face, null, { focus: false }); pickLayers([it.id]); } }))
+  const items = list.length ? list.map(it => ({ label: it.text, run: () => { select(o.id, it.face, null, { focus: false }); if (it.id) pickLayers([it.id]); } }))
     : [{ label: 'Края и безопасная зона в порядке', disabled: true }, { label: 'Картинки — не меньше 150 dpi', disabled: true }];
   openMenu(x, y, items, 'Проверка к печати');
 }

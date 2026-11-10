@@ -20,6 +20,8 @@ import { RT, markFace, ui } from '../scene/renderer.js';
 import { pickLayers, select } from '../core/selection.js';
 import { addBackgroundImage, bgToAllFaces, clearFace, imageFitOf, selectBg, setFaceBg, setFaceBgGrad, setImageFit, alignLayers, deleteLayers, distributeLayers, duplicateLayers, groupLayers, groupOf, placeLayers, ungroupLayers, unitsOf, renameItem, selectedIds, selectedLayers, setGradient, setLayerSelection, setLocked, setVisible, shiftLayers } from '../core/layers.js';
 import { commit } from '../core/project.js';
+import { clearLayerWarn, warnOf, warnText } from '../core/pins.js';
+import { placeUnplaced } from '../core/transfer.js';
 import { bindFields, bindNum, placeField, rangeField } from './fields.js';
 import { MASKS, cropped, editMode, hasPanels, resetCrop, setClipBelow, setClipTo, setEditMode, setMask } from '../core/mask.js';
 import { invalidate } from '../scene/camera.js';
@@ -74,6 +76,9 @@ function renderLayers() {
   if (!f) { box.innerHTML = ''; return; }
   const picked = new Set(selectedIds()), rows = [], seen = new Set();
   const sheet = isSheetKey(sel.face);
+  // layers of a face that is gone and had no face to go to: the user picks one
+  (o.unplaced || []).forEach((u, i) => rows.push(`<div class="unplaced"><span>Не размещено (${u.layers.length}): грань «${esc(faceLabel(o, u.from))}»</span>
+    <select data-un="${i}" aria-label="Поместить на грань"><option value="">Поместить на…</option>${faceKeys(o).filter(k => !isPart(k)).map(k => `<option value="${k}">${faceLabel(o, k)}</option>`).join('')}</select></div>`));
   if (!f.layers.length) rows.push(`<div class="empty">${sheet ? 'Слои развёртки лежат на всём листе и идут через сгибы между гранями. Добавьте картинку, текст или плашку, или перенесите слой грани кнопкой «На развёртку».' : 'Добавьте картинку, текст или плашку — или перетащите файл на грань в 3D.'}</div>`);
   for (const L of [...f.layers].reverse()) {
     if (L.group && !seen.has(L.group)) {
@@ -93,6 +98,7 @@ function renderLayers() {
   // the background: always the bottom row (a clear PET face has none)
   if (!sheet && !isClearFace(o, sel.face)) rows.push(bgRowHTML(f));
   box.innerHTML = rows.join('');
+  $$('#layers select[data-un]').forEach(s => { s.onchange = () => { if (placeUnplaced(o, +s.dataset.un, s.value)) { renderFaceTabs(); renderLayers(); ui.editor = true; commit(); } }; });
   const bgRow = $('#layers .bgrow');
   if (bgRow) {
     bgRow.onclick = () => { selectBg(); renderLayers(); renderLayerProps(); ui.editor = true; };
@@ -151,7 +157,8 @@ const rowActs = (vis, locked) => `<button data-a="lock" class="${locked ? 'pin' 
   <button data-a="vis" class="${vis ? '' : 'pin'}" title="${vis ? 'Скрыть' : 'Показать'}" aria-label="Видимость">${vis ? ICON.eye : ICON.eyeOff}</button>`;
 /* what is done to a layer beyond its plain look, as small marks in its row: { i: icon, t: title, to: the field it opens } */
 function layerMods(o, L) {
-  const m = [], dpi = L.type === 'image' && !L.tile ? imageDpi(o, L) : null;
+  const m = [], dpi = L.type === 'image' && !L.tile ? imageDpi(o, L) : null, w = warnOf(L);
+  if (w) m.push({ i: 'warn', cls: 'warn', t: warnText(o, w), to: '#warnOk' });
   if (dpi != null && dpi < 300) m.push({ i: 'warn', cls: dpi < 150 ? 'bad' : 'warn', t: `${dpi} dpi при печати — ${dpi < 150 ? 'мало для офсета' : 'для офсета лучше 300 dpi'}`, to: '[data-k="w"]' });
   if (cropped(L)) m.push({ i: 'crop', t: 'Кадрирована', to: '.cut' });
   if (L.mask) m.push({ i: 'mask', t: 'Маска: ' + (MASKS[L.mask.kind] || '').toLowerCase(), to: '.cut' });
@@ -300,7 +307,9 @@ function renderLayerProps() {
   const effOpts = Object.entries(EFFECTS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   // a picture's name is in its card (under the title), and its alignment under the card
   const pic = L.type === 'image';
-  let html = `<div class="sec-h"><h2>${pic ? 'Картинка' : `Слой: ${esc(layerName(L)).slice(0, 24)}`}</h2><span class="badge">${faceLabel(o, sel.face)}</span></div>${pic ? '' : alignBarHTML(1)}`;
+  const wn = warnOf(L);
+  let html = `<div class="sec-h"><h2>${pic ? 'Картинка' : `Слой: ${esc(layerName(L)).slice(0, 24)}`}</h2><span class="badge">${faceLabel(o, sel.face)}</span></div>`
+    + (wn ? `<div class="warnrow"><span>${ICON.warn} ${esc(warnText(o, wn))}</span><button class="btn sm" id="warnOk">Так и надо</button></div>` : '') + (pic ? '' : alignBarHTML(1));
   if (L.type === 'text') {
     html += `<textarea data-k="text" rows="2" aria-label="Текст"></textarea>
       <div class="grid2"><select data-k="font" aria-label="Шрифт">${brandFontOpts()}<optgroup label="Все шрифты">${allFonts().map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</optgroup></select>
@@ -341,6 +350,7 @@ function renderLayerProps() {
     markFace(activeObj(), sel.face);
   });
   bindCrop(o, L); bindAlignBar(sec); bindSheetBlock(sec, o, L);
+  if (wn) $('#warnOk').onclick = () => { clearLayerWarn(o, sel.face, L.id); renderLayers(); renderLayerProps(); commit(); };
   if (L.type === 'text' && linkOf(L, 'font') && $('[data-k="font"]', sec)) $('[data-k="font"]', sec).value = '@' + linkOf(L, 'font');
   $('#gradKind') && ($('#gradKind').onchange = e => { setGradient(o, sel.face, activeLayer(), e.target.value || null); ui.layers = true; renderLayerProps(); commit(); });
   if (L.type === 'image') {

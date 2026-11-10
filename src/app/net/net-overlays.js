@@ -45,7 +45,7 @@ function drawSafe(c, o, n, issues, ox, oy, k) {
   }
   // what crosses it: its box tinted where it lies on the face's panel
   for (const it of issues) {
-    if (it.kind === 'dpi') continue;
+    if (it.kind === 'dpi' || it.kind === 'transfer') continue;
     const L = o.faces[it.face]?.layers.find(l => l.id === it.id); if (!L) continue;
     for (const p of n.panels.filter(q => q.key === it.face)) {
       const m = mapFor(o, p); if (!m) continue;

@@ -6,6 +6,7 @@ import { getImg } from '../core/assets.js';
 import { cropOf } from '../core/mask.js';
 import { layerBox } from '../faces/render.js';
 import { isStickerKey } from '../stickers/design.js';
+import { warnOf, warnText } from '../core/pins.js';
 
 /* What a printer would send back: content that runs off the cut (it is not printed), content closer to the edge than
    the safe zone (a cut a hair off takes it), a picture with too few pixels for its printed size. All of it is read
@@ -46,19 +47,24 @@ function imageDpi(o, k, L) {
   return widthMM > 0 ? Math.round(im.naturalWidth * cropOf(L).w / (widthMM / 25.4)) : null;
 }
 const nameOf = L => L.type === 'text' ? `«${(L.text || '').replace(/\s+/g, ' ').trim().slice(0, 22)}»` : L.name || (L.type === 'image' ? 'Картинка' : 'Фигура');
-/* the problems of object o on its faces (all that can be printed, or the keys given): [{ face, id, kind, text }] */
-function printIssues(o, keys = faceKeys(o)) {
-  const out = [];
+/* the problems of object o on its faces (all that can be printed, or the keys given): [{ face, id, kind, text }];
+   'transfer': a layer a change of size or construction shrank, moved or brought from another face; 'unplaced': layers
+   of a face that is gone, with no face to take them yet (listed when all the faces are asked for) */
+function printIssues(o, keys = null) {
+  const out = [], all = !keys;
+  keys ??= faceKeys(o);
   for (const k of keys) {
     if (isStickerKey(k) || !o.faces[k]) continue;
     for (const L of o.faces[k].layers) {
       if (!L.visible) continue;
-      const where = `${faceLabel(o, k)} · ${nameOf(L)}`, st = edgeState(o, k, L);
+      const where = `${faceLabel(o, k)} · ${nameOf(L)}`, st = edgeState(o, k, L), w = warnOf(L);
+      if (w) out.push({ face: k, id: L.id, kind: 'transfer', text: `${where}: ${warnText(o, w).replace(/^./, c => c.toLowerCase())}` });
       if (st === 'cut') out.push({ face: k, id: L.id, kind: 'cut', text: `${where}: за краем, не напечатается` });
       else if (st === 'safe') out.push({ face: k, id: L.id, kind: 'safe', text: `${where}: ближе ${SAFE_MM} мм к краю` });
       if (L.type === 'image' && !L.tile) { const d = imageDpi(o, k, L); if (d != null && d < MIN_DPI) out.push({ face: k, id: L.id, kind: 'dpi', text: `${where}: ${d} dpi, нужно от ${MIN_DPI}` }); }
     }
   }
+  if (all) (o.unplaced || []).forEach((u, index) => out.push({ face: faceKeys(o)[0], id: null, index, kind: 'unplaced', text: `Не нашлось места: ${u.layers.length} сл. с грани «${faceLabel(o, u.from)}»` }));
   return out;
 }
 

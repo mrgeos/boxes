@@ -330,6 +330,9 @@ input[type=color]{width:34px;height:26px;padding:0 2px;border:1px solid var(--li
 .layer .mods .mod:hover{background:var(--panel);color:var(--accent)}
 .layer .mods .mod.warn{color:var(--warn)}.layer .mods .mod.bad{color:var(--danger)}
 .layer .mods svg{width:12px;height:12px}
+.warnrow{display:flex;gap:8px;align-items:center;justify-content:space-between;font-size:12px;color:var(--warn);margin:2px 0 8px}
+.warnrow span{display:flex;gap:5px;align-items:center;min-width:0}.warnrow svg{width:13px;height:13px;flex:none}
+.unplaced{display:flex;flex-direction:column;gap:4px;padding:6px 8px;margin-bottom:4px;border:1px solid var(--warn);border-radius:6px;font-size:12px}
 .layer .acts button{visibility:hidden}
 .layer:hover .acts button,.layer:focus-within .acts button,.layer .acts button.pin{visibility:visible}
 .flash{animation:propflash 1.2s ease-out}
