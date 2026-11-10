@@ -34,6 +34,7 @@ import { addCreaseEdge, mergeStatic } from './geometry.js';
 import { applyInsert, buildInsert } from '../carriers/insert.js';
 import { drawerOut } from '../carriers/rigid.js';
 import { applyFold } from './fold.js';
+import { reflowObject } from '../core/pins.js';
 
 const viewport = $('#viewport');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -156,6 +157,7 @@ function takeShadowStale() { const s = shadowStale; shadowStale = false; return 
 function buildObject(o) {
   invalidate(); staleShadow();
   ensureFaces(o);
+  reflowObject(o);
   let rt = RT.get(o.id);
   if (!rt) {
     rt = { group: new THREE.Group(), faces: {},
