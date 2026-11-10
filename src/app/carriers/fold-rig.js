@@ -349,9 +349,9 @@ function buildRig(o, rt) {
     // way), and the lid's print, where the leaf lay, is on the side towards the other leaf
     const lidP = p.leaf && panels.find(q => q.key === 'top'), [lw, lh] = p.leaf ? faceMM(o, p.key) : [1, 1], sz = p.key === 'handleFront' ? 1 : -1;
     const leafUV = p.leaf && ((X, Y) => { const cx = lidP.x + lidP.w / 2, cy = lidP.y + lidP.h / 2, hf = Math.max(.5, bridgeMM(o) / 2); return [(sz * (cx - X)) / lw + .5, (sz > 0 ? cy - hf - Y : Y - cy - hf) / lh]; });
-    const face = p.leaf ? rt.faces.top : rt.faces[p.key], hasFace = !!face && p.key !== 'fold' && p.key !== 'tab';
+    const face = p.leaf ? rt.faces.top : p.flap ? rt.flaps : rt.faces[p.key], hasFace = !!face && p.key !== 'fold' && p.key !== 'tab';
     const backKey = p.leaf ? p.key : p.key === 'bottom' ? 'insideBottom' : p.key === 'top' ? 'inside' : null, back = backKey && (p.leaf || !p.crop && (p.q ?? 0) === 0) && rt.faces[backKey];
-    mesh(n.content, flatGeo(outline, holes, ox, oy, 0, false, hasFace ? (X, Y) => faceUV(p.leaf ? lidP : p, X, Y) : null), hasFace ? face.mat : rt.foldMat, { face: p.leaf ? 'top' : hasFace ? p.key : null });
+    mesh(n.content, flatGeo(outline, holes, ox, oy, 0, false, hasFace ? p.flap ? (X, Y) => [X / rt.flaps.W, 1 - Y / rt.flaps.H] : (X, Y) => faceUV(p.leaf ? lidP : p, X, Y) : null), hasFace ? face.mat : rt.foldMat, { face: p.leaf ? 'top' : hasFace && !p.flap ? p.key : null });
     mesh(n.content, flatGeo(outline, holes, ox, oy, -T, true, back ? (p.leaf ? leafUV : (X, Y) => [(X - p.x) / p.w, (Y - p.y) / p.h]) : null), back ? back.mat : rt.innerMat, { face: back ? backKey : null });
     // edges: every side of the outline and the holes but where a crease runs
     const creases = [...(par ? [n.seg] : []), ...nodes.filter(k => k.parent === n).map(k => k.seg)];

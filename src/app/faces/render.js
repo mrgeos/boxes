@@ -14,6 +14,7 @@ import { stickerOfKey } from '../stickers/design.js';
 import { drawSticker, stickerMask, stickerShadow } from '../stickers/film.js';
 import { drawWrapped, wrapsOnto } from './wrap.js';
 import { paintSheet, renderSheetFace } from './sheet-paint.js';
+import { renderFlaps } from './flaps.js';
 import { isSheetKey } from '../core/sheet.js';
 import { clipBase, clipRect, cropOf, cropped, maskPath } from '../core/mask.js';
 import { boardFin } from '../carriers/board.js';
@@ -261,6 +262,8 @@ function textIndexAt(L, W, H, px, py) {
    instead, as the face looks on the sheet, and does nothing else (no texture, no 3D material): what the print files of
    a large sheet are made of (export/pdf.js). */
 function renderFace(o, k, target = null) {
+  // the printed flaps of a handle box's sheet (one picture for the model: faces/flaps.js)
+  if (k === 'flaps') return renderFlaps(o);
   // the sheet's own picture (all its layers, on a clear ground)
   if (isSheetKey(k)) {
     if (!RT.get(o.id) || !o.faces[k]) return;

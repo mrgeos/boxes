@@ -59,4 +59,4 @@ function renderSheetFace(o, k, f, W, H) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
-export { paintSheet, renderSheetFace };
+export { drawSheetLayer, paintSheet, renderSheetFace };

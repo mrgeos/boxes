@@ -12,6 +12,7 @@ import { paperBagSVG } from '../carriers/paperbag.js';
 import { handleBoxSVG } from '../carriers/handle-box.js';
 import { SLEEVE_GLUE } from '../carriers/sleeve.js';
 import { cropPx, drawNetPanel, renderFace, setSkipStickers } from '../faces/render.js';
+import { drawFlap } from '../faces/flaps.js';
 import { saveFile } from '../core/project.js';
 import { panelPath } from './net-view.js';
 import { bleedLoops, paintBleed, printSheet } from './bleed.js';
@@ -239,7 +240,8 @@ function printCanvas(o, bleed = 0, side = 'front') {
     const fc = rt.faces[p.key]?.canvas, x = p.x * k, y = p.y * k, w = p.w * k, h = p.h * k;
     c.save(); c.beginPath(); panelPath(c, p, 0, 0, k); c.clip();
     if (fc) drawNetPanel(c, fc, p, x, y, w, h, cropPx(fc, p)); else if (p.plain) { c.fillStyle = p.plain; c.fillRect(x, y, w, h); } else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
-    else if (p.blank && !bagFilm(o)) { c.fillStyle = o.board; c.fillRect(x, y, w, h); }
+    else if (p.flap) drawFlap(c, o, n, p, 0, 0, k);
+    else if (p.blank && !bagFilm(o) && !p.noPrint) { c.fillStyle = o.board; c.fillRect(x, y, w, h); }
     c.restore();
   }
   // hand holes and the like go through the sheet

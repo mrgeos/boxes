@@ -9,6 +9,7 @@ import { grownPoly, paintBleed, printSheet, bleeds } from '../net/bleed.js';
 import { dielineData } from '../net/dieline.js';
 import { backNet } from '../net/net-side.js';
 import { panelPath } from '../net/net-view.js';
+import { drawFlap } from '../faces/flaps.js';
 
 /* A PDF written by hand (nothing to load: the file is a few kilobytes of text round the pictures). The page is the
    sheet with its bleed, in mm (1 pt = 25.4/72 mm): MediaBox and BleedBox are the sheet, TrimBox the net.
@@ -129,6 +130,17 @@ async function panelPictures(o, S, dpi, report) {
     }
     T.width = T.height = 0;
   }
+  // the flaps with no face of their own are drawn straight into their picture at the file's resolution (faces/flaps.js)
+  for (const p of n.panels.filter(q => q.flap)) {
+    const k = dpi / 25.4, X = p.x - b, Y = p.y - b, W = p.w + 2 * b, H = p.h + 2 * b;
+    const R = document.createElement('canvas'); R.width = Math.max(1, Math.round(W * k)); R.height = Math.max(1, Math.round(H * k));
+    const c = R.getContext('2d'); c.fillStyle = o.faces[p.flap.bgOf]?.bg || o.board || '#ffffff'; c.fillRect(0, 0, R.width, R.height);
+    c.translate(-X * k, -Y * k);
+    if (b && bleeds(o, p)) paintBleed(c, o, { panels: [p] }, 0, 0, k, b);
+    drawFlap(c, o, n, p, 0, 0, k);
+    pics.set(p, { w: R.width, h: R.height, data: await jpeg(R), x: X, y: Y, W, H });
+    R.width = R.height = 0;
+  }
   return { pics, dpis };
 }
 
@@ -140,7 +152,7 @@ function sideForm(pdf, o, sh, ocg, cs) {
   const images = new Map(); let im = 0;
   for (const [p, pic] of pics) { images.set(p, `Im${im++}`); pic.id = pdf.add(`<< /Type /XObject /Subtype /Image /Width ${pic.w} /Height ${pic.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode >>`, pic.data); }
   // the design: bleed rings of all panels first, then the panels, then the glue flaps
-  const colorOf = p => p.plain ? rgbOf(p.plain) : p.fold ? rgbOf(o.faces.front?.bg || o.board) : p.blank && !bagFilm(o) ? rgbOf(o.board) : null;
+  const colorOf = p => p.plain ? rgbOf(p.plain) : p.fold ? rgbOf(o.faces.front?.bg || o.board) : p.blank && !bagFilm(o) && !p.noPrint ? rgbOf(o.board) : null;
   let design = '';
   const place = p => { const pic = pics.get(p); return `q ${n3(pic.W)} 0 0 ${n3(-pic.H)} ${n3(pic.x)} ${n3(pic.y + pic.H)} cm /${images.get(p)} Do Q `; };
   if (b) for (const p of n.panels) {

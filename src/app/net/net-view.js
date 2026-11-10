@@ -6,6 +6,7 @@ import { RT } from '../scene/renderer.js';
 import { fanOutline, fanXY } from '../carriers/cup.js';
 import { cutNetWindow, netWindowPath, netWindows } from '../carriers/box.js';
 import { cropPx, drawNetPanel } from '../faces/render.js';
+import { drawFlap } from '../faces/flaps.js';
 import { select } from '../core/selection.js';
 import { hasReverse } from './net-side.js';
 import { isPart } from '../core/extras.js';
@@ -91,6 +92,7 @@ function paintNet(c, o, n, { ox, oy = ox, k, selKey = sel.face, accent = getComp
     const x = ox + p.x * k, y = oy + p.y * k, w = p.w * k, h = p.h * k, fc = rt?.faces[p.key]?.canvas;
     c.save(); c.beginPath(); panelPath(c, p, ox, oy, k); c.clip();
     if (fc && p.fan && fan) c.drawImage(fan(p, fc, w, h), x, y, w, h); else if (fc) drawNetPanel(c, fc, p, x, y, w, h, cropPx(fc, p)); else if (p.plain) { c.fillStyle = p.plain; c.fillRect(x, y, w, h); } else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
+    else if (p.flap) drawFlap(c, o, n, p, ox, oy, k);
     else if (p.blank) { c.fillStyle = 'rgba(120,110,95,.14)'; c.fillRect(x, y, w, h); }
     c.restore();
     c.beginPath();

@@ -8,6 +8,7 @@ import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/
 import { netWindows, winMM } from './box.js';
 import { addCake } from './cake.js';
 import { placeModel } from '../core/models3d.js';
+import { ensureFlaps } from '../faces/flaps.js';
 
 const HANDLE_KEYS = ['handleFront', 'handleBack'];
 const HANDLE_SHAPES = { arch: 'Арка', rect: 'Прямоугольная с прорезью', photo: 'Рамка с широкой проймой' };
@@ -193,7 +194,7 @@ function hbNet(o) {
   const panels = [
     { key: 'front', x: XL, y: 0, w, h, rot: true }, { key: 'top', x: XL, y: h, w, h: d, rot: true },
     { key: 'back', x: XL, y: h + d, w, h }, { key: 'bottom', x: XL, y: 2 * h + d, w, h: d, rot: true },
-    { key: 'glue', blank: 'клеевой клапан', x: XL, y: 2 * h + 2 * d, w, h: 12 }];
+    { key: 'glue', blank: 'зона склейки — без краски и лака', noPrint: true, x: XL, y: 2 * h + 2 * d, w, h: 12 }];
   const tabs = [], slots = [];
   for (const side of ['right', 'left']) {
     const R = side === 'right', ex = R ? XL : x0, out = R ? -1 : 1;   // the strip edge on this side, and the way out
@@ -203,13 +204,13 @@ function hbNet(o) {
     panels.push({ key: side + 'Top', x: fx(tl), y: h, w: tl, h: d, q: R ? 1 : 3, joins: ['top', 'tab', 'ear'], poly: cornerPoly(fx(tl), h, fx(tl) + tl, h + d, free(r)) },
       { key: side + 'Bottom', x: fx(bl), y: 2 * h + d, w: bl, h: d, q: R ? 3 : 1, joins: ['bottom'], poly: cornerPoly(fx(bl), 2 * h + d, fx(bl) + bl, 2 * h + 2 * d, free(r)) });
     // the dust flaps: on the front and on the back wall
-    for (const [y, wall] of [[0, 'front'], [h + d, 'back']]) panels.push({ key: 'dust', side, blank: 'клапан', x: fx(dl), y, w: dl, h, joins: [wall], poly: cornerPoly(fx(dl), y, fx(dl) + dl, y + h, free(Math.min(r, dl / 3))) });
+    for (const [y, wall] of [[0, 'front'], [h + d, 'back']]) panels.push({ key: 'dust', side, flap: { bgOf: wall }, blank: 'клапан', x: fx(dl), y, w: dl, h, joins: [wall], poly: cornerPoly(fx(dl), y, fx(dl) + dl, y + h, free(Math.min(r, dl / 3))) });
     // the ears on the upper flap's sides, beyond the dust flaps, folded in
     if (B.ears) {
       const er = Math.min(r, B.earW / 2.5, B.earL / 2.5), ex0 = R ? ex - tl + B.earG : ex + tl - B.earG - B.earL;
       for (const up of [true, false]) {
         const y0 = up ? h - B.earW : h + d, y1 = up ? h : h + d + B.earW;
-        panels.push({ key: 'ear', side, blank: 'ушко', x: ex0, y: y0, w: B.earL, h: B.earW, joins: [side + 'Top'], poly: cornerPoly(ex0, y0, ex0 + B.earL, y1, up ? [er, er, 0, 0] : [0, 0, er, er]) });
+        panels.push({ key: 'ear', side, flap: { bgOf: side + 'Top' }, blank: 'ушко', x: ex0, y: y0, w: B.earL, h: B.earW, joins: [side + 'Top'], poly: cornerPoly(ex0, y0, ex0 + B.earL, y1, up ? [er, er, 0, 0] : [0, 0, er, er]) });
       }
     }
     // the tongue on the upper flap's free edge, the slot in the lower flap as far from its free edge as the flaps overlap
@@ -355,7 +356,7 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   else add(lg, W, T, rt.edgeMat, [0, -T / 2, D / 2], [0, 0, 0]);
   if (o.handle?.on) buildHandle(o, rt, lg, 0, 0, addG, LO ? F('top') : null);
   // the ends
-  const tL = B.tl * S, bL = B.bl * S, rr = B.r * S, v2 = pts => dedupe(pts.map(([x, y]) => V2(x, y)));
+  const tL = B.tl * S, bL = B.bl * S, rr = B.r * S;
   // a flap's outline, D wide and len long (centred), the corners at its free end rounded: at the bottom when `down`
   const flapPts = (len, down) => cornerPoly(-D / 2, -len / 2, D / 2, len / 2, down ? [rr, rr, 0, 0] : [0, 0, rr, rr]).map(([x, y]) => V2(x, y));
   const flapGeo = (len, down) => {
@@ -371,6 +372,21 @@ function buildHandleBox(o, rt, { addG, add, film }) {
     const k = P.findIndex((q, i) => Math.abs(q.y - hy) < 1e-7 && Math.abs(P[(i + 1) % n].y - hy) < 1e-7), open = [...P.slice(k + 1), ...P.slice(0, k + 1)];
     addG(grp, ribbonGeo(open.map(q => [0, yc + q.y, -sx * q.x]), open.map(q => [-sx * T, yc + q.y, -sx * q.x])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
   };
+  // a flat convex piece of a flap, its loop `pts` (scene units) with the places `xy` on the sheet (mm) it is printed from; `out`: where
+  // the printed side faces. The other side shows the board's inside, a little way off
+  const net = hbNet(o), fl = ensureFlaps(o, rt, net), V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  const flat = (grp, pts, xy, out) => {
+    const nrm = V3(0, 0, 0); pts.forEach((a, i) => { const b = pts[(i + 1) % pts.length]; nrm.add(V3((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y))); });
+    const fan = pts.slice(2).flatMap((_, i) => [0, i + 1, i + 2]), flip = nrm.dot(out) < 0, mk = (back, ix) => {
+      const geo = new THREE.BufferGeometry(), sh = back ? out.clone().multiplyScalar(-.6 * T) : V3(0, 0, 0);
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap(v => [v.x + sh.x, v.y + sh.y, v.z + sh.z]), 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(xy.flatMap(([X, Y]) => [X / fl.W, 1 - Y / fl.H]), 2));
+      geo.setIndex(ix); geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, back ? rt.innerMat : fl.mat); m.castShadow = m.receiveShadow = true; m.userData = { objId: o.id, face: null }; grp.add(m);
+    };
+    const rev = fan.map((_, i) => fan[i - (i % 3) + (2 - i % 3)]);
+    mk(false, flip ? rev : fan); mk(true, flip ? fan : rev);
+  };
   for (const sx of [1, -1]) {
     const side = sx > 0 ? 'right' : 'left', ry = sx * P / 2;
     // the upper flap hangs from the lid's edge and lies outside; the lower one rises from the floor's edge, a board's thickness further in
@@ -381,24 +397,26 @@ function buildHandleBox(o, rt, { addG, add, film }) {
     const tm = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape([V2(-tw, 0), V2(tw, 0), V2(tw - ins, -B.th * S), V2(-tw + ins, -B.th * S)])), rt.foldMat);
     tm.rotation.set(0, ry, 0); tm.castShadow = true; tm.userData = { objId: o.id, face: null }; tg.add(tm);
     const tong = { m: tg, sx, al: 15 * P / 180, slot: null }; rt.hb.tongues.push(tong);
-    // the ears on its sides, beyond the dust flaps, folded in (they turn with the flap)
+    // the ears on its sides, beyond the dust flaps, folded in (they turn with the flap): the printed side towards the wall
     if (B.ears) {
-      const er = Math.min(B.r, B.earW / 2.5, B.earL / 2.5) * S, eg = new THREE.ShapeGeometry(new THREE.Shape(v2(cornerPoly(-B.earL * S / 2, 0, B.earL * S / 2, B.earW * S, [0, 0, er, er])))), pos = eg.attributes.position;
-      for (let i = 0; i < pos.count; i++) pos.setXYZ(i, -sx * pos.getY(i), pos.getX(i), 0);
-      eg.computeVertexNormals();
+      const er = Math.min(B.r, B.earW / 2.5, B.earL / 2.5), ft = net.panels.find(q => q.key === side + 'Top'), hx = sx > 0 ? ft.x + ft.w : ft.x;
       for (const zs of [1, -1]) {
-        const em = new THREE.Mesh(eg, rt.foldMat); em.position.set(0, -tL + (B.earG + B.earL / 2) * S, zs * (D / 2 - 1.3 * T)); em.castShadow = em.receiveShadow = true; em.userData = { objId: o.id, face: null }; uh.add(em);
+        const pts = cornerPoly(-B.earL / 2, 0, B.earL / 2, B.earW, [0, 0, er, er]);
+        flat(uh, pts.map(([x, y]) => V3(-sx * y * S, (-B.tl + B.earG + B.earL / 2 + x) * S, zs * (D / 2 - 1.3 * T))),
+          // the sheet's place of a point: along the flap from its hinge, and out from its side edge
+          pts.map(([x, y]) => [hx - sx * (B.tl - B.earG - B.earL / 2 - x), zs > 0 ? ft.y - y : ft.y + ft.h + y]), V3(0, 0, zs));
       }
     }
     const lh = new THREE.Group(); lh.position.set(sx * (W / 2 - T), 0, 0); g.add(lh);
     flap(lh, bL, false, ry, sx, side + 'Bottom');
     const slot = new THREE.Mesh(new THREE.PlaneGeometry((B.tw + 2) * S, .7 * S), rt.holeMat); slot.position.set(sx * .05 * S, bL - B.ovl * S, 0); slot.rotation.set(0, ry, 0); slot.raycast = () => {}; lh.add(slot); tong.slot = slot;
     rt.hb.flaps.push({ u: uh, l: lh, sx });
-    // dust flaps fold in from the front and back walls, just inside the end flaps
+    // dust flaps fold in from the front and back walls, just inside the end flaps: the printed side towards the open end
     for (const zs of [1, -1]) {
       const dg = new THREE.Group(); dg.position.set(sx * (W / 2 - 3 * T), H / 2, zs * (D / 2 - T)); g.add(dg);
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(B.dl * S, H - 2.4 * T), rt.foldMat); m.position.set(0, 0, -zs * B.dl * S / 2); m.rotation.y = P / 2;
-      m.castShadow = m.receiveShadow = true; m.userData = { objId: o.id, face: null }; dg.add(m);
+      const dp = net.panels.find(q => q.key === 'dust' && q.side === side && q.joins[0] === (zs > 0 ? 'front' : 'back')), hx = sx > 0 ? dp.x + dp.w : dp.x, z0 = 1.2 * B.t, z1 = B.h - 1.2 * B.t;
+      const at = [[0, z0], [B.dl, z0], [B.dl, z1], [0, z1]];   // distance from the wall's edge, height up the wall (mm)
+      flat(dg, at.map(([t, hz]) => V3(0, (hz - B.h / 2) * S, -zs * t * S)), at.map(([t, hz]) => [hx - sx * t, zs > 0 ? dp.y + hz : dp.y + B.h - hz]), V3(sx, 0, 0));
       rt.hb.dust.push({ g: dg, sx, zs });
     }
   }

@@ -104,6 +104,8 @@ const dirtyFaces = new Set();
 const rebuildQueue = new Set();
 const ui = { editor: true, net: true, layers: false, stickers: false, lib: true, brand: true };
 function markFace(o, k) {
+  // the flaps with no face of their own follow the faces they take their ground from, and the sheet's layers (faces/flaps.js)
+  const fl = RT.get(o.id)?.flaps; if (fl && (isSheetKey(k) || fl.src.has(k))) dirtyFaces.add(o.id + '|flaps');
   // the sheet's layers print on every face, and in the sheet's own picture (made when it is wanted)
   if (isSheetKey(k)) {
     for (const t of faceKeys(o)) dirtyFaces.add(o.id + '|' + t);
