@@ -35,6 +35,7 @@ import { syncProps } from './tabs.js';
 import { renderActionBar } from './action-bar.js';
 import { renderGroupPanel } from './group-panel.js';
 import { commit } from '../core/project.js';
+import { setLidType, transferFaces } from '../core/transfer.js';
 import { bindFields, bindNum, foldSections, rangeField, refreshFields } from './fields.js';
 import { commonValue, fitting, objectsOf, setOnAll } from '../core/bulk.js';
 import { renderFacePanel, renderFaceTabs, updateFaceMeta } from './face-panel.js';
@@ -75,7 +76,7 @@ function modelInput(k) {
   const o = activeObj();
   if (k === 'sleeve.name' || k === 'carry.name') { renderObjects(); renderStickers(); refreshTabs(); return; }
   if (k === 'name') { renderObjects(); $('#objBadge').textContent = o.name; return; }
-  if (k === 'type') { o.dims = { ...PRESETS.find(p => p.type === o.type).dims }; ensureFaces(o); if (o.type === 'board') setBoardCover(o); rebuildQueue.add(o.id); select(o.id, faceKeys(o)[0]); renderModel(); renderObjects(); return; }
+  if (k === 'type') { o.dims = { ...PRESETS.find(p => p.type === o.type).dims }; ensureFaces(o); transferFaces(o); if (o.type === 'board') setBoardCover(o); rebuildQueue.add(o.id); select(o.id, faceKeys(o)[0]); renderModel(); renderObjects(); return; }
   if (o.type === 'tray' && /^(dims|cornerR$|draft$|rim$|ribs\.|bot\.|lidType$|lidSteps$|lidStepH$|tab|mat$)/.test(k)) {
     // the lid's top (the printed face) changes its size and, between a formed lid and a film, its kind
     rebuildQueue.add(o.id); markObj(o); ui.net = ui.editor = true; updateFaceMeta();
@@ -86,7 +87,7 @@ function modelInput(k) {
   }
   if (k === 'style') { ui.net = true; updateFaceMeta(); return; }
   if (k === 'sides' || k === 'roofH' || k === 'gripH') { ensureFaces(o); rebuildQueue.add(o.id); ui.net = true; select(o.id, faceKeys(o).includes(sel.face) ? sel.face : faceKeys(o)[0]); updateFaceMeta(); if (k === 'sides') renderModel(); return; }
-  if (k === 'lidType') { if (o.lidType === 'pyramid' || o.lidType === 'hexagon') o.sides = o.lidType === 'pyramid' ? 4 : 6; if (o.lidType === 'gable') { o.roofH ??= Math.round(o.dims.d * .45); o.gripH ??= Math.round(Math.min(80, o.dims.w * .3)); } ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+  if (k === 'lidType') { setLidType(o, o.lidType); select(o.id, sel.face); renderModel(); renderFaceTabs(); renderFacePanel(); ui.net = true; updateFaceMeta(); return; }
   if (k === 'wallT' || k === 'lidFit' || k === 'tape' || k === 'pull' || k === 'pullColor') { rebuildQueue.add(o.id); applyObjMaterials(o); ui.net = true; updateFaceMeta(); return; }
   if (k === 'lidMat') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
   if (k.startsWith('pb.')) { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); if (k === 'pb.handles') renderModel(); return; }
@@ -485,6 +486,7 @@ function renderModel() {
     }
     if (o.type === 'tray') { applyTrayPreset(o, p); ensureFaces(o); if (p.board) setBoard(o, p.board); applyObjMaterials(o); select(o.id, sel.face); }
     if (o.type === 'bag') { applyBagPreset(o, p); ensureFaces(o); if (p.board) setBoard(o, p.board); applyObjMaterials(o); select(o.id, sel.face); }
+    transferFaces(o); renderFaceTabs(); renderFacePanel();
     rebuildQueue.add(o.id); renderModel(); renderObjects(); commit(); setTimeout(() => setView(lastView), 50);
   };
 }
