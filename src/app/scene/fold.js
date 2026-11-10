@@ -12,8 +12,9 @@ import { camPose, camTween, frameBox, goPose, invalidate } from './camera.js';
 /* How far an object is folded (0 the blank flat … 1 the box) is a look, like the isolation: it lives on the object's
    runtime record (rt.fold, missing = 1), not in the project, and is gone with the object. Below 1 the object shows its
    fold rig (carriers/fold-rig.js) in place of the model: the model's parts are hidden (and so are the stickers,
-   ribbons, sleeve, insert and fill, which sit on the closed box), and the lid is closed whatever o.lid says. At 1 the
-   rig is dropped and the model shows as it is, with its own o.lid. Nothing here touches the interface: the panel
+   ribbons, sleeve, insert and fill, which sit on the closed box), and the lid is closed until the last of the way, where it
+   opens to o.lid (poseRig), so that at 1 the rig and the model are the same and the swap is not seen. At 1 the rig is
+   dropped and the model shows as it is, with its own o.lid. Nothing here touches the interface: the panel
    (ui/fold-bar.js) and an agent both call setFold / playFold. */
 const objById = id => state.objects.find(o => o.id === id) || null;
 const foldOf = id => RT.get(id)?.fold ?? 1;
@@ -49,7 +50,7 @@ function applyFold(o) {
     if (rt.foldSel) markCrease(rig, rt.foldSel);
   }
   const { plan, sl } = planOf(o); applyPlan(rt.rig, plan, sl);
-  poseRig(rt.rig, t); syncFoldVis(); invalidate(); staleShadow();
+  rt.rig.lid = o.lid; poseRig(rt.rig, t); syncFoldVis(); invalidate(); staleShadow();
 }
 /* the project's plan resolved against the object's creases (kept until the plan or the object changes) */
 function creasesOf(o) { const rt = RT.get(o.id); return rt ? rt.creases ??= foldCreases(o) : null; }
