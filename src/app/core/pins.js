@@ -44,12 +44,16 @@ function scaleSize(L, k) {
 function reflowLayers(layers, from, to, ax = null) {
   const [fw, fh] = from, [tw, th] = to;
   for (const L of layers) {
-    const p = L.pin || {}, had = L.warn && warnOf(L);
-    const b0 = boxMM(L, fw, fh), cx0 = L.x * fw, cy0 = L.y * fh;
+    const p = L.pin || {}, had = L.warn && warnOf(L), redo = had?.want;
+    // a mark still untouched: start again from what the layer wanted (its size before shrinking, the centre unclamped)
+    if (redo && had.k < 1) scaleSize(L, 1 / had.k);
+    // the face mark the layer had before (kept, to come back to)
+    const prev = redo ? had.prev : had?.kind === 'face' ? { kind: 'face', from: had.from } : null;
+    const b0 = boxMM(L, fw, fh), cx0 = redo ? had.want[0] : L.x * fw, cy0 = redo ? had.want[1] : L.y * fh;
     // was it inside its face (inside the safe zone, or just the face), and not a backdrop
     const inside = (m) => cx0 - b0.ex >= m - .5 && cx0 + b0.ex <= fw - m + .5 && cy0 - b0.ey >= m - .5 && cy0 + b0.ey <= fh - m + .5;
     const backdrop = b0.ex * 2 >= fw * .9 && b0.ey * 2 >= fh * .9 || (L.type === 'image' && L.tile);
-    const margin = backdrop || L.clipTo ? null : inside(SAFE_MM) ? SAFE_MM : inside(0) ? 0 : null;
+    const margin = redo ? had.margin : backdrop || L.clipTo ? null : inside(SAFE_MM) ? SAFE_MM : inside(0) ? 0 : null;
     // the size in mm kept: the share is recomputed on the new face
     if (p.size === 'fixed') {
       if (L.type === 'text') L.size *= fh / th; else { L.w *= fw / tw; if (L.type === 'shape') L.h *= fh / th; }
@@ -58,6 +62,7 @@ function reflowLayers(layers, from, to, ax = null) {
     // the centre: from the edge kept (start, end), the middle (center), or the share (scale)
     const place = (mode, c0, s0, s1, e0, e1) => mode === 'start' ? c0 - e0 + e1 : mode === 'end' ? s1 - (s0 - c0 - e0) - e1 : mode === 'center' ? s1 / 2 + c0 - s0 / 2 : c0 / s0 * s1;
     let cx = place(p.x, cx0, fw, tw, b0.ex, b1.ex), cy = place(p.y, cy0, fh, th, b0.ey, b1.ey), k = 1, moved = false;
+    const want = [cx, cy];
     if (margin != null) {
       const m = margin, fitK = (e, s) => (s - 2 * m) / (2 * e);
       k = Math.min(1, ax === 'x' ? 1 : fitK(b1.ex, tw), ax === 'y' ? 1 : fitK(b1.ey, th));
@@ -67,7 +72,8 @@ function reflowLayers(layers, from, to, ax = null) {
       if (k < 1) scaleSize(L, k);
     }
     L.x = cx / tw; L.y = cy / th;
-    if (k < 1) setWarn(L, { kind: 'shrunk' }); else if (moved) setWarn(L, { kind: 'moved' }); else if (had) setWarn(L, had);
+    if (k < 1 || moved) setWarn(L, { kind: k < 1 ? 'shrunk' : 'moved', k, want, margin, prev });
+    else if (prev) setWarn(L, prev); else if (redo) delete L.warn; else if (had) setWarn(L, had);
   }
 }
 /* lays out again the layers of every face whose size changed since they were laid out; the faces changed */

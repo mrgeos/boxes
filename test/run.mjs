@@ -126,6 +126,13 @@ await test('перенос дизайна: смена размера и конс
   await run(`B.setDims(o.id, { w: 80, h: 150, d: 50 });`);
   const p = await run(`const [W, H] = B.faceMM(o, 'front'), L = o.faces.front.layers[0]; return { w: L.w * W, h: L.h * H, bottom: H - (L.y + L.h / 2) * H };`);
   assert.ok(Math.abs(p.w - 30) < .2 && Math.abs(p.h - 20) < .2 && Math.abs(p.bottom - 5) < .2, `плашка держит мм: ${JSON.stringify(p)}`);
+  // too narrow for the plate: it shrinks, marked; back to the first size it is whole again, unmarked
+  const geom = `const [W, H] = B.faceMM(o, 'front'), L = o.faces.front.layers[0]; return { w: L.w * W, h: L.h * H, bottom: H - (L.y + L.h / 2) * H, warn: L.warn?.kind };`;
+  await run(`B.setDims(o.id, { w: 30 });`);
+  assert.equal((await run(geom)).warn, 'shrunk', 'узкая грань: плашка уменьшена и помечена');
+  await run(`B.setDims(o.id, { w: 100, h: 200, d: 60 });`);
+  const q = await run(geom);
+  assert.ok(Math.abs(q.w - 30) < .2 && Math.abs(q.h - 20) < .2 && Math.abs(q.bottom - 5) < .2 && !q.warn, `плашка вернулась: ${JSON.stringify(q)}`);
   // the lid's flap is gone with the construction: its layer moves to the top, marked, and is in the check; undo brings it back
   await run(`B.setLidType(o.id, 'f0427'); o.faces.flap.layers.push(${shape('F', .3, .3)}); B.setLayerPin(o.id, 'flap', 'F', { size: 'scale' });`);
   const n = await run(`return ${count}`);
