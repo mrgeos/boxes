@@ -80,10 +80,10 @@ const UV_THICK = { normal: { label: 'Обычный', bump: '#b8b8b8', blur: 1 }
 const isFoil = e => e && e.startsWith('foil');
 const BLENDS = { 'source-over': 'Обычное', multiply: 'Умножение', screen: 'Осветление', overlay: 'Перекрытие' };
 const PRESETS = [
-  { id: 'window', label: 'Коробка с окном', type: 'box', dims: { w: 200, h: 50, d: 150 }, finish: 'matte', edge: '#e9e5dc', thick: .8, board: '#f4f1e9', window: { on: true, w: 136, d: 127, h: 23, r: 6 } },
-  { id: 'flap150', label: 'С клапаном 150×90×70', type: 'box', dims: { w: 150, h: 70, d: 90 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'flap', flapH: 24 } },
-  { id: 'flapwin', label: 'С клапаном и окном 230×140×60', type: 'box', dims: { w: 230, h: 60, d: 140 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'flap', flapH: 20 }, window: { on: true, place: 'lid', w: 150, d: 80, h: 12, r: 8, off: 0, corners: 'round' } },
-  { id: 'flap230', label: 'С клапаном 230×140×60', type: 'box', dims: { w: 230, h: 60, d: 140 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'flap', flapH: 20 } },
+  { id: 'window', label: 'Коробка с окном (мейлер FEFCO 0427) 200×150×50', type: 'box', dims: { w: 200, h: 50, d: 150 }, finish: 'matte', edge: '#e9e5dc', thick: .8, board: '#f4f1e9', lid: { type: 'f0427', flapH: 30 }, window: { on: true, place: 'lid', w: 136, d: 90, h: 12, r: 6, off: 0, corners: 'round' } },
+  { id: 'flap150', label: 'Мейлер FEFCO 0427 150×90×70, крафт', type: 'box', dims: { w: 150, h: 70, d: 90 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'f0427', flapH: 35 } },
+  { id: 'flapwin', label: 'Мейлер FEFCO 0427 с окном 230×140×60, крафт', type: 'box', dims: { w: 230, h: 60, d: 140 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'f0427', flapH: 30 }, window: { on: true, place: 'lid', w: 150, d: 80, h: 12, r: 8, off: 0, corners: 'round' } },
+  { id: 'flap230', label: 'Мейлер FEFCO 0427 230×140×60, крафт', type: 'box', dims: { w: 230, h: 60, d: 140 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, lid: { type: 'f0427', flapH: 30 } },
   { id: 'mailer', label: 'Мейлер FEFCO 0427', type: 'box', dims: { w: 260, h: 80, d: 170 }, finish: 'matte', edge: '#cdb08a', thick: 1.5, flute: 'E', lid: { type: 'f0427', flapH: 45 } },
   { id: 'lidbase', label: 'Крышка-дно', type: 'box', dims: { w: 220, h: 90, d: 160 }, finish: 'soft', edge: '#e2ddd4', thick: 1.5, lid: { type: 'telescope', lidH: 45 } },
   { id: 'shipping', label: 'Гофрокороб FEFCO 0201', type: 'box', dims: { w: 400, h: 300, d: 300 }, finish: 'kraft', edge: '#a87f50', thick: 4, flute: 'C', lid: { type: 'f0201' }, tape: 'clear' },
@@ -99,7 +99,7 @@ const PRESETS = [
   { id: 'cartonSTE', label: 'Пачка с прямой заправкой 90×25×120', type: 'box', dims: { w: 90, h: 120, d: 25 }, finish: 'matte', edge: '#ece8e0', thick: .5, board: '#f7f5f0', grain: .1, lid: { type: 'tuck', style: 'ste', flapH: 15 } },
   { id: 'cartonCrash', label: 'Пачка с дном-автоматом 100×70×160', type: 'box', dims: { w: 100, h: 160, d: 70 }, finish: 'matte', edge: '#ece8e0', thick: .6, board: '#f7f5f0', grain: .1, lid: { type: 'tuck', style: 'crash', flapH: 22 } },
   { id: 'cartonSnap', label: 'Пачка с дном-конвертом 80×80×120, крафт', type: 'box', dims: { w: 80, h: 120, d: 80 }, finish: 'matte', edge: '#b88d5c', thick: .6, board: '#c39460', grain: .45, whiteInside: false, lid: { type: 'tuck', style: 'snap', flapH: 22 } },
-  { id: 'product', label: 'Коробка для продукта', type: 'box', dims: { w: 70, h: 180, d: 70 }, finish: 'gloss', edge: '#ece8e0', thick: .6 },
+  { id: 'product', label: 'Пачка для продукта с прямой заправкой 70×70×180', type: 'box', dims: { w: 70, h: 180, d: 70 }, finish: 'gloss', edge: '#ece8e0', thick: .5, board: '#f7f5f0', grain: .1, lid: { type: 'tuck', style: 'ste', flapH: 20 } },
   { id: 'cake', label: 'Коробка для торта, белая', type: 'box', dims: { w: 220, h: 45, d: 220 }, finish: 'matte', edge: '#ece8e0', thick: .8, wallT: 6, board: '#f7f5f0', lid: { type: 'telescope', lidH: 120, mat: 'clear', fit: 'inside' } },
   { id: 'cakeKraft', label: 'Коробка для торта, крафт', type: 'box', dims: { w: 220, h: 45, d: 220 }, finish: 'matte', edge: '#b88d5c', thick: .8, wallT: 6, board: '#c39460', grain: .45, whiteInside: false, lid: { type: 'telescope', lidH: 120, mat: 'clear', fit: 'inside' } },
   { id: 'gift', label: 'Подарочная коробка', type: 'box', dims: { w: 200, h: 120, d: 200 }, finish: 'soft', edge: '#e2ddd4', thick: 1.5, lid: { type: 'telescope', lidH: 40 } },
@@ -112,7 +112,7 @@ const PRESETS = [
   { id: 'cakeSleeveHandle', label: 'Коробка для торта крафт с рукавом-ручкой', type: 'box', dims: { w: 260, h: 140, d: 260 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'telescope', lidH: 70 }, sleeve: { axis: 'x', w: 120, bg: '#f2a9b4', fin: 'matte', handle: { on: true, h: 80, r: 22, rf: 14, hole: { w: 70, h: 22, y: 44, r: 11 } } } },
   { id: 'matchbox', label: 'Коробка-пенал: лоток в рукаве', type: 'box', dims: { w: 180, h: 50, d: 120 }, finish: 'matte', edge: '#e2ddd4', thick: 1, board: '#f4f1e9', lid: { type: 'none' }, sleeve: { axis: 'x', w: 182, bg: '#1f3b57', fin: 'soft' } },
   { id: 'tray', label: 'Лоток без крышки', type: 'box', dims: { w: 240, h: 60, d: 160 }, finish: 'kraft', edge: '#a87f50', thick: 1.5, lid: { type: 'none' } },
-  { id: 'flat', label: 'Плоская (пицца, одежда)', type: 'box', dims: { w: 330, h: 45, d: 330 }, finish: 'kraft', edge: '#a87f50', thick: 3, flute: 'B' },
+  { id: 'flat', label: 'Коробка для пиццы (FEFCO 0427) 330×330×45', type: 'box', dims: { w: 330, h: 45, d: 330 }, finish: 'kraft', edge: '#a87f50', thick: 3, flute: 'B', lid: { type: 'f0427', flapH: 30 } },
   { id: 'tube', label: 'Тубус', type: 'tube', dims: { w: 80, h: 200, d: 80 }, finish: 'matte', edge: '#cdb08a' },
   { id: 'can', label: 'Низкая банка', type: 'tube', dims: { w: 100, h: 60, d: 100 }, finish: 'metal', edge: '#cccccc' },
   // paper cups: w = rim diameter, d = bottom diameter, h = height
