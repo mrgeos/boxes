@@ -533,7 +533,9 @@ function windowFields(o) {
     + rangeField(place === 'lid' ? 'Окно: глубина, мм' : 'Окно: на крышке, мм', 'window.d', 5, 800, 1)
     + (place !== 'lid' ? rangeField(place === 'back' ? 'Окно: на задней, мм' : flap ? 'Окно: на клапане, мм' : 'Окно: на передней, мм', 'window.h', 2, 800, 1)
                         : rangeField('Окно: сдвиг к переду, мм', 'window.off', -400, 400, 1))
-    + (o.window.corners !== 'square' ? rangeField('Окно: радиус, мм', 'window.r', 0, 60, .5) : '');
+    + (o.window.corners !== 'square' ? rangeField('Окно: радиус, мм', 'window.r', 0, 60, .5) : '')
+    // across the front edge the lid and the wall are not neighbours on the sheet (the lid hangs off the back): two cuts, two films
+    + (place === 'edge' ? `<p class="hint">${flap ? 'На крышке и клапане окно — один вырез через сгиб, а передняя стенка под клапаном вырезана отдельно: два куска плёнки.' : 'На крое это два выреза — в крышке и в передней стенке, у каждого своя плёнка: крышка крепится к задней стенке, и на листе её передний край не соседствует с передней стенкой. Одним вырезом окно проходит только через заднее ребро.'}</p>` : '');
 }
 /* the HDR row shows with «Свой HDR» picked */
 function paintHdr() { const s = state.scene; $('#envHdrRow').hidden = s.envMap !== 'hdr'; $('#envHdrName').textContent = s.envMap === 'hdr' ? (s.envHdr && assets[s.envHdr] ? 'панорама загружена' : 'выберите файл .hdr') : ''; }
