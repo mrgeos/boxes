@@ -5,7 +5,7 @@ import { activeObj, sel } from '../core/state.js';
 import { clearLid, ensureFaces, faceKeys, faceLabel, newImage, newText } from '../core/model.js';
 import { migrateSticker, stickerKey } from '../stickers/design.js';
 import { markFace, ui } from '../scene/renderer.js';
-import { hbOpen } from '../carriers/handle-box.js';
+import { hbOpens } from '../carriers/handle-box.js';
 import { STICKER_FINISH, STICKER_KIND, activeSticker, newSticker, stickerKeys, stickerSize, touchSticker } from '../stickers/placement.js';
 import { commit } from '../core/project.js';
 import { bindFields, placeField, presetField, rangeField } from './fields.js';
@@ -38,7 +38,7 @@ function sealSpot(o) {
   if (o.type === 'torte') return { face: 'lidWrap', x: .5, y: .97 };
   if (o.type !== 'box') return { face: faceKeys(o)[0], x: .5, y: .5 };
   if (lt === 'flap') return { face: 'flap', x: .5, y: 1 };
-  if (lt === 'handle') { const op = hbOpen(o); return op.right || op.left ? { face: op.right ? 'rightTop' : 'leftTop', x: .5, y: 1, rot: 0 } : { face: 'front', x: .5, y: .5 }; }
+  if (lt === 'handle') { const op = hbOpens(o); return op.right || op.left ? { face: op.right ? 'rightTop' : 'leftTop', x: .5, y: 1, rot: 0 } : { face: 'front', x: .5, y: .5 }; }
   if (lt === 'telescope') return clearLid(o) && o.lidFit === 'inside' ? { face: 'top', x: .5, y: .5 } : { face: 'lidFront', x: .5, y: 1 };
   if (lt === 'none') return { face: 'front', x: .5, y: .5 };
   return { face: 'front', x: .5, y: 0 };

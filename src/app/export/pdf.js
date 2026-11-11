@@ -9,6 +9,7 @@ import { grownPoly, paintBleed, printSheet, bleeds } from '../net/bleed.js';
 import { dielineData } from '../net/dieline.js';
 import { backNet } from '../net/net-side.js';
 import { panelPath } from '../net/net-view.js';
+import { bareRect, drawFlap, flapRect } from '../faces/flaps.js';
 
 /* A PDF written by hand (nothing to load: the file is a few kilobytes of text round the pictures). The page is the
    sheet with its bleed, in mm (1 pt = 25.4/72 mm): MediaBox and BleedBox are the sheet, TrimBox the net.
@@ -129,6 +130,18 @@ async function panelPictures(o, S, dpi, report) {
     }
     T.width = T.height = 0;
   }
+  // the flaps with no face of their own are drawn straight into their picture at the file's resolution (faces/flaps.js)
+  for (const p of n.panels.filter(q => q.flap)) {
+    // a glue flap's picture is only its printed strip, with no bleed
+    const [fx, fy, fw, fh] = flapRect(p), bb = p.flap.strip ? 0 : b, k = dpi / 25.4, X = fx - bb, Y = fy - bb, W = fw + 2 * bb, H = fh + 2 * bb;
+    const R = document.createElement('canvas'); R.width = Math.max(1, Math.round(W * k)); R.height = Math.max(1, Math.round(H * k));
+    const c = R.getContext('2d'); c.fillStyle = o.faces[p.flap.bgOf]?.bg || o.board || '#ffffff'; c.fillRect(0, 0, R.width, R.height);
+    c.translate(-X * k, -Y * k);
+    if (bb && bleeds(o, p)) paintBleed(c, o, { panels: [p] }, 0, 0, k, bb);
+    drawFlap(c, o, n, p, 0, 0, k);
+    pics.set(p, { w: R.width, h: R.height, data: await jpeg(R), x: X, y: Y, W, H });
+    R.width = R.height = 0;
+  }
   return { pics, dpis };
 }
 
@@ -140,14 +153,17 @@ function sideForm(pdf, o, sh, ocg, cs) {
   const images = new Map(); let im = 0;
   for (const [p, pic] of pics) { images.set(p, `Im${im++}`); pic.id = pdf.add(`<< /Type /XObject /Subtype /Image /Width ${pic.w} /Height ${pic.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode >>`, pic.data); }
   // the design: bleed rings of all panels first, then the panels, then the glue flaps
-  const colorOf = p => p.plain ? rgbOf(p.plain) : p.fold ? rgbOf(o.faces.front?.bg || o.board) : p.blank && !bagFilm(o) ? rgbOf(p.reverse ? o.faces.inside?.bg || o.board : o.board) : null;
+  const colorOf = p => p.plain ? rgbOf(p.plain) : p.fold ? rgbOf(o.faces.front?.bg || o.board) : p.blank && !bagFilm(o) && !p.noPrint ? rgbOf(o.board) : null;
   let design = '';
   const place = p => { const pic = pics.get(p); return `q ${n3(pic.W)} 0 0 ${n3(-pic.H)} ${n3(pic.x)} ${n3(pic.y + pic.H)} cm /${images.get(p)} Do Q `; };
   if (b) for (const p of n.panels) {
     if (!bleeds(o, p)) continue;
     const col = pics.has(p) ? null : colorOf(p);
     if (!pics.has(p) && !col) continue;
-    design += `q ${shapeOps(p, b)}${shapeOps(p, 0)}W* n ${col ? `${col} rg ${shapeOps(p, b)}f* ` : place(p)}Q\n`;
+    // the bare part of a glue flap off this panel is cut out of its bleed (even-odd: a rect inside the ring takes it away)
+    const bare = n.panels.filter(q => q.glueStrip?.of === p.key).map(q => { const [x, y, w, h] = bareRect(q), e = q.glueStrip.edge, d = Math.max(0, b - q.glueStrip.mm);
+      return d <= 0 ? '' : polyOps(e === 'bottom' ? [[x, y + h - d], [x + w, y + h - d], [x + w, y + h], [x, y + h]] : e === 'left' ? [[x, y], [x + d, y], [x + d, y + h], [x, y + h]] : e === 'right' ? [[x + w - d, y], [x + w, y], [x + w, y + h], [x + w - d, y + h]] : [[x, y], [x + w, y], [x + w, y + d], [x, y + d]]); }).join('');
+    design += `q ${shapeOps(p, b)}${shapeOps(p, 0)}${bare}W* n ${col ? `${col} rg ${shapeOps(p, b)}${shapeOps(p, 0)}${bare}f* ` : place(p)}Q\n`;
   }
   for (const p of n.panels) {
     const col = pics.has(p) ? null : colorOf(p);

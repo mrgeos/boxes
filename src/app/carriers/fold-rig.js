@@ -11,6 +11,7 @@ import { rigidT } from './rigid.js';
 import { hexDims, pyramidSides } from './shapes.js';
 import { nameCreases } from './fold-plan.js';
 import { rrectPts } from '../scene/geometry.js';
+import { bridgeMM, hbDims, hbOpens } from './handle-box.js';
 
 /* The «Сборка» slider shows the blank folding into the box. While it is below 100 % the object shows this rig instead
    of its model: every panel of the blank is a flat piece (the print on one side, the board's inner side on the other,
@@ -85,6 +86,36 @@ const casketFold = {
   topY: o => o.dims.h,
   hinge(par, ch, T) { return ch.key === 'tab' ? { ang: 90, a: -T, slide: -2 * T } : { ang: 90, a: 0 }; },
 };
+/* the cake box with a handle: a strip front, lid, back, floor (hung on the floor), glue flap on the floor's edge. The ends that
+   open have a long flap on the lid and a short one on the floor, which overlap (the lid's lies outside); the lid's flap has a
+   tongue that slants in through a slot in the floor's flap, and ears on its sides that fold in; dust flaps on the front and back
+   walls close first. The handle's leaves are cut out of the lid and stand up on the bridge. */
+const handleFold = {
+  T: o => hbDims(o).t,
+  roots: ps => [ps.findIndex(p => p.key === 'bottom')],
+  leaves: true,
+  hinge(par, ch, T, o) {
+    const k = ch.key;
+    if (ch.leaf) {
+      // up: standing on the bridge, leaning in until the tops meet (as buildHandle has it), the reverse of the board outside, so the leaf is
+      // moved out by its thickness; else it lies in the lid's opening, as it was cut
+      const half = Math.max(.5, bridgeMM(o) / 2), h = faceMM(o, ch.key)[1], lean = Math.asin(clamp((half - .5) / h, 0, .9)) * 180 / Math.PI;
+      return o.handle.up !== false ? { ang: -(90 + lean), a: T, d: -T, rank: 6 } : { ang: -1.15, a: 0, rank: 6 };
+    }
+    if (k === 'glue') return { ang: 90, a: -T, d: -T, slide: -2 * T };
+    // the end opens as the model's does (applyLid): the upper flap swings up 150° first, then the lower one down 90°, then the dust flaps 90°;
+    // the tongue straightens as the upper flap lifts
+    // only the end hbSides names opens: the side from the panel (dust, ear), the flap a tongue is on, or the key (rightTop …)
+    const side = ch.side || String(ch.on || k).replace(/(Top|Bottom)$/, ''), shut = (side === 'right' || side === 'left') && !hbOpens(o)[side];
+    const f = lid => shut ? 0 : clamp(lid / 125, 0, 1), a = lid => clamp(f(lid) / .4, 0, 1), c = lid => clamp((f(lid) - .3) / .3, 0, 1), b = lid => clamp((f(lid) - .6) / .4, 0, 1);
+    if (k === 'tab') return { ang: 15, a: -2 * T, opens: lid => 15 * Math.min(1, a(lid) / .15) };   // slants in behind the lower flap, through its slot
+    if (k === 'dust') return { ang: 90, a: -2.5 * T, d: -2 * T, rank: 4, opens: lid => 90 * b(lid) };
+    if (k === 'ear') return { ang: 90, a: -T, rank: 5.5 };   // folded in, against the inside of the wall
+    if (k === 'rightBottom' || k === 'leftBottom') return { ang: 90, a: -T, d: -T, rank: 5, opens: lid => 90 * c(lid) };   // inside the upper flap
+    if (k === 'rightTop' || k === 'leftTop') return { ang: 90, a: 0, rank: 6, opens: lid => 150 * a(lid) };
+    return { ang: 90, a: 0 };
+  },
+};
 /* the prism: the walls in a row hung on the bottom's front edge, each next one turned by the polygon's outer angle at its corner;
    the cap lid is a second blank, its walls hanging down from the top */
 const edgeAt = (pts, k) => { const n = pts.length, a = pts[(k + n - 1) % n], b = pts[k % n], c = pts[(k + 1) % n], u = [b[0] - a[0], b[1] - a[1]], v = [c[0] - b[0], c[1] - b[1]]; return Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v))))) * 180 / Math.PI; };
@@ -122,6 +153,7 @@ function foldFamily(o) {
   if (lt === 'f0201') return rscFold;
   if (lt === 'tuck' && isCarton(o)) return o.style === 'ste' || o.style === 'rte' ? cartonFold : lockFold;
   if (lt === 'casket') return casketFold;
+  if (lt === 'handle') return handleFold;
   if (lt === 'hexagon') return hexFold;
   if (lt === 'pyramid') return pyramidFold;
   if (['flat', 'flap', 'tuck', 'none'].includes(lt) || (lt === 'telescope' && !clearLid(o))) return boxFold;
@@ -215,6 +247,15 @@ function foldTree(o) {
   if (fam.split) panels = panels.flatMap(splitCreased);
   const pieces = panels.map(p => ({ key: p.key, joins: p.joins, pts: p.poly || rect(p) }));
   const { links } = dieLines(pieces);
+  // the handle's leaves lie in the lid's opening, creased to the bridge: panels hung on the lid by their creases
+  // (dieLines cannot find a crease that runs inside a panel; the legs of a leaf share one line)
+  const lid = panels.findIndex(p => p.key === 'top');
+  if (fam.leaves && net.leaves && lid >= 0) for (const l of net.leaves) {
+    const xs = l.cut.map(v => v[0]), ys = l.cut.map(v => v[1]), x = Math.min(...xs), y = Math.min(...ys), cx = l.creases.flatMap(c => [c[0], c[2]]), cy = l.creases[0][1];
+    panels.push({ key: l.key, leaf: true, poly: l.cut, holes: l.hole ? [l.hole] : [], x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y });
+    pieces.push({ key: l.key, pts: l.cut });
+    links.push({ a: lid, b: panels.length - 1, seg: [Math.min(...cx), cy, Math.max(...cx), cy] });
+  }
   // one crease between two panels: the longest shared edge
   const pair = new Map();
   for (const l of links) { const k = l.a + '-' + l.b, len = Math.hypot(l.seg[2] - l.seg[0], l.seg[3] - l.seg[1]); if (!pair.has(k) || len > pair.get(k).len) pair.set(k, { ...l, len }); }
@@ -233,7 +274,7 @@ function foldTree(o) {
     n.ox = (n.seg[0] + n.seg[2]) / 2; n.oy = (n.seg[1] + n.seg[3]) / 2;
     const pts = pieces[n.i].pts; n.mx = pts.reduce((q, v) => q + v[0], 0) / pts.length; n.my = pts.reduce((q, v) => q + v[1], 0) / pts.length;
     const h = fam.hinge(panels[par.i], p, T, o, { dx: Math.sign(n.mx - n.ox), dy: Math.sign(n.my - n.oy) }, n.depth);
-    n.ang0 = h.ang; n.from0 = h.from ?? 0; n.a = h.a; n.d = h.d ?? 0; n.slide = h.slide ?? 0; n.rank = h.rank ?? par.rank + 1;
+    n.ang0 = h.ang; n.from0 = h.from ?? 0; n.a = h.a; n.d = h.d ?? 0; n.slide = h.slide ?? 0; n.rank = h.rank ?? par.rank + 1; n.opens = h.opens;
   }
   // a crease is told by its two panels and its place among those with the same two (top to bottom, left to right)
   const groups = new Map();
@@ -302,12 +343,16 @@ function buildRig(o, rt) {
     const pts = pieces[n.i].pts, outline = pts, own = (p.holes || []).slice(), holes = own.slice(), filmed = [];
     // windows lying wholly in the panel are cut out of it (one running over its edge, or over a crease, stays solid here)
     for (const q of wins) for (const hl of q.polys ? q.polys.map(pl => pl.map(w => [w.x, w.y])) : [rrectPts(q.x + q.w / 2, q.y + q.h / 2, q.w, q.h, q.radii?.[0] ?? 0).map(w => [w.x, w.y])]) {
-      if (p.key !== 'tab' && hl.every(w => w[0] > p.x + .3 && w[0] < p.x + p.w - .3 && w[1] > p.y + .3 && w[1] < p.y + p.h - .3) && (!p.poly || hl.every(w => inside(p.poly, w)))) { holes.push(hl); filmed.push(hl); }
+      if (p.key !== 'tab' && !p.leaf && hl.every(w => w[0] > p.x + .3 && w[0] < p.x + p.w - .3 && w[1] > p.y + .3 && w[1] < p.y + p.h - .3) && (!p.poly || hl.every(w => inside(p.poly, w)))) { holes.push(hl); filmed.push(hl); }
     }
-    const face = rt.faces[p.key], hasFace = !!face && p.key !== 'fold' && p.key !== 'tab';
-    const backKey = p.key === 'bottom' ? 'insideBottom' : p.key === 'top' ? 'inside' : null, back = backKey && !p.crop && (p.q ?? 0) === 0 && rt.faces[backKey];
-    mesh(n.content, flatGeo(outline, holes, ox, oy, 0, false, hasFace ? (X, Y) => faceUV(p, X, Y) : null), hasFace ? face.mat : rt.foldMat, { face: hasFace ? p.key : null });
-    mesh(n.content, flatGeo(outline, holes, ox, oy, -T, true, back ? (X, Y) => [(X - p.x) / p.w, (Y - p.y) / p.h] : null), back ? back.mat : rt.innerMat, { face: back ? backKey : null });
+    // a leaf of the handle: its face is printed on the back of the sheet (the sheet's X mirrored: the leaf's own x runs the other
+    // way), and the lid's print, where the leaf lay, is on the side towards the other leaf
+    const lidP = p.leaf && panels.find(q => q.key === 'top'), [lw, lh] = p.leaf ? faceMM(o, p.key) : [1, 1], sz = p.key === 'handleFront' ? 1 : -1;
+    const leafUV = p.leaf && ((X, Y) => { const cx = lidP.x + lidP.w / 2, cy = lidP.y + lidP.h / 2, hf = Math.max(.5, bridgeMM(o) / 2); return [(sz * (cx - X)) / lw + .5, (sz > 0 ? cy - hf - Y : Y - cy - hf) / lh]; });
+    const face = p.leaf ? rt.faces.top : p.flap ? rt.flaps : rt.faces[p.key], hasFace = !!face && p.key !== 'fold' && p.key !== 'tab';
+    const backKey = p.leaf ? p.key : p.key === 'bottom' ? 'insideBottom' : p.key === 'top' ? 'inside' : null, back = backKey && (p.leaf || !p.crop && (p.q ?? 0) === 0) && rt.faces[backKey];
+    mesh(n.content, flatGeo(outline, holes, ox, oy, 0, false, hasFace ? p.flap ? (X, Y) => [X / rt.flaps.W, 1 - Y / rt.flaps.H] : (X, Y) => faceUV(p.leaf ? lidP : p, X, Y) : null), hasFace ? face.mat : rt.foldMat, { face: p.leaf ? 'top' : hasFace && !p.flap ? p.key : null });
+    mesh(n.content, flatGeo(outline, holes, ox, oy, -T, true, back ? (p.leaf ? leafUV : (X, Y) => [(X - p.x) / p.w, (Y - p.y) / p.h]) : null), back ? back.mat : rt.innerMat, { face: back ? backKey : null });
     // edges: every side of the outline and the holes but where a crease runs
     const creases = [...(par ? [n.seg] : []), ...nodes.filter(k => k.parent === n).map(k => k.seg)];
     const v = [];
@@ -354,7 +399,7 @@ function poseRig(rig, t) {
     let prog;
     if (rig.steps) prog = sm(clamp((ft - n.sc.s) / n.sc.len, 0, 1));
     else prog = sm(clamp((ft - (n.rank - 1) * (1 - SPAN) / Math.max(1, D - 1)) / SPAN, 0, 1));
-    n.rot.quaternion.setFromAxisAngle(n.axis, n.sign * (n.from + (n.ang - n.from) * prog - (n.lid ? rad(rig.lid) * open * prog : 0)));
+    n.rot.quaternion.setFromAxisAngle(n.axis, n.sign * (n.from + (n.ang - n.from) * prog - (n.lid ? rad(rig.lid) * open * prog : 0) - (n.opens ? rad(n.opens(rig.lid)) * open * prog : 0)));
     // a tab that is pressed on: it hovers off its place while it comes, and settles at the end of its step
     if (n.slide) n.content.position.y = (n.a + n.slide * sm(clamp(prog / .35, 0, 1)) * (1 - sm(clamp((prog - .6) / .4, 0, 1)))) * S;
   }

@@ -56,7 +56,7 @@ function backNet(o, n) {
     m.key = ok ? bk : null;
     // the inside's picture lies on the paper's other side: turned over left to right, it is turned half a round on the sheet
     // (as the model assembles it: net/../fold-rig.js); the piece of the face a panel shows stays the same
-    if (ok) { m.q = (((p.q ?? (p.rot ? 2 : 0)) + 2) % 4 + 4) % 4; delete m.rot; } else { m.plain = plain; delete m.crop; }
+    if (ok) { m.q = (((p.q ?? (p.rot ? 2 : 0)) + 2) % 4 + 4) % 4; delete m.rot; } else { m.plain = plain; delete m.crop; delete m.flap; }
     if (p.poly) m.poly = mp(W, p.poly);
     if (p.holes) m.holes = p.holes.map(h => mp(W, h));
     if (p.creases) m.creases = p.creases.map(l => ml(W, l));
@@ -64,6 +64,8 @@ function backNet(o, n) {
     if (p.cx != null) { m.cx = W - p.cx; m.ang = -p.ang; }
     return m;
   });
+  // a handle box's leaves: their outside is the back of the sheet (carriers/handle-box.js: hbNet)
+  if (n.leafBack) panels.push(...n.leafBack);
   const out = { ...n, panels, back: true, plain, windows: n.part ? [] : mirrorWindows(netWindows(o, n), W) };
   if (n.tabs) out.tabs = n.tabs.map(t => ({ ...t, pts: mp(W, t.pts), ...(t.glue ? { glue: mp(W, t.glue) } : {}), ...(t.creases ? { creases: t.creases.map(l => ml(W, l)) } : {}) }));
   if (n.slots) out.slots = n.slots.map(l => ml(W, l));

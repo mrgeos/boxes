@@ -7,9 +7,9 @@
    the same two: `parent>child#n`, so it stays the same when the sizes change. This file holds data only (no three.js). */
 const FLIP_MS = 500, DEFAULT_FOLD_MS = 1350, STEP_MS = 700, MIN_MS = 100, MAX_MS = 20000;
 const LABEL = { front: 'Перед', back: 'Зад', left: 'Левый бок', right: 'Правый бок', bottom: 'Дно', top: 'Крышка', flap: 'Язычок', tab: 'Клапан', fold: 'Загиб', lock: 'Замок',
-  ear: 'Ушко', dust: 'Пылевой клапан', iflap: 'Боковой клапан', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', earLeft: 'Левое ушко', earRight: 'Правое ушко', gtri: 'Склейка', wrap: 'Стенка', lidWrap: 'Крышка: стенка' };
+  ear: 'Ушко', dust: 'Пылевой клапан', iflap: 'Боковой клапан', lidFront: 'Крышка: перед', lidBack: 'Крышка: зад', lidLeft: 'Крышка: левый бок', lidRight: 'Крышка: правый бок', earLeft: 'Левое ушко', earRight: 'Правое ушко', gtri: 'Склейка', glue: 'Клеевой клапан', handleFront: 'Ручка: перед', handleBack: 'Ручка: зад', rightTop: 'Правый торец: верх', rightBottom: 'Правый торец: низ', leftTop: 'Левый торец: верх', leftBottom: 'Левый торец: низ', wrap: 'Стенка', lidWrap: 'Крышка: стенка' };
 const STEP = { front: 'стенки', back: 'стенки', left: 'стенки', right: 'стенки', bottom: 'дно', top: 'крышка', flap: 'язычок', tab: 'клапаны', fold: 'загибы', lock: 'замки', ear: 'ушки',
-  dust: 'пылевые клапаны', iflap: 'боковые клапаны', lidFront: 'стенки крышки', lidBack: 'стенки крышки', lidLeft: 'стенки крышки', lidRight: 'стенки крышки', earLeft: 'ушки', earRight: 'ушки', gtri: 'склеено заранее', wrap: 'стенки', lidWrap: 'стенки крышки' };
+  dust: 'пылевые клапаны', iflap: 'боковые клапаны', lidFront: 'стенки крышки', lidBack: 'стенки крышки', lidLeft: 'стенки крышки', lidRight: 'стенки крышки', earLeft: 'ушки', earRight: 'ушки', gtri: 'склеено заранее', glue: 'клеевой клапан', handleFront: 'ручка', handleBack: 'ручка', rightTop: 'торцы', rightBottom: 'торцы', leftTop: 'торцы', leftBottom: 'торцы', wrap: 'стенки', lidWrap: 'стенки крышки' };
 const label = k => LABEL[k] || (/^side\d+$/.test(k) ? `Грань ${k.slice(4)}` : k);
 const creaseLabel = c => `${label(c.key)} ↔ ${label(c.parentKey)}`;
 /* the names of the creases, those that read alike told apart: by the side of the parent panel they lie on, as the net shows it

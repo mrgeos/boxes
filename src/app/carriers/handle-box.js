@@ -8,6 +8,7 @@ import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/
 import { netWindows, winMM } from './box.js';
 import { addCake } from './cake.js';
 import { placeModel } from '../core/models3d.js';
+import { ensureFlaps } from '../faces/flaps.js';
 
 const HANDLE_KEYS = ['handleFront', 'handleBack'];
 const HANDLE_SHAPES = { arch: 'Арка', rect: 'Прямоугольная с прорезью', photo: 'Рамка с широкой проймой' };
@@ -160,36 +161,68 @@ function buildHandle(o, rt, pivot, T, zc, addG, lidMat = null) {
    cake slides out through the open end. */
 const HB_SIDES = { right: 'Справа', left: 'Слева', both: 'С обеих сторон' };
 const TRAY_FIN = { board: 'Картон (с печатью)', gold: 'Золото', silver: 'Серебро' };
-const hbOpen = o => { const s = o.hbSides || 'right'; return { right: s !== 'left', left: s !== 'right' }; };
+/* both ends close with tuck flaps, as on a real cake box; hbSides only says which end the «Открыть торец» slider opens */
+const hbOpen = () => ({ right: true, left: true });
+const hbOpens = o => { const s = o.hbSides || 'right'; return { right: s !== 'left', left: s !== 'right' }; };
 const HB_END_KEYS = ['rightTop', 'rightBottom', 'leftTop', 'leftBottom'];
+/* the end's settings (o.hbEnd) with defaults: the upper flap's and the lower flap's lengths (fractions of the height), the
+   tongue's width (fraction of the depth) and height (mm), ears on the upper flap's sides, the corner radius (mm) */
+const defaultHbEnd = () => ({ top: .77, bottom: .4, tongueW: .5, tongueH: 18, ears: true, r: 6, glue: 3 });
 function hbDims(o) {
-  const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4);
-  return { w, h, d, t, dl: Math.round(clamp(d * .3, 15, h * .9)), tw: clamp(d * .22, 12, 45), th: clamp(h * .1, 6, 16), slot: 3,
+  const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4), E = { ...defaultHbEnd(), ...o.hbEnd };
+  // the flaps overlap by at least 10 mm: the lower one is lengthened when they would not
+  let top = clamp(E.top, .3, .95), bottom = clamp(E.bottom, .1, .9);
+  if (top + bottom < 1 + 10 / h) { bottom = Math.min(.9, 1 + 10 / h - top); if (top + bottom < 1 + 10 / h) top = Math.min(.95, 1 + 10 / h - bottom); }
+  const dl = Math.round(clamp(d * .3, 15, h * .9)), tl = top * h, bl = bottom * h, r = clamp(E.r, 0, 30);
+  const tw = clamp(E.tongueW * d, 12, Math.max(12, d - 2 * (r + 5))), th = clamp(E.tongueH, 4, tl * .3);
+  // ears on the upper flap's sides, beyond the dust flaps: width off the flap, length along it, distance from its free end
+  const room = tl - dl - 4 - (r + 1), earL = Math.min(47, tl * .3, room), earW = Math.min(20, dl * .4);
+  const ears = E.ears !== false && earL >= 8 && earW >= 3, earG = ears ? Math.min(tl * .22, room - earL) + r + 1 : 0;
+  return { w, h, d, t, dl, top, bottom, tl, bl, ovl: tl + bl - h, tw, th, r, ears, earL, earW, earG, glue: clamp(E.glue ?? 3, 0, 10),
     trW: Math.max(10, w - 2 * t - 2), trD: Math.max(10, d - 2 * t - 2), trT: 1.5 };
+}
+/* a rectangle's outline (net mm) with its four corners (top left, top right, bottom right, bottom left) rounded by r[i] */
+function cornerPoly(x0, y0, x1, y1, r) {
+  const P = Math.PI, arc = (cx, cy, rr, a0, a1, px, py) => rr > .01 ? arcPts(cx, cy, rr, a0, a1, 6) : [[px, py]];
+  return [...arc(x0 + r[0], y0 + r[0], r[0], P, P * 1.5, x0, y0), ...arc(x1 - r[1], y0 + r[1], r[1], P * 1.5, P * 2, x1, y0), ...arc(x1 - r[2], y1 - r[2], r[2], 0, P / 2, x1, y1), ...arc(x0 + r[3], y1 - r[3], r[3], P / 2, P, x0, y1)];
 }
 /* the die: a vertical strip front, lid, back, floor, glue flap; the right end's parts on the sheet's left
    (the sheet is seen from outside, so +x of the box is on the left), the left end's parts on the right */
 function hbNet(o) {
-  const B = hbDims(o), { w, h, d, dl } = B, op = hbOpen(o), keys = faceKeys(o), half = h / 2;
-  const XL = op.right ? Math.max(half, dl) : d, XR = op.left ? Math.max(half, dl) : d, x0 = XL + w;
+  const B = hbDims(o), { w, h, d, dl, tl, bl, r } = B, keys = faceKeys(o);
+  const XL = Math.max(tl + B.th, dl), XR = XL, x0 = XL + w;
   const panels = [
     { key: 'front', x: XL, y: 0, w, h, rot: true }, { key: 'top', x: XL, y: h, w, h: d, rot: true },
     { key: 'back', x: XL, y: h + d, w, h }, { key: 'bottom', x: XL, y: 2 * h + d, w, h: d, rot: true },
-    { key: 'glue', blank: 'клеевой клапан', x: XL, y: 2 * h + 2 * d, w, h: 12 }];
+    { key: 'glue', blank: 'зона склейки — без краски и лака', noPrint: true, x: XL, y: 2 * h + 2 * d, w, h: 12,
+      // the print runs on past the crease onto the glue flap by B.glue mm, so no white line shows at the seam; the rest is bare
+      glueStrip: { of: 'bottom', edge: 'top', mm: Math.min(B.glue, 12) }, ...(B.glue > 0 ? { flap: { bgOf: 'bottom', strip: { mm: Math.min(B.glue, 12), edge: 'top' } } } : {}) }];
   const tabs = [], slots = [];
   for (const side of ['right', 'left']) {
     const R = side === 'right', ex = R ? XL : x0, out = R ? -1 : 1;   // the strip edge on this side, and the way out
-    if (!op[side]) { panels.push({ key: side, x: R ? XL - d : x0, y: h + d, w: d, h }); continue; }
-    panels.push({ key: side + 'Top', x: R ? XL - half : x0, y: h, w: half, h: d, q: R ? 1 : 3 },
-      { key: side + 'Bottom', x: R ? XL - half : x0, y: 2 * h + d, w: half, h: d, q: R ? 3 : 1 });
-    for (const y of [0, h + d]) panels.push({ key: 'dust', blank: 'клапан', x: R ? XL - dl : x0, y, w: dl, h });
-    // tongue on the upper flap's free edge, slot near the lower flap's free edge
-    const fe = ex + out * half, cy = h + d / 2, cyb = 2 * h + d + d / 2, ins = B.th * .35;
-    tabs.push({ base: [fe, cy - B.tw / 2, fe, cy + B.tw / 2], pts: [[fe, cy - B.tw / 2], [fe + out * B.th, cy - B.tw / 2 + ins], [fe + out * B.th, cy + B.tw / 2 - ins], [fe, cy + B.tw / 2]] });
-    slots.push([fe - out * B.slot, cyb - B.tw / 2 - 1, fe - out * B.slot, cyb + B.tw / 2 + 1]);
+    // a flap lies from the strip's edge outwards: its free end has rounded corners (top left, top right, bottom right, bottom left)
+    const free = hang => R ? [hang, 0, 0, hang] : [0, hang, hang, 0], fx = len => R ? ex - len : ex;
+    // the upper flap on the lid, the lower one on the floor (the upper lies over the lower); `joins` keeps neighbours that only touch from being creases
+    panels.push({ key: side + 'Top', x: fx(tl), y: h, w: tl, h: d, q: R ? 1 : 3, joins: ['top', 'tab', 'ear'], poly: cornerPoly(fx(tl), h, fx(tl) + tl, h + d, free(r)) },
+      { key: side + 'Bottom', x: fx(bl), y: 2 * h + d, w: bl, h: d, q: R ? 3 : 1, joins: ['bottom'], poly: cornerPoly(fx(bl), 2 * h + d, fx(bl) + bl, 2 * h + 2 * d, free(r)) });
+    // the dust flaps: on the front and on the back wall
+    for (const [y, wall] of [[0, 'front'], [h + d, 'back']]) panels.push({ key: 'dust', side, flap: { bgOf: wall }, blank: 'клапан', x: fx(dl), y, w: dl, h, joins: [wall], poly: cornerPoly(fx(dl), y, fx(dl) + dl, y + h, free(Math.min(r, dl / 3))) });
+    // the ears on the upper flap's sides, beyond the dust flaps, folded in
+    if (B.ears) {
+      const er = Math.min(r, B.earW / 2.5, B.earL / 2.5), ex0 = R ? ex - tl + B.earG : ex + tl - B.earG - B.earL;
+      for (const up of [true, false]) {
+        const y0 = up ? h - B.earW : h + d, y1 = up ? h : h + d + B.earW;
+        panels.push({ key: 'ear', side, flap: { bgOf: side + 'Top' }, blank: 'ушко', x: ex0, y: y0, w: B.earL, h: B.earW, joins: [side + 'Top'], poly: cornerPoly(ex0, y0, ex0 + B.earL, y1, up ? [er, er, 0, 0] : [0, 0, er, er]) });
+      }
+    }
+    // the tongue on the upper flap's free edge, the slot in the lower flap as far from its free edge as the flaps overlap
+    const fe = ex + out * tl, cy = h + d / 2, cyb = 2 * h + d + d / 2, ins = B.th * .35, sx = ex + out * bl - out * B.ovl;
+    tabs.push({ on: side + 'Top', base: [fe, cy - B.tw / 2, fe, cy + B.tw / 2], pts: [[fe, cy - B.tw / 2], [fe + out * B.th, cy - B.tw / 2 + ins], [fe + out * B.th, cy + B.tw / 2 - ins], [fe, cy + B.tw / 2]] });
+    slots.push([sx, cyb - B.tw / 2 - 1, sx, cyb + B.tw / 2 + 1]);
   }
   let W = XL + w + XR, H = 2 * h + 2 * d + 12;
-  const gap = 15, y = H + gap; let x = 0, rowH = 0;
+  // the separate parts lie well clear of the sheet: the tray is not cut from it
+  const gap = 15, y = H + 30; let x = 0, rowH = 0;
   const part = (key, pw, ph, extra = {}) => { panels.push({ key, x, y, w: pw, h: ph, part: true, ...extra(x, y) }); x += pw + gap; rowH = Math.max(rowH, ph); };
   const leaves = lidLeaves(o);
   // without a bridge the leaves are separate parts
@@ -197,39 +230,38 @@ function hbNet(o) {
     const [pw, ph] = faceMM(o, k), sp = handleShape(pw, ph, o.handle).extractPoints(10);
     part(k, pw, ph, (px, py) => { const m = v => [px + pw / 2 + v.x, py + ph / 2 - v.y]; return { poly: sp.shape.map(m), holes: sp.holes.map(hl => hl.map(m)) }; });
   }
-  part('tray', B.trW, B.trD, () => ({}));
-  let sheetLeaves = null;
-  if (leaves) {
-    // the leaves lie in the lid (turned 180° on the sheet: +x of the box on the left); their faces are printed on
-    // the back of the sheet, drawn here as the back is seen: the lid mirrored, beside the tray
-    const onLid = ([lx, ly]) => [XL + w / 2 - lx, h + d / 2 + ly], half = bridgeMM(o) / 2;
-    sheetLeaves = leaves.map(l => ({ key: l.key, outer: l.outer.map(onLid), cut: l.cut.map(onLid), hole: l.hole && l.hole.map(onLid), creases: l.creases.map(([a, b, c, e]) => [...onLid([a, b]), ...onLid([c, e])]) }));
-    const bx = x, by = y, back = ([lx, ly]) => [bx + w / 2 + lx, by + d / 2 + ly];
-    panels.push({ key: 'reverse', blank: 'оборот крышки', part: true, reverse: true, x: bx, y: by, w, h: d });
-    for (const l of leaves) {
-      const front = l.sz > 0;
-      panels.push({ key: l.key, part: true, reverse: true, x: bx + w / 2 - l.w / 2, y: front ? by + d / 2 - half - l.h : by + d / 2 + half, w: l.w, h: l.h, q: front ? 0 : 2,
-        poly: l.cut.map(back), holes: l.hole ? [l.hole.map(back)] : [] });
-    }
-    x += w + gap; rowH = Math.max(rowH, d);
-  }
+  part('tray', B.trW, B.trD, () => ({ note: 'отдельная деталь' }));
+  // the leaves lie in the lid (turned 180° on the sheet: +x of the box on the left); the lid's own print is on their other side
+  const onLid = ([lx, ly]) => [XL + w / 2 - lx, h + d / 2 + ly];
+  const sheetLeaves = leaves && leaves.map(l => ({ key: l.key, outer: l.outer.map(onLid), cut: l.cut.map(onLid), hole: l.hole && l.hole.map(onLid), creases: l.creases.map(([a, b, c, e]) => [...onLid([a, b]), ...onLid([c, e])]) }));
   W = Math.max(W, x - gap); H = y + rowH;
-  return { W, H, panels, hb: true, tabs, slots, leaves: sheetLeaves };
+  // the leaves on the back of the sheet, where they lie in the lid (the sheet turned over: x mirrored about the sheet's
+  // middle): what is printed there is the outside of the standing handle, so these panels carry the handle's faces
+  const cx = W - XL - w / 2, half = bridgeMM(o) / 2, onBack = ([lx, ly]) => [cx + lx, h + d / 2 + ly];
+  const leafBack = leaves && leaves.map(l => ({ key: l.key, x: cx - l.w / 2, y: l.sz > 0 ? h + d / 2 - half - l.h : h + d / 2 + half, w: l.w, h: l.h,
+    q: l.sz > 0 ? 0 : 2, poly: l.cut.map(onBack), holes: l.hole ? [l.hole.map(onBack)] : [] }));
+  return { W, H, panels, hb: true, tabs, slots, leaves: sheetLeaves, leafBack };
 }
 /* the handle box's die in SVG: an edge two panels share is a crease, any other edge is cut (except the
    tongues' bases, which crease); tongues, slots, windows and the separate parts */
 function handleBoxSVG(o, n, f, label) {
   const line = (l, st) => `<line x1="${f(l[0])}" y1="${f(l[1])}" x2="${f(l[2])}" y2="${f(l[3])}" ${st}/>`;
   const CUT = 'stroke="#00a0e3" stroke-width="0.3"', FOLD = 'stroke="#e6007e" stroke-width="0.3" stroke-dasharray="2 1.2"';
-  const ps = n.panels.filter(p => !p.part), edges = p => [[p.x, p.y, p.x + p.w, p.y], [p.x, p.y + p.h, p.x + p.w, p.y + p.h], [p.x, p.y, p.x, p.y + p.h], [p.x + p.w, p.y, p.x + p.w, p.y + p.h]];
-  const cut = [], fold = new Map(), near = (a, b) => Math.abs(a - b) < 1e-6;
+  // a panel's outline as segments (a rounded one from its points); an edge two panels share is a crease only when they are joined
+  const ps = n.panels.filter(p => !p.part), edges = p => p.poly ? p.poly.map((a, i) => [...a, ...p.poly[(i + 1) % p.poly.length]]) : [[p.x, p.y, p.x + p.w, p.y], [p.x, p.y + p.h, p.x + p.w, p.y + p.h], [p.x, p.y, p.x, p.y + p.h], [p.x + p.w, p.y, p.x + p.w, p.y + p.h]];
+  const cut = [], fold = new Map(), near = (a, b) => Math.abs(a - b) < 1e-6, joined = (p, q) => (!p.joins || p.joins.includes(q.key)) && (!q.joins || q.joins.includes(p.key));
   for (const p of ps) for (const [x1, y1, x2, y2] of edges(p)) {
-    const hor = near(y1, y2); let parts = [[hor ? x1 : y1, hor ? x2 : y2]];
+    const hor = near(y1, y2);
+    if (!hor && !near(x1, x2)) { cut.push([x1, y1, x2, y2]); continue; }   // a corner's arc
+    let parts = [[hor ? Math.min(x1, x2) : Math.min(y1, y2), hor ? Math.max(x1, x2) : Math.max(y1, y2)]];
     const sub = (s0, s1) => { parts = parts.flatMap(([u, v]) => [[u, Math.min(v, s0)], [Math.max(u, s1), v]].filter(([a, b]) => b - a > .01)); };
     for (const q of ps) if (q !== p) for (const [a1, b1, a2, b2] of edges(q)) {
       if (hor ? near(b1, b2) && near(b1, y1) : near(a1, a2) && near(a1, x1)) {
-        const s0 = Math.max(hor ? x1 : y1, hor ? a1 : b1), s1 = Math.min(hor ? x2 : y2, hor ? a2 : b2);
-        if (s1 - s0 > .01) { fold.set(`${hor}|${s0.toFixed(2)}|${s1.toFixed(2)}|${(hor ? y1 : x1).toFixed(2)}`, hor ? [s0, y1, s1, y1] : [x1, s0, x1, s1]); sub(s0, s1); }
+        const s0 = Math.max(hor ? Math.min(x1, x2) : Math.min(y1, y2), hor ? Math.min(a1, a2) : Math.min(b1, b2)), s1 = Math.min(hor ? Math.max(x1, x2) : Math.max(y1, y2), hor ? Math.max(a1, a2) : Math.max(b1, b2));
+        if (s1 - s0 > .01) {
+          if (joined(p, q)) { fold.set(`${hor}|${s0.toFixed(2)}|${s1.toFixed(2)}|${(hor ? y1 : x1).toFixed(2)}`, hor ? [s0, y1, s1, y1] : [x1, s0, x1, s1]); sub(s0, s1); }
+          else if (ps.indexOf(q) < ps.indexOf(p)) sub(s0, s1);   // a cut two panels share is drawn once
+        }
       }
     }
     for (const t of n.tabs) { const [bx, b0, , b1] = t.base; if (!hor && near(bx, x1)) { fold.set('tab' + bx + b0, [bx, b0, bx, b1]); sub(b0, b1); } }
@@ -256,20 +288,16 @@ function handleBoxSVG(o, n, f, label) {
     body += `<rect x="${f(q.x)}" y="${f(q.y)}" width="${f(q.w)}" height="${f(q.h)}" rx="${f(Math.min(q.radii[0], q.w / 2, q.h / 2))}" fill="none" ${CUT}/>`;
   }
   const poly = q => `<polygon points="${q.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${CUT}/>`;
-  for (const p of n.panels.filter(p => p.part && !p.reverse)) body += p.poly ? poly(p.poly) + (p.holes || []).map(poly).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" ${CUT}/>`;
-  // the back of the sheet where the leaves are printed: not cut, only a guide for the print on the reverse
-  const GUIDE = 'stroke="#9a9a9a" stroke-width="0.3" stroke-dasharray="1.5 1.5"';
-  for (const p of n.panels.filter(p => p.reverse)) body += p.poly ? `<polygon points="${p.poly.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${GUIDE}/>` + (p.holes || []).map(h => `<polygon points="${h.map(v => v.map(f).join(',')).join(' ')}" fill="none" ${GUIDE}/>`).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" ${GUIDE}/>`;
+  for (const p of n.panels.filter(p => p.part)) body += p.poly ? poly(p.poly) + (p.holes || []).map(poly).join('') : `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="none" ${CUT}/>`;
   for (const p of n.panels) {
-    if (p.reverse && p.blank) body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + 6)}" font-family="Arial, sans-serif" font-size="4" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle">${esc(p.blank.toUpperCase())} — ВИД С ОБОРОТА</text>`;
-    else if (p.blank) { if (p.blank.length) body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.max(2.5, Math.min(p.w, p.h) * .12))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle"${p.h > p.w ? ` transform="rotate(-90 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''}>${esc(p.blank.toUpperCase())}</text>`; }
+    if (p.blank) { if (p.blank.length) body += `<text x="${f(p.x + p.w / 2)}" y="${f(p.y + p.h / 2)}" font-family="Arial, sans-serif" font-size="${f(Math.max(2.5, Math.min(p.w, p.h) * .12))}" fill="#9a9a9a" text-anchor="middle" dominant-baseline="middle"${p.h > p.w ? ` transform="rotate(-90 ${f(p.x + p.w / 2)} ${f(p.y + p.h / 2)})"` : ''}>${esc(p.blank.toUpperCase())}</text>`; }
     else body += label(p);
   }
   return body;
 }
 function buildHandleBox(o, rt, { addG, add, film }) {
-  const B = hbDims(o), W = B.w * S, H = B.h * S, D = B.d * S, T = B.t * S, P = Math.PI, g = rt.group, F = k => rt.faces[k].mat, op = hbOpen(o);
-  rt.hb = { flaps: [], dust: [], tongues: [], tray: null, dir: op.right ? 1 : -1 };
+  const B = hbDims(o), W = B.w * S, H = B.h * S, D = B.d * S, T = B.t * S, P = Math.PI, g = rt.group, F = k => rt.faces[k].mat;
+  rt.hb = { flaps: [], dust: [], tongues: [], tray: null, dir: hbOpens(o).right ? 1 : -1 };
   rt.lidPivot = rt.lidGroup = null;
   // front wall, with its window
   const J = joinWinMM(o), fwn = !J && frontWinMM(o), fHole = fwn && rrectPts(0, fwn.cy * S - H / 2, fwn.ww * S, fwn.wh * S, fwn.r * S);
@@ -330,32 +358,67 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   else add(lg, W, T, rt.edgeMat, [0, -T / 2, D / 2], [0, 0, 0]);
   if (o.handle?.on) buildHandle(o, rt, lg, 0, 0, addG, LO ? F('top') : null);
   // the ends
-  const half = H / 2, fH = half - .15 * S;
+  const tL = B.tl * S, bL = B.bl * S, rr = B.r * S;
+  // a flap's outline, D wide and len long (centred), the corners at its free end rounded: at the bottom when `down`
+  const flapPts = (len, down) => cornerPoly(-D / 2, -len / 2, D / 2, len / 2, down ? [rr, rr, 0, 0] : [0, 0, rr, rr]).map(([x, y]) => V2(x, y));
+  const flapGeo = (len, down) => {
+    const g = new THREE.ShapeGeometry(new THREE.Shape(dedupe(flapPts(len, down)))), pos = g.attributes.position, uv = g.attributes.uv;
+    for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / D + .5, pos.getY(i) / len + .5);
+    return g;
+  };
+  // one flap: its printed face outside, its board's back inside, the cut edge round the free end and the sides (not at the hinge)
+  const flap = (grp, len, down, ry, sx, key) => {
+    const yc = down ? -len / 2 : len / 2, P = flapPts(len, down), hy = down ? len / 2 : -len / 2, n = P.length;
+    addG(grp, flapGeo(len, down), F(key), [0, yc, 0], [0, ry, 0], { face: key });
+    addG(grp, flapGeo(len, down), rt.innerMat, [-sx * T, yc, 0], [0, -ry, 0], { face: 'inside', wall: true });
+    const k = P.findIndex((q, i) => Math.abs(q.y - hy) < 1e-7 && Math.abs(P[(i + 1) % n].y - hy) < 1e-7), open = [...P.slice(k + 1), ...P.slice(0, k + 1)];
+    addG(grp, ribbonGeo(open.map(q => [0, yc + q.y, -sx * q.x]), open.map(q => [-sx * T, yc + q.y, -sx * q.x])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+  };
+  // a flat convex piece of a flap, its loop `pts` (scene units) with the places `xy` on the sheet (mm) it is printed from; `out`: where
+  // the printed side faces. The other side shows the board's inside, a little way off
+  const net = hbNet(o), fl = ensureFlaps(o, rt, net), V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  const flat = (grp, pts, xy, out) => {
+    const nrm = V3(0, 0, 0); pts.forEach((a, i) => { const b = pts[(i + 1) % pts.length]; nrm.add(V3((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y))); });
+    const fan = pts.slice(2).flatMap((_, i) => [0, i + 1, i + 2]), flip = nrm.dot(out) < 0, mk = (back, ix) => {
+      const geo = new THREE.BufferGeometry(), sh = back ? out.clone().multiplyScalar(-.6 * T) : V3(0, 0, 0);
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap(v => [v.x + sh.x, v.y + sh.y, v.z + sh.z]), 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(xy.flatMap(([X, Y]) => [X / fl.W, 1 - Y / fl.H]), 2));
+      geo.setIndex(ix); geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, back ? rt.innerMat : fl.mat); m.castShadow = m.receiveShadow = true; m.userData = { objId: o.id, face: null }; grp.add(m);
+    };
+    const rev = fan.map((_, i) => fan[i - (i % 3) + (2 - i % 3)]);
+    mk(false, flip ? rev : fan); mk(true, flip ? fan : rev);
+  };
   for (const sx of [1, -1]) {
     const side = sx > 0 ? 'right' : 'left', ry = sx * P / 2;
-    if (!op[side]) {
-      add(g, D, H, F(side), [sx * W / 2, H / 2, 0], [0, ry, 0], { face: side });
-      add(g, D - 2 * T, H - 2 * T, rt.innerMat, [sx * (W / 2 - T), H / 2, 0], [0, -ry, 0], { face: 'inside', wall: true });
-      continue;
-    }
-    // upper flap on the lid's edge, lower flap on the floor's edge; each with its board back and cut edge
+    // the upper flap hangs from the lid's edge and lies outside; the lower one rises from the floor's edge, a board's thickness further in
     const uh = new THREE.Group(); uh.position.set(sx * W / 2, H, 0); g.add(uh);
-    add(uh, D, fH, F(side + 'Top'), [0, -fH / 2, 0], [0, ry, 0], { face: side + 'Top' });
-    add(uh, D, fH, rt.innerMat, [-sx * T, -fH / 2, 0], [0, -ry, 0], { face: 'inside', wall: true });
-    add(uh, D, T, rt.edgeMat, [-sx * T / 2, -fH, 0], [P / 2, 0, ry]);
-    const tg = new THREE.Mesh(new THREE.PlaneGeometry(B.tw * S, B.th * S), rt.foldMat); tg.rotation.set(0, ry, 0); tg.castShadow = true; tg.userData = { objId: o.id, face: null };
-    uh.add(tg); rt.hb.tongues.push({ m: tg, sx, y: -fH - B.th * S / 2 });
-    const lh = new THREE.Group(); lh.position.set(sx * W / 2, 0, 0); g.add(lh);
-    add(lh, D, fH, F(side + 'Bottom'), [0, fH / 2, 0], [0, ry, 0], { face: side + 'Bottom' });
-    add(lh, D, fH, rt.innerMat, [-sx * T, fH / 2, 0], [0, -ry, 0], { face: 'inside', wall: true });
-    add(lh, D, T, rt.edgeMat, [-sx * T / 2, fH, 0], [P / 2, 0, ry]);
-    const slot = new THREE.Mesh(new THREE.PlaneGeometry((B.tw + 2) * S, .7 * S), rt.holeMat); slot.position.set(sx * .05 * S, fH - B.slot * S, 0); slot.rotation.set(0, ry, 0); slot.raycast = () => {}; lh.add(slot);
+    flap(uh, tL, true, ry, sx, side + 'Top');
+    // the tongue on the upper flap's free edge: it slants in through the slot in the lower flap while the end is closed
+    const tw = B.tw * S / 2, ins = B.th * .35 * S, tg = new THREE.Group(); tg.position.set(-sx * T, -tL, 0); uh.add(tg);
+    const tm = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape([V2(-tw, 0), V2(tw, 0), V2(tw - ins, -B.th * S), V2(-tw + ins, -B.th * S)])), rt.foldMat);
+    tm.rotation.set(0, ry, 0); tm.castShadow = true; tm.userData = { objId: o.id, face: null }; tg.add(tm);
+    const tong = { m: tg, sx, al: 15 * P / 180, slot: null }; rt.hb.tongues.push(tong);
+    // the ears on its sides, beyond the dust flaps, folded in (they turn with the flap): the printed side towards the wall
+    if (B.ears) {
+      const er = Math.min(B.r, B.earW / 2.5, B.earL / 2.5), ft = net.panels.find(q => q.key === side + 'Top'), hx = sx > 0 ? ft.x + ft.w : ft.x;
+      for (const zs of [1, -1]) {
+        const pts = cornerPoly(-B.earL / 2, 0, B.earL / 2, B.earW, [0, 0, er, er]);
+        flat(uh, pts.map(([x, y]) => V3(-sx * y * S, (-B.tl + B.earG + B.earL / 2 + x) * S, zs * (D / 2 - 1.3 * T))),
+          // the sheet's place of a point: along the flap from its hinge, and out from its side edge
+          pts.map(([x, y]) => [hx - sx * (B.tl - B.earG - B.earL / 2 - x), zs > 0 ? ft.y - y : ft.y + ft.h + y]), V3(0, 0, zs));
+      }
+    }
+    const lh = new THREE.Group(); lh.position.set(sx * (W / 2 - T), 0, 0); g.add(lh);
+    flap(lh, bL, false, ry, sx, side + 'Bottom');
+    const slot = new THREE.Mesh(new THREE.PlaneGeometry((B.tw + 2) * S, .7 * S), rt.holeMat); slot.position.set(sx * .05 * S, bL - B.ovl * S, 0); slot.rotation.set(0, ry, 0); slot.raycast = () => {}; lh.add(slot); tong.slot = slot;
     rt.hb.flaps.push({ u: uh, l: lh, sx });
-    // dust flaps fold in from the front and back walls, just inside the end flaps
+    // dust flaps fold in from the front and back walls, just inside the end flaps: the printed side towards the open end
     for (const zs of [1, -1]) {
-      const dg = new THREE.Group(); dg.position.set(sx * (W / 2 - 1.6 * T), H / 2, zs * (D / 2 - T)); g.add(dg);
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(B.dl * S, H - 2.4 * T), rt.foldMat); m.position.set(0, 0, -zs * B.dl * S / 2); m.rotation.y = P / 2;
-      m.castShadow = m.receiveShadow = true; m.userData = { objId: o.id, face: null }; dg.add(m);
+      const dg = new THREE.Group(); dg.position.set(sx * (W / 2 - 3 * T), H / 2, zs * (D / 2 - T)); g.add(dg);
+      const dp = net.panels.find(q => q.key === 'dust' && q.side === side && q.joins[0] === (zs > 0 ? 'front' : 'back')), hx = sx > 0 ? dp.x + dp.w : dp.x, z0 = 1.2 * B.t, z1 = B.h - 1.2 * B.t;
+      const at = [[0, z0], [B.dl, z0], [B.dl, z1], [0, z1]];   // distance from the wall's edge, height up the wall (mm)
+      flat(dg, at.map(([t, hz]) => V3(0, (hz - B.h / 2) * S, -zs * t * S)), at.map(([t, hz]) => [hx - sx * t, zs > 0 ? dp.y + hz : dp.y + B.h - hz]), V3(sx, 0, 0));
       rt.hb.dust.push({ g: dg, sx, zs });
     }
   }
@@ -381,4 +444,4 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   }
 }
 
-export { HANDLE_KEYS, HANDLE_SHAPES, HB_END_KEYS, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, buildHandleBox, defaultFrontWin, defaultHandle, frontWinMM, handleBoxSVG, hbDims, hbNet, hbOpen, joinWinMM, lidLeaves, lidOpenings };
+export { defaultHbEnd, hbOpens, HANDLE_KEYS, HANDLE_SHAPES, HB_END_KEYS, HB_SIDES, TRAY_FIN, applyHandlePreset, bridgeMM, buildHandleBox, defaultFrontWin, defaultHandle, frontWinMM, handleBoxSVG, hbDims, hbNet, hbOpen, joinWinMM, lidLeaves, lidOpenings };
