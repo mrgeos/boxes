@@ -81,7 +81,11 @@ function renderFlaps(o) {
   const f = RT.get(o.id)?.flaps; if (!f) return;
   const n = netLayout(o), c = f.ctx;
   c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, f.canvas.width, f.canvas.height);
-  for (const p of printPanels(n)) if (p.flap) drawFlap(c, o, n, p, 0, 0, f.s);
+  for (const p of printPanels(n)) {
+    if (p.flap) drawFlap(c, o, n, p, 0, 0, f.s);
+    // the bare part of a glue flap is the paper itself
+    if (p.glueStrip) { const [x, y, w, h] = bareRect(p); c.save(); c.beginPath(); panelPath(c, p, 0, 0, f.s); c.clip(); c.fillStyle = o.board || '#ffffff'; c.fillRect(x * f.s, y * f.s, w * f.s, h * f.s); c.restore(); }
+  }
   f.tex.needsUpdate = true;
 }
 

@@ -12,6 +12,7 @@ import { hexDims, pyramidSides } from './shapes.js';
 import { nameCreases } from './fold-plan.js';
 import { rrectPts } from '../scene/geometry.js';
 import { bridgeMM, hbDims, hbOpens } from './handle-box.js';
+import { ensureFlaps, renderFlaps } from '../faces/flaps.js';
 
 /* The «Сборка» slider shows the blank folding into the box. While it is below 100 % the object shows this rig instead
    of its model: every panel of the blank is a flat piece (the print on one side, the board's inner side on the other,
@@ -241,7 +242,7 @@ function foldTree(o) {
   const net = netLayout(o), T = fam.T(o);
   const tabs = (net.tabs || []).filter(t => t.pts?.length > 2).map(t => {
     const xs = t.pts.map(v => v[0]), ys = t.pts.map(v => v[1]), x = Math.min(...xs), y = Math.min(...ys);
-    return { key: 'tab', on: t.on, joins: [t.on], poly: t.pts, x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, creases: t.creases, glue: t.glue };
+    return { key: 'tab', on: t.on, joins: [t.on], poly: t.pts, x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, creases: t.creases, glue: t.glue, ...(t.fp?.flap ? { flap: t.fp.flap } : {}) };
   });
   let panels = [...net.panels.filter(p => !p.part && !p.circle && !p.fan && (p.ang == null || fam.ang)), ...tabs];
   if (fam.split) panels = panels.flatMap(splitCreased);
@@ -293,6 +294,8 @@ function foldCreases(o) {
 function buildRig(o, rt) {
   const tree = foldTree(o); if (!tree) return null;
   const { net, T, panels, pieces, nodes } = tree, H = o.dims.h;
+  // the flaps' picture (faces/flaps.js): the rig's flaps take their part of it
+  if (panels.some(p => p.flap)) { ensureFlaps(o, rt, net); renderFlaps(o); }
   const bbox = ns => { const q = ns.flatMap(n => pieces[n.i].pts), xs = q.map(v => v[0]), ys = q.map(v => v[1]); return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]; };
   const all = bbox(nodes), Gx = (all[0] + all[1]) / 2, Gy = (all[2] + all[3]) / 2;
   const wins = netWindows(o, net), meshes = [], roots = [], group = new THREE.Group();
@@ -349,7 +352,7 @@ function buildRig(o, rt) {
     // way), and the lid's print, where the leaf lay, is on the side towards the other leaf
     const lidP = p.leaf && panels.find(q => q.key === 'top'), [lw, lh] = p.leaf ? faceMM(o, p.key) : [1, 1], sz = p.key === 'handleFront' ? 1 : -1;
     const leafUV = p.leaf && ((X, Y) => { const cx = lidP.x + lidP.w / 2, cy = lidP.y + lidP.h / 2, hf = Math.max(.5, bridgeMM(o) / 2); return [(sz * (cx - X)) / lw + .5, (sz > 0 ? cy - hf - Y : Y - cy - hf) / lh]; });
-    const face = p.leaf ? rt.faces.top : p.flap ? rt.flaps : rt.faces[p.key], hasFace = !!face && p.key !== 'fold' && p.key !== 'tab';
+    const face = p.leaf ? rt.faces.top : p.flap ? rt.flaps : rt.faces[p.key], hasFace = !!face && p.key !== 'fold' && (p.key !== 'tab' || !!p.flap);
     const backKey = p.leaf ? p.key : p.key === 'bottom' ? 'insideBottom' : p.key === 'top' ? 'inside' : null, back = backKey && (p.leaf || !p.crop && (p.q ?? 0) === 0) && rt.faces[backKey];
     mesh(n.content, flatGeo(outline, holes, ox, oy, 0, false, hasFace ? p.flap ? (X, Y) => [X / rt.flaps.W, 1 - Y / rt.flaps.H] : (X, Y) => faceUV(p.leaf ? lidP : p, X, Y) : null), hasFace ? face.mat : rt.foldMat, { face: p.leaf ? 'top' : hasFace && !p.flap ? p.key : null });
     mesh(n.content, flatGeo(outline, holes, ox, oy, -T, true, back ? (p.leaf ? leafUV : (X, Y) => [(X - p.x) / p.w, (Y - p.y) / p.h]) : null), back ? back.mat : rt.innerMat, { face: back ? backKey : null });
