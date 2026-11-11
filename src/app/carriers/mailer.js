@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { S, V2, clamp } from '../core/util.js';
 import { planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
 import { winMM } from './box.js';
+import { ensureFlaps } from '../faces/flaps.js';
+import { netLayout } from '../core/model.js';
 
 /* FEFCO 0427, the folding mailer: one blank, no glue. The bottom is in the middle. The side walls are double: the
    outer wall rises from the bottom, rolls over at the top and comes down inside, its locks going into slots in the
@@ -52,11 +54,17 @@ function buildMailer(o, rt, { addG, add }) {
   add(fp, FW, FH, rt.innerMat, [0, -FH / 2, -T], [0, P, 0], { face: 'inside', wall: true });
   add(fp, FW, T, rt.edgeMat, [0, -FH, -T / 2], [P / 2, 0, 0]);
   // the dust ears: folded back from the flap's ends, inside the side walls
-  const DL = M.dl * S, ch = Math.min(FH, DL) * .45;
+  const DL = M.dl * S, ch = Math.min(FH, DL) * .45, net = netLayout(o), flaps = ensureFlaps(o, rt, net), fl = net.panels.find(p => p.key === 'flap');
   const ear = (sx, out) => {
     // the face toward +x is the shape as drawn turned a quarter; toward -x, its mirror turned the other way
     const n = out ? sx : -sx, pts = [V2(0, 0), V2(DL, 0), V2(DL, -FH + ch), V2(DL - ch, -FH), V2(0, -FH)].map(v => V2(v.x * n, v.y));
-    addG(fp, new THREE.ShapeGeometry(new THREE.Shape(pts)), out ? rt.foldMat : rt.innerMat, [sx * (FW / 2 - (out ? 0 : T)), 0, -T / 2], [0, n * P / 2, 0]);
+    const geo = new THREE.ShapeGeometry(new THREE.Shape(pts));
+    // the ear's print side takes its picture from the sheet (faces/flaps.js): along the flap's side edge and down from its lip
+    if (out) {
+      const pos = geo.attributes.position, uv = geo.attributes.uv;
+      for (let i = 0; i < pos.count; i++) { const d = Math.abs(pos.getX(i)) / S; uv.setXY(i, (sx < 0 ? fl.x - d : fl.x + fl.w + d) / flaps.W, 1 - (fl.y - pos.getY(i) / S) / flaps.H); }
+    }
+    addG(fp, geo, out ? flaps.mat : rt.innerMat, [sx * (FW / 2 - (out ? 0 : T)), 0, -T / 2], [0, n * P / 2, 0]);
   };
   for (const sx of [-1, 1]) { ear(sx, true); ear(sx, false); add(fp, T, DL - ch, rt.edgeMat, [sx * (FW / 2 - T / 2), -FH, -T / 2 - (DL - ch) / 2], [P / 2, 0, 0]); }
 }

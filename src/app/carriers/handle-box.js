@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { S, V2, arcPts, clamp, dedupe, esc, r1, splitBand } from '../core/util.js';
 import { unionPolys } from '../core/polygon.js';
-import { faceKeys, faceMM } from '../core/model.js';
+import { faceKeys, faceMM, netLayout } from '../core/model.js';
 import { getImg } from '../core/assets.js';
 import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
 import { netWindows, winMM } from './box.js';
@@ -167,7 +167,7 @@ const hbOpens = o => { const s = o.hbSides || 'right'; return { right: s !== 'le
 const HB_END_KEYS = ['rightTop', 'rightBottom', 'leftTop', 'leftBottom'];
 /* the end's settings (o.hbEnd) with defaults: the upper flap's and the lower flap's lengths (fractions of the height), the
    tongue's width (fraction of the depth) and height (mm), ears on the upper flap's sides, the corner radius (mm) */
-const defaultHbEnd = () => ({ top: .77, bottom: .4, tongueW: .5, tongueH: 18, ears: true, r: 6, glue: 3 });
+const defaultHbEnd = () => ({ top: .77, bottom: .4, tongueW: .5, tongueH: 18, ears: true, r: 6 });
 function hbDims(o) {
   const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4), E = { ...defaultHbEnd(), ...o.hbEnd };
   // the flaps overlap by at least 10 mm: the lower one is lengthened when they would not
@@ -178,7 +178,7 @@ function hbDims(o) {
   // ears on the upper flap's sides, beyond the dust flaps: width off the flap, length along it, distance from its free end
   const room = tl - dl - 4 - (r + 1), earL = Math.min(47, tl * .3, room), earW = Math.min(20, dl * .4);
   const ears = E.ears !== false && earL >= 8 && earW >= 3, earG = ears ? Math.min(tl * .22, room - earL) + r + 1 : 0;
-  return { w, h, d, t, dl, top, bottom, tl, bl, ovl: tl + bl - h, tw, th, r, ears, earL, earW, earG, glue: clamp(E.glue ?? 3, 0, 10),
+  return { w, h, d, t, dl, top, bottom, tl, bl, ovl: tl + bl - h, tw, th, r, ears, earL, earW, earG,
     trW: Math.max(10, w - 2 * t - 2), trD: Math.max(10, d - 2 * t - 2), trT: 1.5 };
 }
 /* a rectangle's outline (net mm) with its four corners (top left, top right, bottom right, bottom left) rounded by r[i] */
@@ -194,9 +194,9 @@ function hbNet(o) {
   const panels = [
     { key: 'front', x: XL, y: 0, w, h, rot: true }, { key: 'top', x: XL, y: h, w, h: d, rot: true },
     { key: 'back', x: XL, y: h + d, w, h }, { key: 'bottom', x: XL, y: 2 * h + d, w, h: d, rot: true },
-    { key: 'glue', blank: 'зона склейки — без краски и лака', noPrint: true, x: XL, y: 2 * h + 2 * d, w, h: 12,
-      // the print runs on past the crease onto the glue flap by B.glue mm, so no white line shows at the seam; the rest is bare
-      glueStrip: { of: 'bottom', edge: 'top', mm: Math.min(B.glue, 12) }, ...(B.glue > 0 ? { flap: { bgOf: 'bottom', strip: { mm: Math.min(B.glue, 12), edge: 'top' } } } : {}) }];
+    { key: 'glue', blank: 'зона склейки — без краски и лака', x: XL, y: 2 * h + 2 * d, w, h: 12,
+      // (net/flap-rules.js prints a strip of it by the crease, the rest is bare)
+      kind: 'glue' }];
   const tabs = [], slots = [];
   for (const side of ['right', 'left']) {
     const R = side === 'right', ex = R ? XL : x0, out = R ? -1 : 1;   // the strip edge on this side, and the way out
@@ -206,18 +206,18 @@ function hbNet(o) {
     panels.push({ key: side + 'Top', x: fx(tl), y: h, w: tl, h: d, q: R ? 1 : 3, joins: ['top', 'tab', 'ear'], poly: cornerPoly(fx(tl), h, fx(tl) + tl, h + d, free(r)) },
       { key: side + 'Bottom', x: fx(bl), y: 2 * h + d, w: bl, h: d, q: R ? 3 : 1, joins: ['bottom'], poly: cornerPoly(fx(bl), 2 * h + d, fx(bl) + bl, 2 * h + 2 * d, free(r)) });
     // the dust flaps: on the front and on the back wall
-    for (const [y, wall] of [[0, 'front'], [h + d, 'back']]) panels.push({ key: 'dust', side, flap: { bgOf: wall }, blank: 'клапан', x: fx(dl), y, w: dl, h, joins: [wall], poly: cornerPoly(fx(dl), y, fx(dl) + dl, y + h, free(Math.min(r, dl / 3))) });
+    for (const [y, wall] of [[0, 'front'], [h + d, 'back']]) panels.push({ key: 'dust', side, blank: 'клапан', x: fx(dl), y, w: dl, h, joins: [wall], poly: cornerPoly(fx(dl), y, fx(dl) + dl, y + h, free(Math.min(r, dl / 3))) });
     // the ears on the upper flap's sides, beyond the dust flaps, folded in
     if (B.ears) {
       const er = Math.min(r, B.earW / 2.5, B.earL / 2.5), ex0 = R ? ex - tl + B.earG : ex + tl - B.earG - B.earL;
       for (const up of [true, false]) {
         const y0 = up ? h - B.earW : h + d, y1 = up ? h : h + d + B.earW;
-        panels.push({ key: 'ear', side, flap: { bgOf: side + 'Top' }, blank: 'ушко', x: ex0, y: y0, w: B.earL, h: B.earW, joins: [side + 'Top'], poly: cornerPoly(ex0, y0, ex0 + B.earL, y1, up ? [er, er, 0, 0] : [0, 0, er, er]) });
+        panels.push({ key: 'ear', side, blank: 'ушко', x: ex0, y: y0, w: B.earL, h: B.earW, joins: [side + 'Top'], poly: cornerPoly(ex0, y0, ex0 + B.earL, y1, up ? [er, er, 0, 0] : [0, 0, er, er]) });
       }
     }
     // the tongue on the upper flap's free edge, the slot in the lower flap as far from its free edge as the flaps overlap
     const fe = ex + out * tl, cy = h + d / 2, cyb = 2 * h + d + d / 2, ins = B.th * .35, sx = ex + out * bl - out * B.ovl;
-    tabs.push({ on: side + 'Top', base: [fe, cy - B.tw / 2, fe, cy + B.tw / 2], pts: [[fe, cy - B.tw / 2], [fe + out * B.th, cy - B.tw / 2 + ins], [fe + out * B.th, cy + B.tw / 2 - ins], [fe, cy + B.tw / 2]] });
+    tabs.push({ on: side + 'Top', kind: 'flap', base: [fe, cy - B.tw / 2, fe, cy + B.tw / 2], pts: [[fe, cy - B.tw / 2], [fe + out * B.th, cy - B.tw / 2 + ins], [fe + out * B.th, cy + B.tw / 2 - ins], [fe, cy + B.tw / 2]] });
     slots.push([sx, cyb - B.tw / 2 - 1, sx, cyb + B.tw / 2 + 1]);
   }
   let W = XL + w + XR, H = 2 * h + 2 * d + 12;
@@ -376,7 +376,7 @@ function buildHandleBox(o, rt, { addG, add, film }) {
   };
   // a flat convex piece of a flap, its loop `pts` (scene units) with the places `xy` on the sheet (mm) it is printed from; `out`: where
   // the printed side faces. The other side shows the board's inside, a little way off
-  const net = hbNet(o), fl = ensureFlaps(o, rt, net), V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  const net = netLayout(o), fl = ensureFlaps(o, rt, net), V3 = (x, y, z) => new THREE.Vector3(x, y, z);
   const flat = (grp, pts, xy, out) => {
     const nrm = V3(0, 0, 0); pts.forEach((a, i) => { const b = pts[(i + 1) % pts.length]; nrm.add(V3((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y))); });
     const fan = pts.slice(2).flatMap((_, i) => [0, i + 1, i + 2]), flip = nrm.dot(out) < 0, mk = (back, ix) => {

@@ -3,6 +3,7 @@ import { WHITE_INSIDE } from '../core/constants.js';
 import { faceKeys } from '../core/model.js';
 import { RT } from '../scene/renderer.js';
 import { netWindows } from '../carriers/box.js';
+import { flipEdge, mirrorTwin } from './flap-rules.js';
 
 /* A sheet is printed on both sides: the outside faces on one, what is inside the box on the other. Seen from the back
    the sheet is turned over (mirrored left to right), and each panel shows the face on its other side: the lid's
@@ -61,13 +62,18 @@ function backNet(o, n) {
     if (p.holes) m.holes = p.holes.map(h => mp(W, h));
     if (p.creases) m.creases = p.creases.map(l => ml(W, l));
     if (p.glue) m.glue = mp(W, p.glue);
+    if (p.glueStrip) m.glueStrip = { ...p.glueStrip, edge: flipEdge(p.glueStrip.edge) };
     if (p.cx != null) { m.cx = W - p.cx; m.ang = -p.ang; }
     return m;
   });
   // a handle box's leaves: their outside is the back of the sheet (carriers/handle-box.js: hbNet)
   if (n.leafBack) panels.push(...n.leafBack);
   const out = { ...n, panels, back: true, plain, windows: n.part ? [] : mirrorWindows(netWindows(o, n), W) };
-  if (n.tabs) out.tabs = n.tabs.map(t => ({ ...t, pts: mp(W, t.pts), ...(t.glue ? { glue: mp(W, t.glue) } : {}), ...(t.creases ? { creases: t.creases.map(l => ml(W, l)) } : {}) }));
+  if (n.tabs) {
+    out.tabs = n.tabs.map(t => { const pts = mp(W, t.pts); return { ...t, pts, ...(t.fp ? { fp: mirrorTwin(t.fp, pts, W, plain) } : {}), ...(t.glue ? { glue: mp(W, t.glue) } : {}), ...(t.creases ? { creases: t.creases.map(l => ml(W, l)) } : {}) }; });
+    const tw = out.tabs.filter(t => t.fp).map(t => t.fp);
+    if (tw.length) out.flapPanels = tw; else delete out.flapPanels;
+  }
   if (n.slots) out.slots = n.slots.map(l => ml(W, l));
   if (n.tray) out.tray = { ...n.tray, cut: mp(W, n.tray.cut), safe: mp(W, n.tray.safe) };
   return out;

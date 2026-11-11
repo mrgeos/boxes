@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { DEG, S, clamp } from '../core/util.js';
 import { RT } from '../scene/renderer.js';
 import { invalidate } from '../scene/camera.js';
+import { ensureFlaps } from '../faces/flaps.js';
+import { netLayout } from '../core/model.js';
 
 /* FEFCO 0201, the regular slotted carton: the four walls are one strip, closed by a glue flap; every wall has a flap
    at the top and at the bottom, all half the box's depth high. The flaps of the front and back meet in the middle
@@ -49,10 +51,16 @@ function buildRsc(o, rt, { addG, add }) {
     flaps.outer.push({ g: pv, sz });
   }
   // inner flaps (sides), under the outer ones: the board's outer side up
-  const IW = D - 2 * T;
+  const IW = D - 2 * T, net = netLayout(o), fpic = ensureFlaps(o, rt, net);
   for (const sx of [-1, 1]) {
     const pv = new THREE.Group(); pv.position.set(sx * W / 2, H - T, 0); g.add(pv);
-    add(pv, L, IW, rt.foldMat, [-sx * L / 2, 0, 0], [-P / 2, 0, 0]);
+    // its print side (the side wall's ground and the sheet's layers) from the sheet's picture (faces/flaps.js)
+    const geo = new THREE.PlaneGeometry(L, IW), pos = geo.attributes.position, uv = geo.attributes.uv, fp = net.panels.find(p => p.key === 'iflap' && p.y < 1 && p.flap?.bgOf === (sx < 0 ? 'left' : 'right'));
+    if (fp) for (let i = 0; i < pos.count; i++) {
+      const t = (L / 2 - sx * pos.getX(i)) / S, z = -pos.getY(i) / S;   // mm from the hinge, and along the wall
+      uv.setXY(i, (fp.x + fp.w / 2 + (sx < 0 ? z : -z)) / fpic.W, 1 - (fp.y + fp.h - t) / fpic.H);
+    }
+    addG(pv, geo, fp ? fpic.mat : rt.foldMat, [-sx * L / 2, 0, 0], [-P / 2, 0, 0]);
     add(pv, L, IW, rt.innerMat, [-sx * L / 2, -T, 0], [P / 2, 0, 0]);
     add(pv, IW, T, rt.edgeMat, [-sx * L, -T / 2, 0], [0, -sx * P / 2, 0]);
     flaps.inner.push({ g: pv, sx });

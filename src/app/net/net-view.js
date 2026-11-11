@@ -109,7 +109,11 @@ function paintNet(c, o, n, { ox, oy = ox, k, selKey = sel.face, accent = getComp
   // a film's safe zone: 4 mm in from the cut
   if (n.tray?.safe) { c.beginPath(); n.tray.safe.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.closePath(); c.setLineDash([3, 3]); c.lineWidth = 1; c.strokeStyle = 'rgba(120,110,95,.8)'; c.stroke(); c.setLineDash([]); }
   for (const p of n.panels) for (const l of p.creases || []) { c.beginPath(); c.moveTo(ox + l[0] * k, oy + l[1] * k); c.lineTo(ox + l[2] * k, oy + l[3] * k); c.setLineDash([4, 3]); c.strokeStyle = 'rgba(230,0,126,.7)'; c.lineWidth = 1; c.stroke(); c.setLineDash([]); }
-  for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.fillStyle = n.plain || o.board || '#ffffff'; c.fill(); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke();
+  for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.fillStyle = n.plain || o.board || '#ffffff'; c.fill();
+    // a tab the sheet's rules print (net/flap-rules.js) shows its print, a glue tab only its strip
+    const fp = t.fp;
+    if (fp) { c.save(); c.beginPath(); panelPath(c, fp, ox, oy, k); c.clip(); if (fp.glueStrip) { const [bx, by, bw, bh] = bareRect(fp); c.clearRect(ox + bx * k, oy + by * k, bw * k, bh * k); c.fillStyle = 'rgba(120,110,95,.14)'; c.fillRect(ox + fp.x * k, oy + fp.y * k, fp.w * k, fp.h * k); } if (fp.flap) drawFlap(c, o, n, fp, ox, oy, k); else if (fp.plain) { c.fillStyle = fp.plain; c.fillRect(ox + fp.x * k, oy + fp.y * k, fp.w * k, fp.h * k); } c.restore(); }
+    c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.strokeStyle = 'rgba(120,110,95,.8)'; c.lineWidth = 1; c.stroke();
     if (t.glue) { c.beginPath(); t.glue.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.fillStyle = 'rgba(243,146,0,.25)'; c.fill(); }
     for (const l of t.creases || []) { c.beginPath(); c.moveTo(ox + l[0] * k, oy + l[1] * k); c.lineTo(ox + l[2] * k, oy + l[3] * k); c.setLineDash([4, 3]); c.strokeStyle = 'rgba(230,0,126,.7)'; c.stroke(); c.setLineDash([]); }
   }

@@ -22,6 +22,7 @@ import { casketLidH } from '../carriers/rigid.js';
 import { gableDims, hexDims, isShape, pillowDims, pyramidSides } from '../carriers/shapes.js';
 import { isStickerKey, migrateSticker, stickerKey, stickerOfKey } from '../stickers/design.js';
 import { stickerSize } from '../stickers/placement.js';
+import { applyFlapRules } from '../net/flap-rules.js';
 
 /* printed faces of an object, in tab order; depends on the lid construction */
 /* faces that close into a ring (a sleeve glued into a loop, the wall of a tube, a cup or a cake lid): what runs
@@ -88,6 +89,7 @@ const faceLabel = (o, k) => isSheetKey(k) ? (k === 'sheet:back' ? 'Оборот 
 function ensureFaces(o) {
   o.stickers ??= [];
   o.netV ??= o.dieline ? 1 : 2;
+  o.glueBleed ??= 3;   // mm of print that runs onto a glue flap from its crease (net/flap-rules.js)
   upgradeSleeve(o);
   if (o.type === 'box') {
     o.lidType ??= 'flat';
@@ -110,7 +112,7 @@ function ensureFaces(o) {
     o.sleeve.handle ??= defaultSleeveHandle(); o.sleeve.handle.rf ??= 10;
     if (o.handle.rTop == null) applyHandlePreset(o.handle, o.handle.shape || 'arch');   // projects from before adjustable handles
     o.frontWin ??= defaultFrontWin(o.dims);
-    if (o.lidType === 'handle') { o.hbSides ??= 'right'; o.hbEnd ??= defaultHbEnd(); o.tray ??= { out: 0, fin: 'board' }; o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 0, cake: true }; }
+    if (o.lidType === 'handle') { o.hbSides ??= 'right'; o.hbEnd ??= defaultHbEnd(); delete o.hbEnd.glue; o.tray ??= { out: 0, fin: 'board' }; o.product ??= { src: null, aspect: 1, w: Math.round(o.dims.w * .7), x: 0, y: 0, cake: true }; }
   }
   if (o.type === 'torte') { o.lidD ??= Math.round(o.dims.w * .88); o.baseH ??= Math.round(clamp(o.dims.w * .075, 10, 25)); o.lidR ??= Math.round(o.lidD * .06); o.lidDraft ??= .03; o.baseColor ??= TORTE_COLORS[0][0]; o.baseFin ??= 'metal'; o.carry ??= defaultCarry(o); }
   if (o.type === 'paperbag') o.pb ??= defaultPaperBag(o.dims);
@@ -286,7 +288,14 @@ function facePx(o, k) {
   if (plainFace(o, k)) s = Math.min(s, o.grain > 0 ? 3 : 64 / Math.max(mw, mh));
   return [Math.max(16, Math.round(mw * s)), Math.max(16, Math.round(mh * s)), s];
 }
+/* the net of o with the sheet's print rules applied to its flaps and tabs (net/flap-rules.js) */
 function netLayout(o) {
+  const n = rawNet(o);
+  if (o.type === 'bag' && bagFilm(o)) return n;
+  const keys = new Set(faceKeys(o));
+  return applyFlapRules(o, n, k => keys.has(k));
+}
+function rawNet(o) {
   const { w, h, d } = o.dims;
   if (o.type === 'tube') {
     const D = w, C = Math.PI * D;

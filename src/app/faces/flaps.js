@@ -6,6 +6,7 @@ import { faceMM, netLayout } from '../core/model.js';
 import { dimsFor, settleSheet } from '../core/sheet.js';
 import { faceToSheet, flatPanel } from '../net/sheet-map.js';
 import { panelPath } from '../net/net-view.js';
+import { printPanels } from '../net/flap-rules.js';
 import { RT } from '../scene/renderer.js';
 import { layerPaint } from './render.js';
 import { drawSheetLayer } from './sheet-paint.js';
@@ -56,7 +57,7 @@ function drawFlap(c, o, n, p, ox, oy, k) {
   c.restore();
 }
 /* the faces whose ground the net's flaps take */
-const flapSources = n => new Set(n.panels.filter(p => p.flap).map(p => p.flap.bgOf));
+const flapSources = n => new Set(printPanels(n).filter(p => p.flap).map(p => p.flap.bgOf));
 
 /* ---------- the 3D model: one picture of the whole sheet, the flaps' meshes take their part of it ---------- */
 /* rt.flaps = { canvas, tex, mat, W, H (the sheet, mm), s (px per mm), src (faces it follows) }: made with the model, painted
@@ -80,7 +81,11 @@ function renderFlaps(o) {
   const f = RT.get(o.id)?.flaps; if (!f) return;
   const n = netLayout(o), c = f.ctx;
   c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, f.canvas.width, f.canvas.height);
-  for (const p of n.panels) if (p.flap) drawFlap(c, o, n, p, 0, 0, f.s);
+  for (const p of printPanels(n)) {
+    if (p.flap) drawFlap(c, o, n, p, 0, 0, f.s);
+    // the bare part of a glue flap is the paper itself
+    if (p.glueStrip) { const [x, y, w, h] = bareRect(p); c.save(); c.beginPath(); panelPath(c, p, 0, 0, f.s); c.clip(); c.fillStyle = o.board || '#ffffff'; c.fillRect(x * f.s, y * f.s, w * f.s, h * f.s); c.restore(); }
+  }
   f.tex.needsUpdate = true;
 }
 
