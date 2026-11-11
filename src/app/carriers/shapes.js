@@ -113,7 +113,7 @@ function gableNet(o) {
     panels.push({ key, x, y: 0, w, h: top, q: 0, creases: [[x, G.gh, x + w, G.gh]], holes: [hole] });
   }
   // the bottom under the front wall, a glue flap under the back
-  panels.push({ key: 'bottom', x: xs[1], y: top + h, w, h: d, q: 0 }, { key: 'bflap', blank: 'клей', fs: 4, x: xs[3], y: top + h, w, h: 20 });
+  panels.push({ key: 'bottom', x: xs[1], y: top + h, w, h: d, q: 0 }, { key: 'bflap', kind: 'glue', blank: 'клей', fs: 4, x: xs[3], y: top + h, w, h: 20 });
   tabs.push({ on: 'left', pts: [[gw, top + 2], [0, top + 6], [0, top + h - 6], [gw, top + h - 2]] });
   return { v: 2, shape: 'gable', W: gw + 2 * d + 2 * w, H: top + h + d, panels, tabs };
 }

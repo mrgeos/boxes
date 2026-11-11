@@ -127,7 +127,7 @@ function drawerNet(o) {
   const { w, h, d } = o.dims, t = rigidT(o), panels = [], tabs = [], ti = 12;
   let x = 0;
   for (const [key, len, q] of [['left', h, 1], ['top', w, 0], ['right', h, 3], ['bottom', w, 2]]) { panels.push({ key, x, y: ti, w: len, h: d, q }); x += len; }
-  tabs.push({ on: 'bottom', pts: [[x, ti + 2], [x + 15, ti + 6], [x + 15, ti + d - 6], [x, ti + d - 2]] });
+  tabs.push({ on: 'bottom', kind: 'glue', pts: [[x, ti + 2], [x + 15, ti + 6], [x + 15, ti + d - 6], [x, ti + d - 2]] });
   panels.push({ key: 'fold', fold: true, x: 0, y: 0, w: x, h: ti }, { key: 'fold', fold: true, x: 0, y: ti + d, w: x, h: ti });
   panels.push({ key: 'back', x: x + 30, y: ti, w, h, q: 0 });
   const dw = w - 2 * t - .6, dh = h - 2 * t - .6, dd = d - t - .3;

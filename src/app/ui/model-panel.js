@@ -4,7 +4,8 @@ import { BOARD, FINISHES, LID_COLORS, LID_TYPES, LIGHTS, PRESETS, isFoil } from 
 import { activeObj, assets, sel, state } from '../core/state.js';
 import { addAsset } from '../core/assets.js';
 import { ENVS, setHdrFile } from '../scene/environments.js';
-import { clearLid, ensureFaces, faceKeys, faceMM, setBoard } from '../core/model.js';
+import { clearLid, ensureFaces, faceKeys, faceMM, netLayout, setBoard } from '../core/model.js';
+import { hasGlueFlap } from '../net/flap-rules.js';
 import { pickAsset } from './asset-picker.js';
 import { applyLid, applyObjMaterials, markFace, markObj, rebuildQueue, ui } from '../scene/renderer.js';
 import { BAG_MATS, BAG_TOPS, applyBagPreset, bagFilm } from '../carriers/bag.js';
@@ -119,6 +120,7 @@ function modelInput(k) {
   }
   if (k === 'handle.shape') applyHandlePreset(o.handle, o.handle.shape);
   if (k === 'tray.out') { applyLid(o); return; }
+  if (k === 'glueBleed') { ensureFaces(o); rebuildQueue.add(o.id); ui.net = ui.editor = true; updateFaceMeta(); return; }
   if (k.startsWith('hbEnd.')) { ensureFaces(o); rebuildQueue.add(o.id); ui.net = ui.editor = true; updateFaceMeta(); return; }
   if (k === 'hbSides' || k === 'tray.fin' || k === 'product.cake') { ensureFaces(o); rebuildQueue.add(o.id); ui.net = true; select(o.id, sel.face); renderModel(); updateFaceMeta(); return; }
   if (k.startsWith('handle.') || k.startsWith('frontWin.')) {
@@ -372,7 +374,7 @@ function renderModel() {
     ${box && o.lidType === 'handle' ? `<div class="field wide"><span class="fl">Какой торец открывать</span><select data-k="hbSides">${Object.entries(HB_SIDES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + `<div class="sec-h"><h2>Торец</h2></div>` + rangeField('Верхний клапан, %', 'hbEnd.top', 30, 95, 1, 100) + rangeField('Нижний клапан, %', 'hbEnd.bottom', 10, 90, 1, 100)
       + rangeField('Язычок: ширина, %', 'hbEnd.tongueW', 10, 90, 1, 100) + rangeField('Язычок: высота, мм', 'hbEnd.tongueH', 4, 40, .5)
-      + `<label class="check"><input type="checkbox" data-k="hbEnd.ears"> Ушки на верхнем клапане</label>` + rangeField('Скругление углов, мм', 'hbEnd.r', 0, 30, .5) + rangeField('Вылет на клеевой клапан, мм', 'hbEnd.glue', 0, 10, .5)
+      + `<label class="check"><input type="checkbox" data-k="hbEnd.ears"> Ушки на верхнем клапане</label>` + rangeField('Скругление углов, мм', 'hbEnd.r', 0, 30, .5)
       + rangeField('Выдвинуть подложку, мм', 'tray.out', 0, o.dims.w, 1)
       + `<div class="field wide"><span class="fl">Подложка</span><select data-k="tray.fin">${Object.entries(TRAY_FIN).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + `<div class="field wide"><span class="fl">Торт</span><div class="row"><button class="btn sm" id="prodBtn">${o.product?.src ? 'Заменить фото…' : 'Фото торта (PNG)…'}</button>${o.product?.src ? '<button class="btn sm" id="prodOff">Убрать</button>' : ''}</div></div>`
@@ -412,6 +414,7 @@ function renderModel() {
     ${box && o.lidType === 'f0427' ? `<p class="hint">FEFCO 0427 собирается без клея: боковые стенки и перед двойные, завёрнуты внутрь и встают замками в прорези дна; ушки передней и задней стенок зажаты в боковых. Крышка — на задней стенке, её передний край завёрнут, клапан с пылевыми ушками уходит внутрь за переднюю стенку.</p>` : ''}
     ${box && windowPlace(o) ? `<label class="check"><input type="checkbox" data-k="window.on"> Прозрачное окно с плёнкой</label>` : ''}
     ${box && o.window.on && windowPlace(o) ? windowFields(o) : ''}
+    ${hasGlueFlap(netLayout(o)) ? rangeField('Вылет на клеевой клапан, мм', 'glueBleed', 0, 10, .5) + `<p class="hint">Печать заходит на клеевой клапан на столько от сгиба, чтобы на стыке не было белой щели; дальше — зона клея без краски и лака (число уточните у типографии). Клапаны, ушки и язычки без своей грани печатаются целиком: фон грани, на которой они висят, и слои «Развёртки».</p>` : ''}
     <div class="sec-h"><h2>Материал</h2></div>
     ${cboard ? `<div class="field wide"><span class="fl">Покрытие</span><select data-k="cbCover">${Object.entries(BOARD_COVER).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>`
       + (foilCover ? `<p class="hint">Фольга — металл: блики даёт то, что она отражает («Отражения» в настройках сцены: снимите выделение, кликнув мимо моделей). Печать поверх фольги — краска, она не блестит.</p>`

@@ -4,6 +4,7 @@ import { RT } from '../scene/renderer.js';
 import { cropPx } from '../faces/render.js';
 import { BLEED_MM } from './net-check.js';
 import { panelPath } from './net-view.js';
+import { printPanels } from './flap-rules.js';
 
 /* One bleed for the screen and the files. Every printed panel runs on past its own edge by the bleed: a face's
    picture goes on as its edge pixels do (what a print file is made with), a panel that is not a rectangle gets its
@@ -60,7 +61,7 @@ function growPath(c, p, g, ox, oy, k) {
    a panel's face where it is not the one on the model (a print at its own resolution) */
 function paintBleed(c, o, n, ox, oy, k, b = BLEED_MM, line = null, canvasOf = null) {
   const rt = RT.get(o.id), g = b * k;
-  for (const p of n.panels) {
+  for (const p of printPanels(n)) {
     if (p.fan) continue;
     const fc = canvasOf ? canvasOf(p) : rt?.faces[p.key]?.canvas;
     if (!fc && !p.fold && !p.plain && !p.flap) continue;
@@ -154,7 +155,7 @@ function unionLoops(polys) {
 }
 /* the bleed's outline round the printed panels of the net n of object o: closed loops of [x, y] in the sheet's mm */
 function bleedLoops(o, n, b = BLEED_MM) {
-  const polys = n.panels.filter(p => bleeds(o, p)).map(p => grownPoly(p, b)).filter(pl => pl.every(v => Number.isFinite(v[0]) && Number.isFinite(v[1])));
+  const polys = printPanels(n).filter(p => bleeds(o, p)).map(p => grownPoly(p, b)).filter(pl => pl.every(v => Number.isFinite(v[0]) && Number.isFinite(v[1])));
   return polys.length && b > 0 ? unionLoops(polys) : [];
 }
 
@@ -163,7 +164,7 @@ function bleedLoops(o, n, b = BLEED_MM) {
    sheet; the same numbers for the PNG and the SVG, so one lies right over the other. A net with nothing that bleeds (a
    cup) gets none. */
 function printSheet(o, bleed = 0, n = netLayout(o)) {
-  const b = bleed > 0 && n.panels.some(p => bleeds(o, p)) ? bleed : 0;
+  const b = bleed > 0 && printPanels(n).some(p => bleeds(o, p)) ? bleed : 0;
   return { n, bleed: b, ox: b, oy: b, W: n.W + 2 * b, H: n.H + 2 * b };
 }
 

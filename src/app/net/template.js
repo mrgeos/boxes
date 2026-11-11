@@ -13,6 +13,7 @@ import { handleBoxSVG } from '../carriers/handle-box.js';
 import { SLEEVE_GLUE } from '../carriers/sleeve.js';
 import { cropPx, drawNetPanel, renderFace, setSkipStickers } from '../faces/render.js';
 import { bareRect, drawFlap } from '../faces/flaps.js';
+import { printPanels } from './flap-rules.js';
 import { saveFile } from '../core/project.js';
 import { panelPath } from './net-view.js';
 import { bleedLoops, paintBleed, printSheet } from './bleed.js';
@@ -236,7 +237,7 @@ function printCanvas(o, bleed = 0, side = 'front') {
   // stickers are applied after printing, so the print sheet leaves them out
   setSkipStickers(true); for (const key of faceKeys(o)) renderFace(o, key); setSkipStickers(false);
   if (S.bleed) { c.translate(S.ox * k, S.oy * k); paintBleed(c, o, n, 0, 0, k, S.bleed); }
-  for (const p of n.panels) {
+  for (const p of printPanels(n)) {
     const fc = rt.faces[p.key]?.canvas, x = p.x * k, y = p.y * k, w = p.w * k, h = p.h * k;
     c.save(); c.beginPath(); panelPath(c, p, 0, 0, k); c.clip();
     if (fc) drawNetPanel(c, fc, p, x, y, w, h, cropPx(fc, p)); else if (p.plain) { c.fillStyle = p.plain; c.fillRect(x, y, w, h); } else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
@@ -250,7 +251,7 @@ function printCanvas(o, bleed = 0, side = 'front') {
   c.save(); c.globalCompositeOperation = 'destination-out';
   for (const p of n.panels) for (const hl of p.holes || []) { c.beginPath(); hl.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](X * k, Y * k)); c.closePath(); c.fill(); }
   c.restore();
-  for (const t of n.tabs || []) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](X * k, Y * k)); c.closePath(); c.fillStyle = n.plain || o.board || '#ffffff'; c.fill(); }
+  for (const t of n.tabs || []) if (!t.fp) { c.beginPath(); t.pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](X * k, Y * k)); c.closePath(); c.fillStyle = n.plain || o.board || '#ffffff'; c.fill(); }
   cutNetWindow(c, o, 0, k, 0, n.windows);
   markObj(o);
   return out;

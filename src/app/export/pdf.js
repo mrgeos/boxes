@@ -9,6 +9,7 @@ import { grownPoly, paintBleed, printSheet, bleeds } from '../net/bleed.js';
 import { dielineData } from '../net/dieline.js';
 import { backNet } from '../net/net-side.js';
 import { panelPath } from '../net/net-view.js';
+import { adjacent, printPanels } from '../net/flap-rules.js';
 import { bareRect, drawFlap, flapRect } from '../faces/flaps.js';
 
 /* A PDF written by hand (nothing to load: the file is a few kilobytes of text round the pictures). The page is the
@@ -131,7 +132,7 @@ async function panelPictures(o, S, dpi, report) {
     T.width = T.height = 0;
   }
   // the flaps with no face of their own are drawn straight into their picture at the file's resolution (faces/flaps.js)
-  for (const p of n.panels.filter(q => q.flap)) {
+  for (const p of printPanels(n).filter(q => q.flap)) {
     // a glue flap's picture is only its printed strip, with no bleed
     const [fx, fy, fw, fh] = flapRect(p), bb = p.flap.strip ? 0 : b, k = dpi / 25.4, X = fx - bb, Y = fy - bb, W = fw + 2 * bb, H = fh + 2 * bb;
     const R = document.createElement('canvas'); R.width = Math.max(1, Math.round(W * k)); R.height = Math.max(1, Math.round(H * k));
@@ -156,21 +157,21 @@ function sideForm(pdf, o, sh, ocg, cs) {
   const colorOf = p => p.plain ? rgbOf(p.plain) : p.fold ? rgbOf(o.faces.front?.bg || o.board) : p.blank && !bagFilm(o) && !p.noPrint ? rgbOf(o.board) : null;
   let design = '';
   const place = p => { const pic = pics.get(p); return `q ${n3(pic.W)} 0 0 ${n3(-pic.H)} ${n3(pic.x)} ${n3(pic.y + pic.H)} cm /${images.get(p)} Do Q `; };
-  if (b) for (const p of n.panels) {
+  if (b) for (const p of printPanels(n)) {
     if (!bleeds(o, p)) continue;
     const col = pics.has(p) ? null : colorOf(p);
     if (!pics.has(p) && !col) continue;
     // the bare part of a glue flap off this panel is cut out of its bleed (even-odd: a rect inside the ring takes it away)
-    const bare = n.panels.filter(q => q.glueStrip?.of === p.key).map(q => { const [x, y, w, h] = bareRect(q), e = q.glueStrip.edge, d = Math.max(0, b - q.glueStrip.mm);
+    const bare = printPanels(n).filter(q => q.glueStrip?.of === p.key && adjacent(q, [p.x, p.y, p.x + p.w, p.y + p.h])).map(q => { const [x, y, w, h] = bareRect(q), e = q.glueStrip.edge, d = Math.max(0, b - q.glueStrip.mm);
       return d <= 0 ? '' : polyOps(e === 'bottom' ? [[x, y + h - d], [x + w, y + h - d], [x + w, y + h], [x, y + h]] : e === 'left' ? [[x, y], [x + d, y], [x + d, y + h], [x, y + h]] : e === 'right' ? [[x + w - d, y], [x + w, y], [x + w, y + h], [x + w - d, y + h]] : [[x, y], [x + w, y], [x + w, y + d], [x, y + d]]); }).join('');
     design += `q ${shapeOps(p, b)}${shapeOps(p, 0)}${bare}W* n ${col ? `${col} rg ${shapeOps(p, b)}${shapeOps(p, 0)}${bare}f* ` : place(p)}Q\n`;
   }
-  for (const p of n.panels) {
+  for (const p of printPanels(n)) {
     const col = pics.has(p) ? null : colorOf(p);
     if (!pics.has(p) && !col) continue;
     design += `q ${shapeOps(p, 0)}W n ${col ? `${col} rg ${shapeOps(p, 0)}f ` : place(p)}Q\n`;
   }
-  for (const t of n.tabs || []) design += `q ${rgbOf(n.plain || o.board || '#ffffff')} rg ${polyOps(t.pts)}f Q\n`;
+  for (const t of n.tabs || []) if (!t.fp) design += `q ${rgbOf(n.plain || o.board || '#ffffff')} rg ${polyOps(t.pts)}f Q\n`;
   // the lines
   let lines = ''; const by = {};
   for (const pr of D.prims) (by[LAYER_OF[pr.layer]] ||= []).push(pr);
