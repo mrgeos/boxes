@@ -167,7 +167,7 @@ const hbOpens = o => { const s = o.hbSides || 'right'; return { right: s !== 'le
 const HB_END_KEYS = ['rightTop', 'rightBottom', 'leftTop', 'leftBottom'];
 /* the end's settings (o.hbEnd) with defaults: the upper flap's and the lower flap's lengths (fractions of the height), the
    tongue's width (fraction of the depth) and height (mm), ears on the upper flap's sides, the corner radius (mm) */
-const defaultHbEnd = () => ({ top: .77, bottom: .4, tongueW: .5, tongueH: 18, ears: true, r: 6 });
+const defaultHbEnd = () => ({ top: .77, bottom: .4, tongueW: .5, tongueH: 18, ears: true, r: 6, glue: 3 });
 function hbDims(o) {
   const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 4), E = { ...defaultHbEnd(), ...o.hbEnd };
   // the flaps overlap by at least 10 mm: the lower one is lengthened when they would not
@@ -178,7 +178,7 @@ function hbDims(o) {
   // ears on the upper flap's sides, beyond the dust flaps: width off the flap, length along it, distance from its free end
   const room = tl - dl - 4 - (r + 1), earL = Math.min(47, tl * .3, room), earW = Math.min(20, dl * .4);
   const ears = E.ears !== false && earL >= 8 && earW >= 3, earG = ears ? Math.min(tl * .22, room - earL) + r + 1 : 0;
-  return { w, h, d, t, dl, top, bottom, tl, bl, ovl: tl + bl - h, tw, th, r, ears, earL, earW, earG,
+  return { w, h, d, t, dl, top, bottom, tl, bl, ovl: tl + bl - h, tw, th, r, ears, earL, earW, earG, glue: clamp(E.glue ?? 3, 0, 10),
     trW: Math.max(10, w - 2 * t - 2), trD: Math.max(10, d - 2 * t - 2), trT: 1.5 };
 }
 /* a rectangle's outline (net mm) with its four corners (top left, top right, bottom right, bottom left) rounded by r[i] */
@@ -194,7 +194,9 @@ function hbNet(o) {
   const panels = [
     { key: 'front', x: XL, y: 0, w, h, rot: true }, { key: 'top', x: XL, y: h, w, h: d, rot: true },
     { key: 'back', x: XL, y: h + d, w, h }, { key: 'bottom', x: XL, y: 2 * h + d, w, h: d, rot: true },
-    { key: 'glue', blank: 'зона склейки — без краски и лака', noPrint: true, x: XL, y: 2 * h + 2 * d, w, h: 12 }];
+    { key: 'glue', blank: 'зона склейки — без краски и лака', noPrint: true, x: XL, y: 2 * h + 2 * d, w, h: 12,
+      // the print runs on past the crease onto the glue flap by B.glue mm, so no white line shows at the seam; the rest is bare
+      glueStrip: { of: 'bottom', edge: 'top', mm: Math.min(B.glue, 12) }, ...(B.glue > 0 ? { flap: { bgOf: 'bottom', strip: { mm: Math.min(B.glue, 12), edge: 'top' } } } : {}) }];
   const tabs = [], slots = [];
   for (const side of ['right', 'left']) {
     const R = side === 'right', ex = R ? XL : x0, out = R ? -1 : 1;   // the strip edge on this side, and the way out

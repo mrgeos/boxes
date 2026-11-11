@@ -16,10 +16,24 @@ import { drawSheetLayer } from './sheet-paint.js';
    do not go over to it. This one function draws it for everything: the net on screen, the PNG and PDF files and the
    3D model's picture (below), each into its own canvas at its own scale. (ox, oy): where the sheet's corner is on the
    canvas, k: px per mm; n: the net the panel is on. */
+/* the part of a flap that is printed (net mm, [x, y, w, h]): all of it, or only a strip by its crease (a glue flap: the
+   print runs onto it past the fold, the rest stays bare for the glue) */
+function flapRect(p) {
+  const s = p.flap?.strip; if (!s) return [p.x, p.y, p.w, p.h];
+  const m = Math.min(s.mm, s.edge === 'left' || s.edge === 'right' ? p.w : p.h);
+  return s.edge === 'bottom' ? [p.x, p.y + p.h - m, p.w, m] : s.edge === 'left' ? [p.x, p.y, m, p.h] : s.edge === 'right' ? [p.x + p.w - m, p.y, m, p.h] : [p.x, p.y, p.w, m];
+}
+/* the bare part of a glue flap (net mm, [x, y, w, h]): all of it beyond the printed strip; nothing else prints there,
+   not even the bleed of the panel it folds off */
+function bareRect(p) {
+  const s = p.glueStrip, m = Math.min(s.mm, s.edge === 'left' || s.edge === 'right' ? p.w : p.h);
+  return s.edge === 'bottom' ? [p.x, p.y, p.w, p.h - m] : s.edge === 'left' ? [p.x + m, p.y, p.w - m, p.h] : s.edge === 'right' ? [p.x, p.y, p.w - m, p.h] : [p.x, p.y + m, p.w, p.h - m];
+}
 function drawFlap(c, o, n, p, ox, oy, k) {
   const face = o.faces[p.flap.bgOf]; if (!face) return;
   const src = n.panels.find(q => q.key === p.flap.bgOf && flatPanel(q));
   c.save(); c.beginPath(); panelPath(c, p, ox, oy, k); c.clip();
+  if (p.flap.strip) { const [x, y, w, h] = flapRect(p); c.beginPath(); c.rect(ox + x * k, oy + y * k, w * k, h * k); c.clip(); }
   c.translate(ox, oy); c.scale(k, k);
   c.fillStyle = face.bg; c.fillRect(p.x - 1, p.y - 1, p.w + 2, p.h + 2);
   if (face.bgGrad && src) {
@@ -70,4 +84,4 @@ function renderFlaps(o) {
   f.tex.needsUpdate = true;
 }
 
-export { drawFlap, ensureFlaps, renderFlaps };
+export { bareRect, drawFlap, ensureFlaps, flapRect, renderFlaps };

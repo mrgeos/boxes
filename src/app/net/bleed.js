@@ -12,7 +12,7 @@ import { panelPath } from './net-view.js';
    Not covered yet: the bleed inside a window or a hole, a cup's fan. */
 const rectLike = p => !p.fan && !p.poly && !p.circle && !p.r && p.ang == null;
 /* a panel that gets bleed: printed (a face of its own, or a fold's strip in the ground colour), not a fan */
-const bleeds = (o, p) => !p.fan && (!!p.fold || !!p.plain || !!p.flap || !!o.faces[p.key]);
+const bleeds = (o, p) => !p.fan && !p.flap?.strip && (!!p.fold || !!p.plain || !!p.flap || !!o.faces[p.key]);   // (a glue strip has no bleed: its neighbour is the panel it folds off)
 
 /* ---------- on a canvas ---------- */
 /* the face's picture round the panel (x, y, w, h: the panel itself): eight pieces, the middle one left to the panel. Past the

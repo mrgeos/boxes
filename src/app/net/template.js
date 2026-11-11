@@ -12,7 +12,7 @@ import { paperBagSVG } from '../carriers/paperbag.js';
 import { handleBoxSVG } from '../carriers/handle-box.js';
 import { SLEEVE_GLUE } from '../carriers/sleeve.js';
 import { cropPx, drawNetPanel, renderFace, setSkipStickers } from '../faces/render.js';
-import { drawFlap } from '../faces/flaps.js';
+import { bareRect, drawFlap } from '../faces/flaps.js';
 import { saveFile } from '../core/project.js';
 import { panelPath } from './net-view.js';
 import { bleedLoops, paintBleed, printSheet } from './bleed.js';
@@ -242,6 +242,8 @@ function printCanvas(o, bleed = 0, side = 'front') {
     if (fc) drawNetPanel(c, fc, p, x, y, w, h, cropPx(fc, p)); else if (p.plain) { c.fillStyle = p.plain; c.fillRect(x, y, w, h); } else if (p.fold) { c.fillStyle = o.faces.front?.bg || o.board; c.fillRect(x, y, w, h); }
     else if (p.flap) drawFlap(c, o, n, p, 0, 0, k);
     else if (p.blank && !bagFilm(o) && !p.noPrint) { c.fillStyle = o.board; c.fillRect(x, y, w, h); }
+    // a glue flap's bare part stays clear, the bleed of the panel it folds off included
+    if (p.glueStrip) { const [bx, by, bw, bh] = bareRect(p); c.clearRect(bx * k, by * k, bw * k, bh * k); }
     c.restore();
   }
   // hand holes and the like go through the sheet
