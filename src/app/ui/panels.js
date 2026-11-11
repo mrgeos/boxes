@@ -18,7 +18,8 @@ const sideHidden = () => lay.sideOff || sideAuto;
 function apply() {
   const a = app();
   a.classList.toggle('side-off', sideHidden());
-  for (const k of ['side', 'prop']) { if (lay[k]) a.style.setProperty(`--${k}-w`, lay[k] + 'px'); else a.style.removeProperty(`--${k}-w`); }
+  // (a hidden left panel keeps no width of its own: an inline width would beat the stylesheet's 0 and leave an empty strip)
+  for (const k of ['side', 'prop']) { if (lay[k] && !(k === 'side' && sideHidden())) a.style.setProperty(`--${k}-w`, lay[k] + 'px'); else a.style.removeProperty(`--${k}-w`); }
   // a narrower window: the dragged widths give way to the 3D view, for now (they come back when it is wide again)
   let over = matchMedia('(min-width: 861px)').matches ? stageMin() - $('#work').getBoundingClientRect().width : 0;
   for (const k of ['prop', 'side']) {
