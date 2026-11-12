@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { S, V2, clamp } from '../core/util.js';
 import { planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
-import { winMM } from './box.js';
+import { tuckOpen, winMM } from './box.js';
 import { ensureFlaps } from '../faces/flaps.js';
 import { netLayout } from '../core/model.js';
 
@@ -49,7 +49,7 @@ function buildMailer(o, rt, { addG, add }) {
   add(pivot, W, T, rt.foldMat, [0, T / 2, 0], [0, P, 0]);
   for (const sx of [-1, 1]) add(pivot, D, T, rt.edgeMat, [sx * W / 2, T / 2, D / 2], [0, sx * P / 2, 0]);
   // the tuck flap inside the front wall, its print toward the wall
-  const FH = M.fh * S, FW = M.fw * S, z = D - WF, fp = new THREE.Group(); fp.position.set(0, 0, z); pivot.add(fp);
+  const FH = M.fh * S, FW = M.fw * S, z = D - WF, fp = new THREE.Group(); fp.position.set(0, 0, z); pivot.add(fp); rt.tuck = { g: fp, fh: M.fh, reach: o.dims.d - M.wf };
   add(fp, FW, FH, F('flap'), [0, -FH / 2, 0], [0, 0, 0], { face: 'flap' });
   add(fp, FW, FH, rt.innerMat, [0, -FH / 2, -T], [0, P, 0], { face: 'inside', wall: true });
   add(fp, FW, T, rt.edgeMat, [0, -FH, -T / 2], [P / 2, 0, 0]);
@@ -129,12 +129,12 @@ function mailerNet(o) {
 const mailerFold = {
   T: o => mailerDims(o).t,
   roots: ps => [ps.findIndex(p => p.key === 'bottom')],
-  hinge(par, ch, T) {
+  hinge(par, ch, T, o) {
     const k = ch.key;
     if (k === 'lock') return { ang: 0, a: 0 };
     if (k === 'ear') return { ang: 90, a: -T };
     if (k === 'top') return { ang: 90, a: T, d: T };
-    if (k === 'flap') return { ang: -90, a: 0, d: T };
+    if (k === 'flap') { const M = mailerDims(o); return { ang: -90, a: 0, d: T, opens: lid => tuckOpen(lid, M.fh, o.dims.d - M.wf) }; }
     if (k === 'fold') return par.key === 'top' ? { ang: 180, a: T } : { ang: 90, a: 0 };
     return { ang: 90, a: 0 };
   },

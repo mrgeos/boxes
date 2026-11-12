@@ -378,11 +378,21 @@ function buildBox(o, rt) {
   } else if (lt === 'tuck') {
     // tuck flap hangs inside the front wall; the blank cuts it as wide as the box, the model keeps a clearance (it lies within the walls' thickness)
     const TF = clamp(o.flapH, 3, o.dims.h - 2 * o.thickness) * S, TW = W - 2 * eps, z = D - WT - eps;
-    add(pivot, TW, TF, F('flap'), [0, -TF / 2, z], [0, 0, 0], { face: 'flap' });
-    add(pivot, TW, TF, rt.innerMat, [0, -TF / 2, z - T], [0, P, 0], { face: 'inside', wall: true });
-    add(pivot, TW, T, rt.edgeMat, [0, -TF, z - T / 2], [P / 2, 0, 0]);
+    const fp = new THREE.Group(); fp.position.set(0, 0, z); pivot.add(fp); rt.tuck = { g: fp, fh: TF / S, reach: z / S };
+    add(fp, TW, TF, F('flap'), [0, -TF / 2, 0], [0, 0, 0], { face: 'flap' });
+    add(fp, TW, TF, rt.innerMat, [0, -TF / 2, -T], [0, P, 0], { face: 'inside', wall: true });
+    add(fp, TW, T, rt.edgeMat, [0, -TF, -T / 2], [P / 2, 0, 0]);
     if (isCarton(o)) buildCartonDust(o, rt);
   }
 }
 
-export { buildBox, cutNetWindow, faceWindow, lidDimsMM, netWindowPath, netWindows, winMM, windowPath, windowPlace };
+/* A tuck flap is held inside the front wall: as the lid opens (lid °) it cannot swing out through the wall, so it keeps
+   hanging straight down until its lower edge clears the wall's top (fh: the flap's height, reach: how far its crease is
+   from the hinge, mm), then eases back to its fold with the lid. Returns how far (°) it is turned back against the lid. */
+function tuckOpen(lid, fh, reach) {
+  const th = Math.max(0, lid), tc = Math.asin(Math.min(1, fh / Math.max(fh, reach))) * 180 / Math.PI;
+  if (th <= tc) return th;
+  const k = Math.min(1, (th - tc) / 40);
+  return tc * (1 - k * k * (3 - 2 * k));
+}
+export { buildBox, cutNetWindow, tuckOpen, faceWindow, lidDimsMM, netWindowPath, netWindows, winMM, windowPath, windowPlace };
