@@ -234,7 +234,7 @@ function splitCreased(p) {
   const A = clip(1), B = clip(-1); if (A.length < 3 || B.length < 3 || area(A) < 1 || area(B) < 1) return [p];
   const gc = [p.glue.reduce((s, v) => s + v[0], 0) / p.glue.length, p.glue.reduce((s, v) => s + v[1], 0) / p.glue.length], tri = f(gc) >= 0 ? A : B, body = tri === A ? B : A;
   const box = q => { const xs = q.map(v => v[0]), ys = q.map(v => v[1]), x = Math.min(...xs), y = Math.min(...ys); return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }; };
-  return [{ key: p.key, on: p.on, joins: [p.on, 'gtri'], poly: body, ...box(body) }, { key: 'gtri', on: p.on, joins: ['tab'], poly: tri, ...box(tri) }];
+  return [{ key: p.key, on: p.on, joins: [p.on, 'gtri'], poly: body, ...box(body), ...(p.flap ? { flap: p.flap } : {}) }, { key: 'gtri', on: p.on, joins: ['tab'], poly: tri, ...box(tri) }];
 }
 /* the blank as a tree of panels hung on one another by their creases, with what each crease does by default (ang0, a, rank)
    and its name (id). A crease may lie at any angle on the sheet. No three.js objects: the editor reads it too */

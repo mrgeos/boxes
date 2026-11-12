@@ -396,7 +396,15 @@ function buildHandleBox(o, rt, { addG, add, film }) {
     flap(uh, tL, true, ry, sx, side + 'Top');
     // the tongue on the upper flap's free edge: it slants in through the slot in the lower flap while the end is closed
     const tw = B.tw * S / 2, ins = B.th * .35 * S, tg = new THREE.Group(); tg.position.set(-sx * T, -tL, 0); uh.add(tg);
-    const tm = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape([V2(-tw, 0), V2(tw, 0), V2(tw - ins, -B.th * S), V2(-tw + ins, -B.th * S)])), rt.foldMat);
+    // the tongue's printed side takes its picture from the sheet (faces/flaps.js), like the flap's ears: along the flap past its free edge, and across from its middle
+    const tab = (net.tabs || []).find(q => q.on === side + 'Top' && q.fp?.flap), tgeo = () => new THREE.ShapeGeometry(new THREE.Shape([V2(-tw, 0), V2(tw, 0), V2(tw - ins, -B.th * S), V2(-tw + ins, -B.th * S)]));
+    const tm = new THREE.Mesh(tgeo(), tab ? fl.mat : rt.foldMat);
+    if (tab) {
+      const pos = tm.geometry.attributes.position, uv = tm.geometry.attributes.uv, fe = tab.pts[0][0], cy = (tab.pts[0][1] + tab.pts[3][1]) / 2;
+      for (let i = 0; i < pos.count; i++) uv.setXY(i, (fe - sx * (-pos.getY(i) / S)) / fl.W, 1 - (cy + sx * pos.getX(i) / S) / fl.H);
+      tm.position.x = sx * T;
+      const tb = new THREE.Mesh(tgeo(), rt.innerMat); tb.rotation.set(0, -ry, 0); tb.castShadow = true; tb.userData = { objId: o.id, face: null }; tg.add(tb);
+    }
     tm.rotation.set(0, ry, 0); tm.castShadow = true; tm.userData = { objId: o.id, face: null }; tg.add(tm);
     const tong = { m: tg, sx, al: 15 * P / 180, slot: null }; rt.hb.tongues.push(tong);
     // the ears on its sides, beyond the dust flaps, folded in (they turn with the flap): the printed side towards the wall

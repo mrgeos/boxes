@@ -1,6 +1,8 @@
 // Бумажный пакет с ручками: корпус с фальцами, плоские ручки, развёртка
 import * as THREE from 'three';
 import { S, clamp, esc } from '../core/util.js';
+import { netLayout } from '../core/model.js';
+import { ensureFlaps } from '../faces/flaps.js';
 
 /* ---------- paper carrier bag ----------
    A paper bag standing open: front and back (dims.w × dims.h), side gussets (dims.d) with a crease down the
@@ -28,10 +30,21 @@ function buildPaperBag(o, rt) {
   plane(D, H, F('left'), [-W / 2, H / 2, 0], [0, -P / 2, 0], 'left');
   plane(W, D, rt.foldMat, [0, .02 * S, 0], [P / 2, 0, 0]);
   // inside: plain paper, and the turned-in top band (the printed side, folded in)
-  const tb = B.top * S, ih = H - tb;
+  const tb = B.top * S, ih = H - tb, net = netLayout(o), turn = net.panels.find(q => q.key === 'turn' && q.flap), fl = turn && ensureFlaps(o, rt, net);
+  // the turn-in is the net's `turn` flap folded in 180°, its print facing in: each vertex takes its place on the sheet (faces/flaps.js),
+  // the strip's fold at the top (sheet y = its depth), x running the way the wall's face does seen from outside
+  const bandUV = m => {
+    const geo = m.geometry, pos = geo.attributes.position, uv = geo.attributes.uv, v = new THREE.Vector3(), fb = m.position.z !== 0, ox = fb ? (m.position.z > 0 ? 0 : B.w + B.d) : (m.position.x > 0 ? B.w : 2 * B.w + B.d);
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyEuler(m.rotation).add(m.position);
+      const a = fb ? (m.position.z > 0 ? B.w / 2 + v.x / S : B.w / 2 - v.x / S) : (m.position.x > 0 ? B.d / 2 - v.z / S : B.d / 2 + v.z / S);
+      uv.setXY(i, (ox + a) / fl.W, 1 - (B.top - (H - v.y) / S) / fl.H);
+    }
+  };
   for (const [w, pos, ry] of [[W, [0, 0, D / 2 - T], P], [W, [0, 0, -D / 2 + T], 0], [D, [W / 2 - T, 0, 0], -P / 2], [D, [-W / 2 + T, 0, 0], P / 2]]) {
     plane(w - 2 * T, ih, rt.innerMat, [pos[0], ih / 2, pos[2]], [0, ry, 0], null, true);
-    plane(w - 2 * T, tb, rt.foldMat, [pos[0], H - tb / 2, pos[2]], [0, ry, 0]);
+    const band = plane(w - 2 * T, tb, turn ? fl.mat : rt.foldMat, [pos[0], H - tb / 2, pos[2]], [0, ry, 0]);
+    if (turn) bandUV(band);
   }
   plane(W - 2 * T, D - 2 * T, rt.innerMat, [0, T, 0], [-P / 2, 0, 0], null, true);
   // the creases of the gussets: down the middle to the bottom folds, which open into a peak at the foot

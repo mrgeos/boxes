@@ -51,7 +51,7 @@ function applyFlapRules(o, n, hasFace) {
     if (!best) continue;
     left.delete(it);
     const { q, t, bg } = best, size = t.edge === 'left' || t.edge === 'right' ? r[2] - r[0] : r[3] - r[1], mm = Math.min(bleed, size);
-    const flap = it.glue ? (mm > 0 ? { bgOf: bg, strip: { mm, edge: t.edge } } : null) : { bgOf: bg };
+    const flap = it.glue ? (mm > 0 ? { bgOf: bg, strip: { mm, edge: t.edge } } : null) : { bgOf: bg, ...(it.tab && it.p.glue?.length > 2 ? { hole: it.p.glue } : {}) };
     const glueStrip = it.glue ? { of: q.key, edge: t.edge, mm } : null;
     if (it.tab) {
       const tw = { key: 'tab', tab: true, x: r[0], y: r[1], w: r[2] - r[0], h: r[3] - r[1], poly: it.p.pts, noPrint: it.glue, ...(flap ? { flap } : {}), ...(glueStrip ? { glueStrip } : {}) };

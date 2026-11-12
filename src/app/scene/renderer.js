@@ -15,6 +15,7 @@ import { buildTray, trayLidAt, trayMaterial } from '../carriers/tray.js';
 import { TORTE_COLORS, buildTorte } from '../carriers/torte.js';
 import { buildBox, tuckOpen } from '../carriers/box.js';
 import { applyRsc } from '../carriers/rsc.js';
+import { applyDust } from '../carriers/carton-dust.js';
 import { buildSleeve, sleeveColors } from '../carriers/sleeve.js';
 import { buildCarry, carryColors } from '../carriers/carry.js';
 import { buildPaperBag, paperBagColors } from '../carriers/paperbag.js';
@@ -300,6 +301,7 @@ function applyLid(o) {
     if (rt.hb.tray) rt.hb.tray.position.x = rt.hb.dir * clamp(o.tray?.out ?? 0, 0, o.dims.w) * S;
   }
   if (rt.rsc) applyRsc(o);
+  if (rt.dust) applyDust(o);
   if (rt.drawer) rt.drawer.position.z = drawerOut(o) * S;
   if (rt.lidPivot) rt.lidPivot.rotation.x = -o.lid * DEG;
   if (rt.tuck) rt.tuck.g.rotation.x = tuckOpen(o.lid, rt.tuck.fh, rt.tuck.reach) * DEG;   // (the tuck flap comes out of the wall straight up)
