@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OVERLAY_LAYER, S, clamp } from '../core/util.js';
 import { clearLid, faceMM, netLayout } from '../core/model.js';
 import { dieLines } from './box-net.js';
-import { netWindows } from './box.js';
+import { netWindows, tuckOpen } from './box.js';
 import { mailerFold } from './mailer.js';
 import { isCarton } from './carton-net.js';
 import { rscT } from './rsc.js';
@@ -37,7 +37,8 @@ const boxFold = {
     if (k === 'tab') return { ang: 90, a: -T, slide: -2 * T };
     if (k === 'fold') return { ang: 180, a: T };
     if (k === 'top') return { ang: 90, a: T, d: T };
-    if (k === 'flap') return { ang: 90, a: tuck ? -T : 0, d: tuck ? -2 * T : 0 };
+    // a tuck flap comes out of the front wall straight up as the lid opens at the end (tuckOpen), as the model's does
+    if (k === 'flap') return { ang: 90, a: tuck ? -T : 0, d: tuck ? -2 * T : 0, ...(tuck ? { opens: lid => -tuckOpen(lid, clamp(o.flapH, 3, o.dims.h - 2 * o.thickness), o.dims.d - o.thickness - .3) } : {}) };
     return { ang: 90, a: 0 };
   },
 };
@@ -50,7 +51,7 @@ const cartonFold = {
     const k = ch.key;
     if (k === 'tab') return { ang: 90, a: par.key === 'left' || par.key === 'right' ? (info.dy < 0 ? 0 : -T) : -T, slide: -2 * T };
     if (k === 'top') return { ang: 90, a: T, d: T, rank: 5 };
-    if (k === 'flap') return { ang: 90, a: -T, d: -2 * T };
+    if (k === 'flap') return { ang: 90, a: -T, d: -2 * T, ...(par.key === 'top' ? { opens: lid => -tuckOpen(lid, clamp(o.flapH, 3, o.dims.h - 2 * o.thickness), o.dims.d - o.thickness - .3) } : {}) };
     return { ang: 90, a: 0 };
   },
 };

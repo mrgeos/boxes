@@ -13,7 +13,7 @@ import { buildTube } from '../carriers/tube.js';
 import { buildDome, domeGeom } from '../carriers/dome.js';
 import { buildTray, trayLidAt, trayMaterial } from '../carriers/tray.js';
 import { TORTE_COLORS, buildTorte } from '../carriers/torte.js';
-import { buildBox } from '../carriers/box.js';
+import { buildBox, tuckOpen } from '../carriers/box.js';
 import { applyRsc } from '../carriers/rsc.js';
 import { buildSleeve, sleeveColors } from '../carriers/sleeve.js';
 import { buildCarry, carryColors } from '../carriers/carry.js';
@@ -180,7 +180,7 @@ function buildObject(o) {
   }
   disposeRibbons(rt);
   rt.group.traverse(m => { if ((m.isMesh || m.isLine) && !m.userData.shared) m.geometry.dispose(); });
-  rt.group.clear(); rt.lidPivot = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.insert = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.trayLid = null; rt.bowl = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null; rt.rsc = null; rt.rscTape = null; rt.drawer = null; rt.rig = null; rt.foldPrev = null; rt.creases = null; rt.planned = null;
+  rt.group.clear(); rt.lidPivot = null; rt.tuck = null; rt.hb = null; rt.sleeve = null; rt.tissue = null; rt.insert = null; rt.fill = null; rt.lidGroup = null; rt.domeLid = null; rt.trayLid = null; rt.bowl = null; rt.torteLid = null; rt.cupLid = null; rt.bagPivot = null; rt.bagFrames = null; rt.bagTape = null; rt.rsc = null; rt.rscTape = null; rt.drawer = null; rt.rig = null; rt.foldPrev = null; rt.creases = null; rt.planned = null;
   rt.innerMat.side = o.type === 'cup' || o.type === 'dome' ? THREE.DoubleSide : o.type === 'bag' ? THREE.BackSide : THREE.FrontSide; rt.innerMat.needsUpdate = true;
   for (const k of faceKeys(o)) ensureFaceRT(o, k);
   if (o.type === 'box') buildBox(o, rt); else if (o.type === 'cup') buildCup(o, rt); else if (o.type === 'dome') buildDome(o, rt); else if (o.type === 'tray') buildTray(o, rt); else if (o.type === 'torte') buildTorte(o, rt); else if (o.type === 'paperbag') buildPaperBag(o, rt); else if (o.type === 'bag') buildBag(o, rt); else if (o.type === 'board') buildBoard(o, rt); else if (o.type === 'model') buildModelObject(o, rt); else buildTube(o, rt);
@@ -302,6 +302,7 @@ function applyLid(o) {
   if (rt.rsc) applyRsc(o);
   if (rt.drawer) rt.drawer.position.z = drawerOut(o) * S;
   if (rt.lidPivot) rt.lidPivot.rotation.x = -o.lid * DEG;
+  if (rt.tuck) rt.tuck.g.rotation.x = tuckOpen(o.lid, rt.tuck.fh, rt.tuck.reach) * DEG;   // (the tuck flap comes out of the wall straight up)
   for (const m of rt.contact || []) m.visible = o.lid < 1.5;
   // a ribbon is off while the lid is open
   if (rt.ribbons) rt.ribbons.visible = !(o.lid > .5);
