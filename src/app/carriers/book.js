@@ -1,6 +1,7 @@
 // Коробка-книжка на магните: жёсткий переплёт (дно, корешок, крышка, клапан на магнитах) и оклеенный лоток внутри
 import * as THREE from 'three';
 import { S, clamp } from '../core/util.js';
+import { turnIn } from './rigid.js';
 
 /* A rigid book box: grey board wrapped in printed paper. The case is one wrap over four boards: the bottom, the
    spine (the back), the lid and the front flap that comes down over the tray's front and holds with magnets hidden
@@ -43,6 +44,7 @@ function buildBook(o, rt, { add }) {
   add(g, iw, th - tt, rt.innerMat, [0, y0 + tt + (th - tt) / 2, z0 + tt], [0, 0, 0], { face: 'inside', wall: true });
   for (const sx of [-1, 1]) add(g, idp, th - tt, rt.innerMat, [sx * (tw / 2 - tt), y0 + tt + (th - tt) / 2, zc], [0, -sx * P / 2, 0], { face: 'inside', wall: true });
   add(g, iw, idp, F('insideBottom'), [0, y0 + tt, zc], [-P / 2, 0, 0], { face: 'insideBottom' });
+  turnIn(add, g, { ax: iw / 2, az: idp / 2, cz: zc, y: y0 + th, dep: Math.min(12, th / S * .5) * S, mat: wrap });
   // the wrapped rim of the tray
   add(g, tw, tt, wrap, [0, y0 + th, z0 + td - tt / 2], [-P / 2, 0, 0], { support: 'rimFront' });
   add(g, tw, tt, wrap, [0, y0 + th, z0 + tt / 2], [-P / 2, 0, 0], { support: 'rimBack' });
