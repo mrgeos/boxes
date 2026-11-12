@@ -156,7 +156,7 @@ function sideForm(pdf, o, sh, ocg, cs) {
   // the design: bleed rings of all panels first, then the panels, then the glue flaps
   const colorOf = p => p.plain ? rgbOf(p.plain) : p.fold ? rgbOf(o.faces.front?.bg || o.board) : p.blank && !bagFilm(o) && !p.noPrint ? rgbOf(o.board) : null;
   let design = '';
-  const place = p => { const pic = pics.get(p); return `q ${n3(pic.W)} 0 0 ${n3(-pic.H)} ${n3(pic.x)} ${n3(pic.y + pic.H)} cm /${images.get(p)} Do Q `; };
+  const holeOps = p => p.flap?.hole ? polyOps(p.flap.hole) : '', place = p => { const pic = pics.get(p); return `q ${n3(pic.W)} 0 0 ${n3(-pic.H)} ${n3(pic.x)} ${n3(pic.y + pic.H)} cm /${images.get(p)} Do Q `; };
   if (b) for (const p of printPanels(n)) {
     if (!bleeds(o, p)) continue;
     const col = pics.has(p) ? null : colorOf(p);
@@ -169,7 +169,7 @@ function sideForm(pdf, o, sh, ocg, cs) {
   for (const p of printPanels(n)) {
     const col = pics.has(p) ? null : colorOf(p);
     if (!pics.has(p) && !col) continue;
-    design += `q ${shapeOps(p, 0)}W n ${col ? `${col} rg ${shapeOps(p, 0)}f ` : place(p)}Q\n`;
+    design += `q ${shapeOps(p, 0)}${col ? '' : holeOps(p)}${!col && p.flap?.hole ? 'W*' : 'W'} n ${col ? `${col} rg ${shapeOps(p, 0)}f ` : place(p)}Q\n`;
   }
   for (const t of n.tabs || []) if (!t.fp) design += `q ${rgbOf(n.plain || o.board || '#ffffff')} rg ${polyOps(t.pts)}f Q\n`;
   // the lines

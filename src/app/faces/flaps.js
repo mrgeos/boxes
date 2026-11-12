@@ -30,10 +30,13 @@ function bareRect(p) {
   const s = p.glueStrip, m = Math.min(s.mm, s.edge === 'left' || s.edge === 'right' ? p.w : p.h);
   return s.edge === 'bottom' ? [p.x, p.y, p.w, p.h - m] : s.edge === 'left' ? [p.x + m, p.y, p.w - m, p.h] : s.edge === 'right' ? [p.x, p.y, p.w - m, p.h] : [p.x, p.y + m, p.w, p.h - m];
 }
+const holePath = (c, pts, ox, oy, k) => { pts.forEach(([X, Y], i) => c[i ? 'lineTo' : 'moveTo'](ox + X * k, oy + Y * k)); c.closePath(); };
 function drawFlap(c, o, n, p, ox, oy, k) {
   const face = o.faces[p.flap.bgOf]; if (!face) return;
   const src = n.panels.find(q => q.key === p.flap.bgOf && flatPanel(q));
   c.save(); c.beginPath(); panelPath(c, p, ox, oy, k); c.clip();
+  // a glue patch inside the flap (a crash lock's triangle, `flap.hole`, net mm) stays bare: clip everything but it
+  if (p.flap.hole) { c.beginPath(); c.rect(ox - 1e4, oy - 1e4, 2e4, 2e4); holePath(c, p.flap.hole, ox, oy, k); c.clip('evenodd'); }
   if (p.flap.strip) { const [x, y, w, h] = flapRect(p); c.beginPath(); c.rect(ox + x * k, oy + y * k, w * k, h * k); c.clip(); }
   c.translate(ox, oy); c.scale(k, k);
   c.fillStyle = face.bg; c.fillRect(p.x - 1, p.y - 1, p.w + 2, p.h + 2);
@@ -84,6 +87,7 @@ function renderFlaps(o) {
   for (const p of printPanels(n)) {
     if (p.flap) drawFlap(c, o, n, p, 0, 0, f.s);
     // the bare part of a glue flap is the paper itself
+    if (p.flap?.hole) { c.save(); c.beginPath(); holePath(c, p.flap.hole, 0, 0, f.s); c.fillStyle = o.board || '#ffffff'; c.fill(); c.restore(); }
     if (p.glueStrip) { const [x, y, w, h] = bareRect(p); c.save(); c.beginPath(); panelPath(c, p, 0, 0, f.s); c.clip(); c.fillStyle = o.board || '#ffffff'; c.fillRect(x * f.s, y * f.s, w * f.s, h * f.s); c.restore(); }
   }
   f.tex.needsUpdate = true;

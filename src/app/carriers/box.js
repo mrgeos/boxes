@@ -9,6 +9,8 @@ import { netPoint } from './box-net.js';
 import { buildMailer } from './mailer.js';
 import { buildRsc } from './rsc.js';
 import { outlineOutside, unionPolys } from '../core/polygon.js';
+import { buildCartonDust } from './carton-dust.js';
+import { isCarton } from './carton-net.js';
 import { buildBook } from './book.js';
 import { buildCasket, buildDrawerBox } from './rigid.js';
 import { buildGable, buildHexagon, buildPillow, buildPyramid } from './shapes.js';
@@ -379,6 +381,7 @@ function buildBox(o, rt) {
     add(pivot, TW, TF, F('flap'), [0, -TF / 2, z], [0, 0, 0], { face: 'flap' });
     add(pivot, TW, TF, rt.innerMat, [0, -TF / 2, z - T], [0, P, 0], { face: 'inside', wall: true });
     add(pivot, TW, T, rt.edgeMat, [0, -TF, z - T / 2], [P / 2, 0, 0]);
+    if (isCarton(o)) buildCartonDust(o, rt);
   }
 }
 

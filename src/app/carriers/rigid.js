@@ -29,6 +29,14 @@ function shell(add, parent, { W, D, T, y0, h, faces, inner, rim, rimY, floor }) 
   for (const sz of [-1, 1]) add(parent, W, T, rim, [0, rimY, sz * (D / 2 - T / 2)], [P / 2, 0, 0]);
   for (const sx of [-1, 1]) add(parent, T, D - 2 * T, rim, [sx * (W / 2 - T / 2), rimY, 0], [P / 2, 0, 0]);
 }
+/* The wrapping paper's turn-in: it runs up the outside, over the rim and down the inside wall with its print facing in, so a
+   band `dep` deep shows along the top of each inner wall (the colour the net prints on its `fold` strips). (ax, az): the inner
+   half sizes, cz: the inner middle's z, y: the rim; the band hangs down from it, or rises from it when `up` (a lid's rim) */
+function turnIn(add, parent, { ax, az, cz = 0, y, dep, up = false, mat }) {
+  const P = Math.PI, e = .05 * S, yc = y + (up ? dep : -dep) / 2;
+  add(parent, 2 * ax, dep, mat, [0, yc, cz + az - e], [0, P, 0]); add(parent, 2 * ax, dep, mat, [0, yc, cz - az + e], [0, 0, 0]);
+  for (const sx of [-1, 1]) add(parent, 2 * az, dep, mat, [sx * (ax - e), yc, cz], [0, -sx * P / 2, 0]);
+}
 function buildCasket(o, rt, { add }) {
   const W = o.dims.w * S, H = o.dims.h * S, D = o.dims.d * S, T = rigidT(o) * S, LH = casketLidH(o) * S, BH = H - LH, P = Math.PI, g = rt.group, F = k => rt.faces[k].mat;
   const lined = !!o.lining, lin = lined ? velvet(rt, o) : rt.innerMat;
@@ -37,6 +45,8 @@ function buildCasket(o, rt, { add }) {
   shell(add, g, { W, D, T, y0: 0, h: BH, inner: lin, rim: rt.foldMat, rimY: BH, floor: true,
     faces: { front: F('front'), back: F('back'), right: F('right'), left: F('left'), frontD: { face: 'front' }, backD: { face: 'back' }, rightD: { face: 'right' }, leftD: { face: 'left' } } });
   add(g, W - 2 * T, D - 2 * T, lined ? lin : F('insideBottom'), [0, T, 0], [-P / 2, 0, 0], lined ? {} : { face: 'insideBottom' });
+  const tin = (mm, up) => Math.min(12, mm * .5) * S, ax = W / 2 - T, az = D / 2 - T;
+  if (!lined) turnIn(add, g, { ax, az, y: BH, dep: tin(BH / S), mat: rt.foldMat });
   // the lid on its hinges at the back
   const pivot = new THREE.Group(); pivot.position.set(0, BH, -D / 2); g.add(pivot); rt.lidPivot = pivot; rt.lidGroup = null; rt.contact = [];
   const lid = new THREE.Group(); lid.position.set(0, 0, D / 2); pivot.add(lid);
@@ -44,6 +54,7 @@ function buildCasket(o, rt, { add }) {
   shell(add, lid, { W, D, T, y0: 0, h: LH, inner: lin, rim: rt.foldMat, rimY: 0, floor: false,
     faces: { front: F('lidFront'), back: F('lidBack'), right: F('lidRight'), left: F('lidLeft'), frontD: { face: 'lidFront' }, backD: { face: 'lidBack' }, rightD: { face: 'lidRight' }, leftD: { face: 'lidLeft' } } });
   add(lid, W - 2 * T, D - 2 * T, lined ? lin : F('inside'), [0, LH - T, 0], [P / 2, 0, 0], lined ? {} : { face: 'inside' });
+  if (!lined) turnIn(add, lid, { ax, az, y: 0, dep: tin(LH / S), up: true, mat: rt.foldMat });
   // two small hinges
   for (const sx of [-1, 1]) {
     const hg = new THREE.Mesh(new THREE.CylinderGeometry(1.4 * S, 1.4 * S, Math.min(22, o.dims.w * .12) * S, 12), rt.metalMat);
@@ -80,6 +91,7 @@ function buildDrawerBox(o, rt, { add }) {
   add(dr, dw, dt, rt.foldMat, [0, y0 + dh, zf - dt / 2], [-P / 2, 0, 0], { support: 'rimFront' });
   add(dr, dw, dt, rt.foldMat, [0, y0 + dh, zf - dd + dt / 2], [-P / 2, 0, 0], { support: 'rimBack' });
   for (const sx of [-1, 1]) add(dr, dt, idd, rt.foldMat, [sx * (dw / 2 - dt / 2), y0 + dh, zf - dd / 2], [-P / 2, 0, 0], { support: sx > 0 ? 'rimRight' : 'rimLeft' });
+  turnIn(add, dr, { ax: iw / 2, az: idd / 2, cz: zf - dd / 2, y: y0 + dh, dep: Math.min(12, dh / S * .5) * S, mat: rt.foldMat });
   // the ribbon pull: a short loop out of the drawer's front
   if (o.pull !== 'none') {
     rt.pullMat ??= new THREE.MeshStandardMaterial({ roughness: .45, side: THREE.DoubleSide });
@@ -135,4 +147,4 @@ function drawerNet(o) {
   return normalize(panels, tabs, { rigid: 'drawer' });
 }
 
-export { LININGS, buildCasket, buildDrawerBox, casketLidH, casketNet, drawerNet, drawerOut, rigidT };
+export { LININGS, turnIn, buildCasket, buildDrawerBox, casketLidH, casketNet, drawerNet, drawerOut, rigidT };
