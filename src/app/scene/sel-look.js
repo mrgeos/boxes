@@ -114,10 +114,12 @@ function buildPlate(b) {
 /* keeps the marks in step with the selection, the pointer and the objects; true when the scene needs drawing */
 function syncSelLook() {
   const ids = pickedIds(), one = ids.length === 1 ? RT.get(ids[0]) : null;
-  const k = JSON.stringify([ids, hoverId, tool(), recording ? 1 : 0, one && one.group.matrixWorld.elements.map(v => +v.toFixed(4)), one && one.foot, activeLayer()?.id || sel.sticker || sel.part || '']);
+  // seen from under the floor the plate would show through it as a pale rim round the object's bottom, like a ledge
+  const under = !!one && camera.position.y < one.group.matrixWorld.elements[13];
+  const k = JSON.stringify([ids, hoverId, tool(), recording ? 1 : 0, under, one && one.group.matrixWorld.elements.map(v => +v.toFixed(4)), one && one.foot, activeLayer()?.id || sel.sticker || sel.part || '']);
   const changed = k !== key; key = k;
   // with the move and rotate tools the floor ring (scene/move.js) marks it instead
-  holder.visible = !!one && !recording && tool() !== 'move' && tool() !== 'rotate';
+  holder.visible = !!one && !recording && !under && tool() !== 'move' && tool() !== 'rotate';
   if (holder.visible && changed) {
     const b = localBox(one);
     if (b) { buildPlate(b); holder.matrix.copy(one.group.matrixWorld); holder.matrixWorldNeedsUpdate = true; }
