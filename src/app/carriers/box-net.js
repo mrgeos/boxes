@@ -4,7 +4,7 @@ import { doubleWall, faceKeys, faceMM } from '../core/model.js';
 import { mailerNet } from './mailer.js';
 import { cartonNet, isCarton } from './carton-net.js';
 import { rscNet } from './rsc.js';
-import { bookNet } from './book.js';
+import { bookFlatNet, bookNet } from './book.js';
 import { casketNet, drawerNet } from './rigid.js';
 import { gableNet, hexNet, pillowNet, pyramidNet } from './shapes.js';
 
@@ -26,7 +26,7 @@ function boxNet(o) {
   if (isCarton(o)) return cartonNet(o);
   if (lt === 'f0427') return mailerNet(o);
   if (lt === 'f0201') return rscNet(o);
-  if (lt === 'book') return bookNet(o);
+  if (lt === 'book') return o.bookFlat ? bookFlatNet(o) : bookNet(o);
   if (lt === 'casket') return casketNet(o);
   if (lt === 'drawer') return drawerNet(o);
   if (lt === 'pillow') return pillowNet(o);
