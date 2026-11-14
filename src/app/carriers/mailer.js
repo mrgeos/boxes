@@ -1,7 +1,7 @@
 // Мейлер FEFCO 0427: самосборная коробка из одной заготовки — двойные борта с ушками, крышка с клапаном внутрь
 import * as THREE from 'three';
 import { S, V2, clamp } from '../core/util.js';
-import { planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
+import { notchPts, planeGeo, planeGeoHole, ribbonGeo, rrectPts } from '../scene/geometry.js';
 import { tuckOpen, winMM } from './box.js';
 import { ensureFlaps } from '../faces/flaps.js';
 import { netLayout } from '../core/model.js';
@@ -23,21 +23,35 @@ function mailerDims(o) {
 function buildMailer(o, rt, { addG, add }) {
   const M = mailerDims(o), W = o.dims.w * S, H = o.dims.h * S, D = o.dims.d * S, T = M.t * S, P = Math.PI, g = rt.group;
   const WF = M.wf * S, WS = M.ws * S, WB = M.wb * S, F = k => rt.faces[k].mat;
+  // a window across the hinge: one cut through the lid's back edge and down the back wall (the outer wall is cut in buildBox)
+  const win = winMM(o), back = win?.place === 'back' ? win : null, ww = back ? back.ww * S : 0, wr = back ? back.r * S : 0;
+  const wbH = back ? back.wh * S : 0, wbR = Math.min(wr, wbH * .999);
+  const film = (parent, pts, p, r) => {
+    const m = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(pts)), rt.filmMat);
+    m.position.set(...p); m.rotation.set(...r); m.renderOrder = 2; m.raycast = () => {}; parent.add(m);
+  };
   // inside: the rolled walls show the board's outer side, the back wall its inner side
   const ih = H - T, iy = (H + T) / 2, iw = W - 2 * WS, sd = D - WB - T, sz = (WB - T) / 2;
   add(g, iw, ih, rt.foldMat, [0, iy, D / 2 - WF], [0, P, 0], { face: 'inside', wall: true });
-  add(g, iw, ih, rt.innerMat, [0, iy, -D / 2 + WB], [0, 0, 0], { face: 'inside', wall: true });
+  addG(g, planeGeo(iw, ih, back && notchPts(iw, ih, ww / 2, wbH, wbR, 'top'), 'top'), rt.innerMat, [0, iy, -D / 2 + WB], [0, 0, 0], { face: 'inside', wall: true });
   for (const sx of [-1, 1]) add(g, sd, ih, rt.foldMat, [sx * (W / 2 - WS), iy, sz], [0, -sx * P / 2, 0], { face: 'inside', wall: true });
   add(g, iw, D - WF - WB, F('insideBottom'), [0, T, (WB - WF) / 2], [-P / 2, 0, 0], { face: 'insideBottom' });
   // the rolled tops of the walls and the crease of the lid
   add(g, iw, WF, rt.foldMat, [0, H, D / 2 - WF / 2], [-P / 2, 0, 0], { support: 'rimFront' });
-  add(g, iw, WB, rt.foldMat, [0, H, -D / 2 + WB / 2], [-P / 2, 0, 0], { support: 'rimBack' });
+  if (back) {
+    // the back wall's crease to the lid, split by the window, and the window's edge through the board
+    const sw = (iw - ww) / 2, notch = notchPts(W, H, ww / 2, wbH, wbR, 'top');
+    for (const sx of [-1, 1]) add(g, sw, WB, rt.foldMat, [sx * (ww / 2 + sw / 2), H, -D / 2 + WB / 2], [-P / 2, 0, 0], { support: 'rimBack' });
+    addG(g, ribbonGeo(notch.map(p => [-p.x, H / 2 + p.y, -D / 2]), notch.map(p => [-p.x, H / 2 + p.y, -D / 2 + WB])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+    film(g, notch, [0, H / 2, -D / 2 + WB / 2], [0, P, 0]);
+  } else add(g, iw, WB, rt.foldMat, [0, H, -D / 2 + WB / 2], [-P / 2, 0, 0], { support: 'rimBack' });
   for (const sx of [-1, 1]) add(g, WS, D, rt.foldMat, [sx * (W / 2 - WS / 2), H, 0], [-P / 2, 0, 0], { support: sx > 0 ? 'rimRight' : 'rimLeft' });
   // the lid, hinged at the top of the back wall
   const pivot = new THREE.Group(); pivot.position.set(0, H, -D / 2); g.add(pivot); rt.lidPivot = pivot; rt.lidGroup = null; rt.contact = [];
-  const win = winMM(o), hole = win && [rrectPts(0, -win.off * S, win.ww * S, win.wd * S, win.r * S)], holeIn = hole && hole.map(q => q.map(v => V2(v.x, -v.y)));
-  addG(pivot, hole ? planeGeoHole(W, D, hole) : planeGeo(W, D), F('top'), [0, T, D / 2], [-P / 2, 0, 0], { face: 'top' });
-  addG(pivot, holeIn ? planeGeoHole(W, D, holeIn) : planeGeo(W, D), F('inside'), [0, 0, D / 2], [P / 2, 0, 0], { face: 'inside' });
+  const hole = win?.place === 'lid' && [rrectPts(0, -win.off * S, win.ww * S, win.wd * S, win.r * S)], holeIn = hole && hole.map(q => q.map(v => V2(v.x, -v.y)));
+  const wd = back ? back.wd * S : 0, lidNotch = back && notchPts(W, D, ww / 2, wd, wr, 'top');
+  addG(pivot, hole ? planeGeoHole(W, D, hole) : planeGeo(W, D, lidNotch, 'top'), F('top'), [0, T, D / 2], [-P / 2, 0, 0], { face: 'top' });
+  addG(pivot, holeIn ? planeGeoHole(W, D, holeIn) : planeGeo(W, D, back && notchPts(W, D, ww / 2, wd, wr, 'bottom'), 'bottom'), F('inside'), [0, 0, D / 2], [P / 2, 0, 0], { face: 'inside' });
   if (hole) {
     const loop = [...hole[0], hole[0][0]];
     addG(pivot, ribbonGeo(loop.map(v => [v.x, T, D / 2 - v.y]), loop.map(v => [v.x, 0, D / 2 - v.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
@@ -46,7 +60,12 @@ function buildMailer(o, rt, { addG, add }) {
   }
   // the rolled front edge, the hinge, the cut sides
   add(pivot, W, T, rt.foldMat, [0, T / 2, D], [0, 0, 0]);
-  add(pivot, W, T, rt.foldMat, [0, T / 2, 0], [0, P, 0]);
+  if (lidNotch) {
+    const sw = (W - ww) / 2;
+    for (const sx of [-1, 1]) add(pivot, sw, T, rt.foldMat, [sx * (ww / 2 + sw / 2), T / 2, 0], [0, P, 0]);
+    addG(pivot, ribbonGeo(lidNotch.map(p => [p.x, T, D / 2 - p.y]), lidNotch.map(p => [p.x, 0, D / 2 - p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+    film(pivot, lidNotch, [0, T / 2, D / 2], [-P / 2, 0, 0]);
+  } else add(pivot, W, T, rt.foldMat, [0, T / 2, 0], [0, P, 0]);
   for (const sx of [-1, 1]) add(pivot, D, T, rt.edgeMat, [sx * W / 2, T / 2, D / 2], [0, sx * P / 2, 0]);
   // the tuck flap inside the front wall, its print toward the wall
   const FH = M.fh * S, FW = M.fw * S, z = D - WF, fp = new THREE.Group(); fp.position.set(0, 0, z); pivot.add(fp); rt.tuck = { g: fp, fh: M.fh, reach: o.dims.d - M.wf };

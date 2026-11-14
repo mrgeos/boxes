@@ -523,7 +523,7 @@ function bagFields(o) {
 }
 function windowFields(o) {
   const place = windowPlace(o), lt = o.lidType, flap = lt === 'flap';
-  const canEdge = lt === 'flat' || lt === 'flap', canBack = canEdge || lt === 'tuck';
+  const canEdge = lt === 'flat' || lt === 'flap', canBack = canEdge || lt === 'tuck' || lt === 'f0427';
   if (canBack && o.window.place !== place) o.window.place = place;   // keep the menu on an option this lid offers
   return (canBack ? `<div class="field wide"><span class="fl">Окно</span><select data-k="window.place">
       ${canEdge ? `<option value="edge">${flap ? 'Через переднее ребро на клапан' : 'Через переднее ребро на переднюю стенку'}</option>` : ''}

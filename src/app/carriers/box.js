@@ -30,8 +30,10 @@ function lidDimsMM(o) {
 function windowPlace(o) {
   const lt = o.lidType || 'flat';
   if (['none', 'f0201', 'book', 'casket', 'drawer', 'pillow', 'gable', 'pyramid', 'hexagon'].includes(lt) || clearLid(o)) return null;
-  if (lt === 'telescope' || lt === 'handle' || lt === 'f0427') return 'lid';
+  if (lt === 'telescope' || lt === 'handle') return 'lid';
   const pl = o.window.place;
+  // the mailer's lid hangs off its back wall: only the hinge edge is a fold the window can cross in one cut
+  if (lt === 'f0427') return pl === 'back' ? 'back' : 'lid';
   if (pl === 'lid' || pl === 'back') return pl;
   return lt === 'flat' || lt === 'flap' ? 'edge' : 'lid';
 }
