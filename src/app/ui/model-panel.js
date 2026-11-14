@@ -128,7 +128,7 @@ function modelInput(k) {
     if (['handle.on', 'handle.shape', 'frontWin.on', 'frontWin.join'].includes(k)) { select(o.id, sel.face); renderModel(); }
     return;
   }
-  if (k === 'earsOn' || k === 'earFull') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
+  if (k === 'earsOn' || k === 'earFull' || k === 'bookFlat') { ensureFaces(o); rebuildQueue.add(o.id); select(o.id, sel.face); renderModel(); ui.net = true; updateFaceMeta(); return; }
   if (k === 'flapH' || k === 'earLen' || k === 'lidH') { rebuildQueue.add(o.id); ui.net = true; updateFaceMeta(); return; }
   if (k.startsWith('dims') || k === 'thickness') { if (sleeveOn(o)) markFace(o, 'sleeve'); if (carryOn(o)) markFace(o, 'carry'); rebuildQueue.add(o.id); renderObjects(); ui.net = true; updateFaceMeta(); return; }
   if (k === 'lid') { applyLid(o); return; }
@@ -408,7 +408,9 @@ function renderModel() {
     ${box && clearLid(o) ? `<p class="hint">${o.lidFit === 'inside' ? 'Крышка стоит на дне лотка внутри бортов; высота считается от дна.' : 'Если крышка выше дна, она стоит на столе и закрывает лоток целиком.'} На прозрачные грани можно нанести печать: всё, что не закрыто слоями, остаётся прозрачным.</p>` : ''}
     ${box || dome ? rangeField(o.flute && box ? 'Толщина (по профилю гофры), мм' : 'Толщина, мм', 'thickness', .3, 8, .1) : ''}
     ${box && !['f0427', 'f0201', 'book', 'casket', 'drawer'].includes(o.lidType) ? rangeField('Стенки дна, мм', 'wallT', .3, 30, .1) : ''}
-    ${box && o.lidType === 'book' ? `<p class="hint">Жёсткая коробка из переплётного картона, оклеенная бумагой: дно, корешок, крышка и передний клапан — один переплёт, клапан держится на скрытых магнитах. Внутри лоток, приклеенный к дну и корешку; его бока видны снаружи (грани «Левый бок», «Правый бок»), перед — при открытой крышке («Лоток: перед»). Толщина — толщина картона.</p>` : ''}
+    ${box && o.lidType === 'book' ? `<label class="check"><input type="checkbox" data-k="bookFlat"> Сборная: едет плоской</label>` : ''}
+    ${box && o.lidType === 'book' && o.bookFlat ? `<p class="hint">Сборная коробка-книжка: переплёт и стенки лотка — один лист обтяжки на картоне. Стенки поднимаются от дна на бумажных шарнирах, ушки боковых стенок клеятся двусторонним скотчем изнутри к передней стенке и корешку. Едет плоской, собирается один раз. Клапан держится на скрытых магнитах. Толщина — толщина картона.</p>` : ''}
+    ${box && o.lidType === 'book' && !o.bookFlat ? `<p class="hint">Жёсткая коробка из переплётного картона, оклеенная бумагой: дно, корешок, крышка и передний клапан — один переплёт, клапан держится на скрытых магнитах. Внутри лоток, приклеенный к дну и корешку; его бока видны снаружи (грани «Левый бок», «Правый бок»), перед — при открытой крышке («Лоток: перед»). Толщина — толщина картона.</p>` : ''}
     ${box && !['f0427', 'f0201', 'book', 'casket', 'drawer'].includes(o.lidType) ? `<p class="hint">Стенки толще картона — двойной борт: стенка загибается внутрь, сверху виден сгиб.</p>` : ''}
     ${box && o.lidType === 'f0201' ? `<div class="field wide"><span class="fl">Скотч</span><select data-k="tape">${Object.entries(TAPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div><p class="hint">FEFCO 0201: стенки — одна лента, склеенная клеевым клапаном; сверху и снизу по четыре клапана высотой в половину глубины. Клапаны переда и зада сходятся посередине, боковые — под ними. Грань «Крышка» — две половины на наружных клапанах (рисуйте как на закрытой коробке), «Дно» — так же снизу. Скотч виден, пока коробка закрыта.</p>` : ''}
     ${box && o.lidType === 'f0427' ? `<p class="hint">FEFCO 0427 собирается без клея: боковые стенки и перед двойные, завёрнуты внутрь и встают замками в прорези дна; ушки передней и задней стенок зажаты в боковых. Крышка — на задней стенке, её передний край завёрнут, клапан с пылевыми ушками уходит внутрь за переднюю стенку.</p>` : ''}
@@ -474,7 +476,7 @@ function renderModel() {
       o.lidType = p.lid?.type ?? 'flat';
       for (const [k, v] of [['flapH', p.lid?.flapH], ['lidH', p.lid?.lidH]]) if (v != null) o[k] = v;
       o.lidMat = p.lid?.mat ?? 'board'; o.lidFit = p.lid?.fit ?? 'over'; o.wallT = p.wallT ?? o.thickness;
-      o.earsOn = true; o.earFull = true; o.flute = p.flute || ''; o.tape = p.tape ?? 'clear'; o.lining = p.lining ?? ''; o.pull = p.pull ?? 'ribbon'; o.style = p.lid?.style ?? '';
+      o.earsOn = true; o.earFull = true; o.flute = p.flute || ''; o.tape = p.tape ?? 'clear'; o.lining = p.lining ?? ''; o.bookFlat = !!p.bookFlat; o.pull = p.pull ?? 'ribbon'; o.style = p.lid?.style ?? '';
       if (p.sleeve) { o.sleeve = { ...defaultSleeve(o.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true }; ensureFaces(o); if (p.sleeve.bg) o.faces.sleeve.bg = p.sleeve.bg; }
       if (o.lidType === 'handle') {
         o.handle = applyHandlePreset({ ...defaultHandle(o.dims), ...(p.handle || {}) }, p.handle?.shape || 'arch');

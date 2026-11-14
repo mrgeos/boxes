@@ -9,9 +9,11 @@ import { turnIn } from './rigid.js';
    `left`, `right`), its front `trayFront` is seen with the lid open. Every edge is wrapped, so it is the paper's
    colour. Lengths mm; o.dims is the closed box outside. */
 const bookT = o => clamp(o.thickness, 1, Math.min(o.dims.w, o.dims.h, o.dims.d) / 8);
+/* the collapsible one (o.bookFlat): the tray's walls are boards hinged on the bottom inside the same wrap, flush with
+   its sides; the bottom stops where the front wall stands, the flap comes down in front of both. bd: the bottom's depth */
 function bookDims(o) {
-  const { w, h, d } = o.dims, t = bookT(o), ov = clamp(Math.min(w, d) * .01, 1, 3);
-  return { t, ov, tw: w - 2 * ov, td: d - 2 * t - ov, th: h - 2 * t };
+  const { w, h, d } = o.dims, t = bookT(o), ov = o.bookFlat ? 0 : clamp(Math.min(w, d) * .01, 1, 3);
+  return { t, ov, tw: w - 2 * ov, td: d - 2 * t - ov, th: h - 2 * t, bd: o.bookFlat ? d - t : d };
 }
 function buildBook(o, rt, { add }) {
   const B = bookDims(o), W = o.dims.w * S, H = o.dims.h * S, D = o.dims.d * S, T = B.t * S, P = Math.PI, g = rt.group, F = k => rt.faces[k].mat;
@@ -29,7 +31,8 @@ function buildBook(o, rt, { add }) {
     return b;
   };
   // the case: bottom and spine stay, the lid and the flap swing on the spine's top edge
-  board(g, W, D, F('bottom'), rt.innerMat, [0, T / 2, 0], [P / 2, 0, 0], { face: 'bottom' });
+  const bd = B.bd * S;
+  board(g, W, bd, F('bottom'), rt.innerMat, [0, T / 2, -(D - bd) / 2], [P / 2, 0, 0], { face: 'bottom' });
   board(g, W, H, F('back'), rt.innerMat, [0, H / 2, -D / 2 + T / 2], [0, P, 0], { face: 'back' }, [1, 0, 1, 1]);
   const pivot = new THREE.Group(); pivot.position.set(0, H, -D / 2); g.add(pivot); rt.lidPivot = pivot; rt.lidGroup = null; rt.contact = [];
   board(pivot, W, D, F('top'), F('inside'), [0, -T / 2, D / 2], [-P / 2, 0, 0], { face: 'top' }, [0, 1, 1, 1]);
