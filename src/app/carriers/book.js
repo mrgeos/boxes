@@ -55,6 +55,8 @@ function buildBook(o, rt, { add }) {
   // the wrapped rim of the tray
   add(g, tw, tt, wrap, [0, y0 + th, z0 + td - tt / 2], [-P / 2, 0, 0], { support: 'rimFront' });
   if (!flat) add(g, tw, tt, wrap, [0, y0 + th, z0 + tt / 2], [-P / 2, 0, 0], { support: 'rimBack' });
+  // the collapsible one's front wall stands past the side walls' ends: its own ends are wrapped
+  else for (const sx of [-1, 1]) add(g, tt, th, wrap, [sx * tw / 2, y0 + th / 2, z0 + td - tt / 2], [0, sx * P / 2, 0]);
   for (const sx of [-1, 1]) add(g, tt, idp, wrap, [sx * (tw / 2 - tt / 2), y0 + th, zc], [-P / 2, 0, 0], { support: sx > 0 ? 'rimRight' : 'rimLeft' });
 }
 
@@ -111,14 +113,21 @@ function bookFlatNet(o) {
   panels.push({ key: 'trayFront', x: 0, y: -hg - th, w, h: th, q: 0 }, { key: 'left', x: -hg - th, y: t, w: th, h: sd, q: 3 }, { key: 'right', x: w + hg, y: t, w: th, h: sd, q: 1 });
   fold(0, -hg, w, hg, 1); fold(-hg, t, hg, sd, 1); fold(w, t, hg, sd, 1);
   fold(0, -hg - th - ti, w, ti); fold(-hg - th - ti, t, ti, sd); fold(w + hg + th, t, ti, sd);
+  // narrow turn-ins where the side walls' ears lie beside: the front wall's ends and the spine's sides (they clear the ears)
+  const ea = Math.min(2, th / 4), tn = hg + ea - .5;
+  fold(-tn, -hg - th, tn, th); fold(w, -hg - th, tn, th);
   // the ears: off both ends of each side wall, 2 mm in from the wall's edges, tapering
-  const ew = clamp(th * .6, 6, 25), ea = Math.min(2, th / 4), ta = Math.min(3, th / 4);
+  const ew = clamp(th * .6, 6, 25), ta = Math.min(3, th / 4);
   for (const [on, xl] of [['left', -hg - th], ['right', w + hg]])
     for (const [ye, s] of [[t, -1], [t + sd, 1]])
       tabs.push({ on, kind: 'glue', label: 'скотч', pts: [[xl + ea, ye], [xl + ea + ta, ye + s * ew], [xl + th - ea - ta, ye + s * ew], [xl + th - ea, ye]] });
-  // the turn-ins along the spine (past the back ears), the lid and the flap, and past the flap's end
+  // the turn-ins along the spine (narrow beside the back ears, full past them), the lid and the flap, and past the flap's end
   const y0 = t + sd + ew + 1;
-  for (const p of panels.filter(q => ['back', 'top', 'front'].includes(q.key))) { const ya = Math.max(p.y, y0); fold(-m, ya, m, p.y + p.h - ya); fold(w, ya, m, p.y + p.h - ya); }
+  for (const p of panels.filter(q => ['back', 'top', 'front'].includes(q.key))) {
+    const ya = Math.max(p.y, Math.min(y0, p.y + p.h));
+    if (ya > p.y) { fold(-tn, p.y, tn, ya - p.y); fold(w, p.y, tn, ya - p.y); }
+    if (ya < p.y + p.h) { fold(-m, ya, m, p.y + p.h - ya); fold(w, ya, m, p.y + p.h - ya); }
+  }
   fold(0, y, w, m);
   const all = [...panels.flatMap(p => [[p.x, p.y], [p.x + p.w, p.y + p.h]]), ...tabs.flatMap(tb => tb.pts)];
   const xm = Math.min(...all.map(v => v[0])), ym = Math.min(...all.map(v => v[1]));
@@ -137,6 +146,8 @@ const bookFold = {
   roots: ps => [ps.findIndex(p => p.key === 'bottom')],
   // the bottom stops short of the front by the flap's thickness
   rootAt: o => [0, -(o.dims.d - bookDims(o).bd) / 2],
+  // the lid opens where the model's does: at the spine's top edge, the hinge gap and the flap going with it
+  lidKey: 'hingeLid',
   hinge(par, ch, T) {
     const hg = 2 * T + 1;
     if (ch.key === 'tab') return { ang: 90, a: 0, rank: 2 };

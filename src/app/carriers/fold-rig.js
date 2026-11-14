@@ -324,7 +324,7 @@ function buildRig(o, rt) {
   for (const n of nodes) {
     const p = panels[n.i], par = n.parent, ox = n.ox, oy = n.oy;
     n.ang = rad(n.ang0); n.from = rad(n.from0); n.pts = pieces[n.i].pts;
-    n.lid = !!par && p.key === 'top' && !!rt.lidPivot;   // (the lid of a hinged box opens at its crease)
+    n.lid = !!par && p.key === (tree.fam.lidKey ?? 'top') && !!rt.lidPivot;   // (the lid of a hinged box opens at its crease; a family may name the panel whose crease that is)
     n.content = new THREE.Group();
     if (!par) { n.rot = n.content; n.root.rotG.add(n.content); }
     else {
