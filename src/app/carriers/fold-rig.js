@@ -5,6 +5,7 @@ import { clearLid, faceMM, netLayout } from '../core/model.js';
 import { dieLines } from './box-net.js';
 import { netWindows, tuckOpen } from './box.js';
 import { mailerFold } from './mailer.js';
+import { bookFold } from './book.js';
 import { isCarton } from './carton-net.js';
 import { rscT } from './rsc.js';
 import { rigidT } from './rigid.js';
@@ -155,6 +156,7 @@ function foldFamily(o) {
   if (lt === 'f0201') return rscFold;
   if (lt === 'tuck' && isCarton(o)) return o.style === 'ste' || o.style === 'rte' ? cartonFold : lockFold;
   if (lt === 'casket') return casketFold;
+  if (lt === 'book' && o.bookFlat) return bookFold;
   if (lt === 'handle') return handleFold;
   if (lt === 'hexagon') return hexFold;
   if (lt === 'pyramid') return pyramidFold;
@@ -310,7 +312,8 @@ function buildRig(o, rt) {
     const p = panels[rn.i], [u, v] = faceMid(p), top = p.key === 'top', [fw, fd] = faceMM(o, p.key);
     const rx = rn.ox, ry = rn.oy, [x0, x1, y0, y1] = bbox(nodes.filter(n => n.root === rn));
     const q2 = (((p.q ?? (p.rot ? 2 : 0)) % 4) + 4) % 4 === 2, c = new THREE.Vector3((x0 + x1) / 2 - rx, 0, (y0 + y1) / 2 - ry);
-    const axis = q2 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0), fin = new THREE.Vector3((u - .5) * fw, top ? tree.fam.topY?.(o, T) ?? H + T : 0, (top ? v - .5 : .5 - v) * fd);
+    const axis = q2 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0), fin = new THREE.Vector3((u - .5) * fw, top ? tree.fam.topY?.(o, T) ?? H + T : 0, (top ? v - .5 : .5 - v) * fd), at = tree.fam.rootAt?.(o, p);
+    if (at) fin.add(new THREE.Vector3(at[0], 0, at[1]));
     const qf = new THREE.Quaternion().setFromAxisAngle(axis, top ? 0 : Math.PI);
     const F = new THREE.Group(), R = new THREE.Group(); F.add(R); R.position.set(-c.x * S, 0, -c.z * S); group.add(F);
     roots.push({ node: rn, F, R, flip: !top, late: top ? .3 : 0, axis, hh: q2 ? (x1 - x0) / 2 : (y1 - y0) / 2, flat: [(x0 + x1) / 2 - Gx, (y0 + y1) / 2 - Gy], to: fin.clone().add(c.clone().applyQuaternion(qf)),

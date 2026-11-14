@@ -10,10 +10,12 @@ import { turnIn } from './rigid.js';
    colour. Lengths mm; o.dims is the closed box outside. */
 const bookT = o => clamp(o.thickness, 1, Math.min(o.dims.w, o.dims.h, o.dims.d) / 8);
 /* the collapsible one (o.bookFlat): the tray's walls are boards hinged on the bottom inside the same wrap, flush with
-   its sides; the bottom stops where the front wall stands, the flap comes down in front of both. bd: the bottom's depth */
+   its sides; the bottom stops where the front wall stands, the flap comes down in front of both; the side walls stand between
+   the spine and the front wall (their ears stick inside those) and the spine is the tray's back. bd: the bottom's depth,
+   sd: the side walls' */
 function bookDims(o) {
   const { w, h, d } = o.dims, t = bookT(o), ov = o.bookFlat ? 0 : clamp(Math.min(w, d) * .01, 1, 3);
-  return { t, ov, tw: w - 2 * ov, td: d - 2 * t - ov, th: h - 2 * t, bd: o.bookFlat ? d - t : d };
+  return { t, ov, tw: w - 2 * ov, td: d - 2 * t - ov, th: h - 2 * t, bd: o.bookFlat ? d - t : d, sd: o.bookFlat ? d - 3 * t : d - 2 * t - ov };
 }
 function buildBook(o, rt, { add }) {
   const B = bookDims(o), W = o.dims.w * S, H = o.dims.h * S, D = o.dims.d * S, T = B.t * S, P = Math.PI, g = rt.group, F = k => rt.faces[k].mat;
@@ -38,19 +40,21 @@ function buildBook(o, rt, { add }) {
   board(pivot, W, D, F('top'), F('inside'), [0, -T / 2, D / 2], [-P / 2, 0, 0], { face: 'top' }, [0, 1, 1, 1]);
   board(pivot, W, H - T, F('front'), rt.innerMat, [0, -T - (H - T) / 2, D - T / 2], [0, 0, 0], { face: 'front' }, [0, 1, 1, 1]);
   // the tray: wrapped walls on the bottom, against the spine
-  const tw = B.tw * S, td = B.td * S, th = B.th * S, z0 = -D / 2 + T, zc = z0 + td / 2, y0 = T, tt = T;
+  // (the collapsible one has no back wall of its own: the spine's inside is the tray's back)
+  const flat = !!o.bookFlat, tw = B.tw * S, td = B.td * S, th = B.th * S, sd = B.sd * S, z0 = -D / 2 + T, y0 = T, tt = T;
+  const zb = flat ? z0 : z0 + tt, zf = z0 + td - tt, zc = (zb + zf) / 2, zs = flat ? z0 + sd / 2 : z0 + td / 2;
   add(g, tw, th, F('trayFront'), [0, y0 + th / 2, z0 + td], [0, 0, 0], { face: 'trayFront' });
-  add(g, td, th, F('right'), [tw / 2, y0 + th / 2, zc], [0, P / 2, 0], { face: 'right' });
-  add(g, td, th, F('left'), [-tw / 2, y0 + th / 2, zc], [0, -P / 2, 0], { face: 'left' });
-  const iw = tw - 2 * tt, idp = td - 2 * tt;
-  add(g, iw, th - tt, rt.innerMat, [0, y0 + tt + (th - tt) / 2, z0 + td - tt], [0, P, 0], { face: 'inside', wall: true });
-  add(g, iw, th - tt, rt.innerMat, [0, y0 + tt + (th - tt) / 2, z0 + tt], [0, 0, 0], { face: 'inside', wall: true });
+  add(g, sd, th, F('right'), [tw / 2, y0 + th / 2, zs], [0, P / 2, 0], { face: 'right' });
+  add(g, sd, th, F('left'), [-tw / 2, y0 + th / 2, zs], [0, -P / 2, 0], { face: 'left' });
+  const iw = tw - 2 * tt, idp = zf - zb;
+  add(g, iw, th - tt, rt.innerMat, [0, y0 + tt + (th - tt) / 2, zf], [0, P, 0], { face: 'inside', wall: true });
+  if (!flat) add(g, iw, th - tt, rt.innerMat, [0, y0 + tt + (th - tt) / 2, zb], [0, 0, 0], { face: 'inside', wall: true });
   for (const sx of [-1, 1]) add(g, idp, th - tt, rt.innerMat, [sx * (tw / 2 - tt), y0 + tt + (th - tt) / 2, zc], [0, -sx * P / 2, 0], { face: 'inside', wall: true });
   add(g, iw, idp, F('insideBottom'), [0, y0 + tt, zc], [-P / 2, 0, 0], { face: 'insideBottom' });
   turnIn(add, g, { ax: iw / 2, az: idp / 2, cz: zc, y: y0 + th, dep: Math.min(12, th / S * .5) * S, mat: wrap });
   // the wrapped rim of the tray
   add(g, tw, tt, wrap, [0, y0 + th, z0 + td - tt / 2], [-P / 2, 0, 0], { support: 'rimFront' });
-  add(g, tw, tt, wrap, [0, y0 + th, z0 + tt / 2], [-P / 2, 0, 0], { support: 'rimBack' });
+  if (!flat) add(g, tw, tt, wrap, [0, y0 + th, z0 + tt / 2], [-P / 2, 0, 0], { support: 'rimBack' });
   for (const sx of [-1, 1]) add(g, tt, idp, wrap, [sx * (tw / 2 - tt / 2), y0 + th, zc], [-P / 2, 0, 0], { support: sx > 0 ? 'rimRight' : 'rimLeft' });
 }
 
@@ -90,29 +94,32 @@ function bookNet(o) {
 /* the collapsible one: one wrap. The bottom in the middle, the tray's front wall above it, its sides beside it (hinge gaps
    between the boards), then down from the bottom the spine (upside down), the lid and the flap as in bookNet. The side walls'
    ears carry double-sided tape and stick inside the front wall and the spine; the spine's side turn-ins start past them. */
+// a hinge gap is named by what turns on it (the assembly's steps); its value is the rank it closes at
+const HINGE = { 1: 'hingeWalls', 3: 'hingeBack', 4: 'hingeLid', 5: 'hingeFlap' };
 function bookFlatNet(o) {
-  const { w, h, d } = o.dims, B = bookDims(o), { t, td, th, bd } = B, m = 15, hg = 2 * t + 1, ti = Math.min(12, th * .5), panels = [], tabs = [];
-  const fold = (x, y, fw, fh) => panels.push({ key: 'fold', fold: true, x, y, w: fw, h: fh });
+  const { w, h, d } = o.dims, B = bookDims(o), { t, th, bd } = B, m = 15, hg = 2 * t + 1, ti = Math.min(12, th * .5), panels = [], tabs = [];
+  const { sd } = B, fold = (x, y, fw, fh, gap) => panels.push({ key: gap ? HINGE[gap] : 'fold', fold: true, x, y, w: fw, h: fh, ...(gap ? { gap } : {}) });
   // the case strip, the bottom's front edge at y = 0
   let y = 0;
   const strip = [['bottom', bd, 0], ['back', h, 2], ['top', d, 0], ['front', h - t, 0]];
   strip.forEach(([key, len, q], i) => {
     panels.push({ key, x: 0, y, w, h: len, q });
-    if (i < strip.length - 1) fold(0, y + len, w, hg);
+    if (i < strip.length - 1) fold(0, y + len, w, hg, i + 3);
     y += len + (i < strip.length - 1 ? hg : 0);
   });
-  // the walls: hinge gap, wall, turn-in over its top
-  panels.push({ key: 'trayFront', x: 0, y: -hg - th, w, h: th, q: 0 }, { key: 'left', x: -hg - th, y: 0, w: th, h: td, q: 3 }, { key: 'right', x: w + hg, y: 0, w: th, h: td, q: 1 });
-  fold(0, -hg, w, hg); fold(-hg, 0, hg, td); fold(w, 0, hg, td);
-  fold(0, -hg - th - ti, w, ti); fold(-hg - th - ti, 0, ti, td); fold(w + hg + th, 0, ti, td);
+  // the walls (the sides from the front wall's inside, t in from the bottom's front edge): hinge gap, wall, turn-in over its top
+  panels.push({ key: 'trayFront', x: 0, y: -hg - th, w, h: th, q: 0 }, { key: 'left', x: -hg - th, y: t, w: th, h: sd, q: 3 }, { key: 'right', x: w + hg, y: t, w: th, h: sd, q: 1 });
+  fold(0, -hg, w, hg, 1); fold(-hg, t, hg, sd, 1); fold(w, t, hg, sd, 1);
+  fold(0, -hg - th - ti, w, ti); fold(-hg - th - ti, t, ti, sd); fold(w + hg + th, t, ti, sd);
   // the ears: off both ends of each side wall, 2 mm in from the wall's edges, tapering
   const ew = clamp(th * .6, 6, 25), ea = Math.min(2, th / 4), ta = Math.min(3, th / 4);
   for (const [on, xl] of [['left', -hg - th], ['right', w + hg]])
-    for (const [ye, s] of [[0, -1], [td, 1]])
+    for (const [ye, s] of [[t, -1], [t + sd, 1]])
       tabs.push({ on, kind: 'glue', label: 'скотч', pts: [[xl + ea, ye], [xl + ea + ta, ye + s * ew], [xl + th - ea - ta, ye + s * ew], [xl + th - ea, ye]] });
-  // the turn-ins round the spine, lid and flap (past the back ears) and past the flap's end
-  const y0 = td + ew + 1;
-  fold(-m, y0, m, y - y0); fold(w, y0, m, y - y0); fold(0, y, w, m);
+  // the turn-ins along the spine (past the back ears), the lid and the flap, and past the flap's end
+  const y0 = t + sd + ew + 1;
+  for (const p of panels.filter(q => ['back', 'top', 'front'].includes(q.key))) { const ya = Math.max(p.y, y0); fold(-m, ya, m, p.y + p.h - ya); fold(w, ya, m, p.y + p.h - ya); }
+  fold(0, y, w, m);
   const all = [...panels.flatMap(p => [[p.x, p.y], [p.x + p.w, p.y + p.h]]), ...tabs.flatMap(tb => tb.pts)];
   const xm = Math.min(...all.map(v => v[0])), ym = Math.min(...all.map(v => v[1]));
   for (const p of panels) { p.x -= xm; p.y -= ym; }
@@ -120,4 +127,23 @@ function bookFlatNet(o) {
   return { v: 2, book: true, bookFlat: true, W: Math.max(...all.map(v => v[0])) - xm, H: Math.max(...all.map(v => v[1])) - ym, panels, tabs };
 }
 
-export { bookDims, bookFlatNet, bookNet, buildBook };
+/* the collapsible one folds from the flat cross: the walls stand up (rank 1), their ears turn in (2), the spine rises (3), the lid
+   comes over (4), the flap down (5). A board after a hinge gap goes on straight and slides back over the gap to where its board
+   stands (on the bottom's board for the walls, on the floor for the spine, from the back edge for the lid, under the lid
+   for the flap). The turn-ins were glued
+   down when the blank was made. */
+const bookFold = {
+  T: o => bookT(o),
+  roots: ps => [ps.findIndex(p => p.key === 'bottom')],
+  // the bottom stops short of the front by the flap's thickness
+  rootAt: o => [0, -(o.dims.d - bookDims(o).bd) / 2],
+  hinge(par, ch, T) {
+    const hg = 2 * T + 1;
+    if (ch.key === 'tab') return { ang: 90, a: 0, rank: 2 };
+    if (ch.gap) return { ang: 90, a: 0, rank: ch.gap };
+    if (ch.key === 'fold') return { ang: 180, from: 180, a: T, rank: 1 };
+    return { ang: 0, a: 0, d: ch.key === 'back' || ch.key === 'top' ? hg : hg - T, rank: par.gap ?? 1 };
+  },
+};
+
+export { bookDims, bookFlatNet, bookFold, bookNet, buildBook };

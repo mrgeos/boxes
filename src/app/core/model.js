@@ -222,7 +222,8 @@ function faceMM(o, k) {
     return k === 'wrap' ? [X.P, h] : k === 'lidWrap' ? [X.PL, X.lh] : k === 'top' ? [w + g, d + g] : [w, d];
   }
   if (o.lidType === 'casket' && (LID_WALLS.includes(k) || ['front', 'back', 'left', 'right'].includes(k))) { const lh = casketLidH(o), hh = LID_WALLS.includes(k) ? lh : h - lh; return [k === 'left' || k === 'right' || k === 'lidLeft' || k === 'lidRight' ? d : w, hh]; }
-  if (o.lidType === 'book' && (k === 'front' || k === 'trayFront' || k === 'left' || k === 'right')) { const B = bookDims(o); return k === 'front' ? [w, h - B.t] : k === 'trayFront' ? [B.tw, B.th] : [B.td, B.th]; }
+  if (o.lidType === 'book' && (k === 'front' || k === 'trayFront' || k === 'left' || k === 'right')) { const B = bookDims(o); return k === 'front' ? [w, h - B.t] : k === 'trayFront' ? [B.tw, B.th] : [B.sd, B.th]; }
+  if (o.lidType === 'book' && o.bookFlat && k === 'bottom') return [w, bookDims(o).bd];
   if (k === 'front' || k === 'back') return [w, h];
   if (k === 'left' || k === 'right') return [d, h];
   const tele = o.lidType === 'telescope', inLid = tele && o.lidMat === 'clear' && o.lidFit === 'inside';
