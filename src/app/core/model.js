@@ -102,7 +102,7 @@ function ensureFaces(o) {
     o.lidFit ??= 'over';
     o.tape ??= 'clear';
     o.style ??= '';
-    o.lining ??= ''; o.pull ??= 'ribbon'; o.pullColor ??= '#b8461b';
+    o.lining ??= ''; o.bookFlat ??= false; o.pull ??= 'ribbon'; o.pullColor ??= '#b8461b';
     if (o.lidType === 'gable') { o.roofH ??= Math.round(o.dims.d * .45); o.gripH ??= Math.round(Math.min(80, o.dims.w * .3)); }
     if (o.lidType === 'pyramid' || o.lidType === 'hexagon') o.sides ??= o.lidType === 'pyramid' ? 4 : 6;
     o.handle ??= defaultHandle(o.dims);
@@ -154,7 +154,7 @@ function newObject(presetId = 'mailer') {
     sleeve: p.sleeve ? { ...defaultSleeve(p.dims), ...p.sleeve, handle: { ...defaultSleeveHandle(), ...(p.sleeve.handle || {}) }, on: true } : undefined,
     handle: p.handle ? applyHandlePreset({ ...defaultHandle(p.dims), ...p.handle }, p.handle.shape || 'arch') : undefined,
     frontWin: p.frontWin ? { ...defaultFrontWin(p.dims), ...p.frontWin } : undefined,
-    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2, flute: p.flute || '', style: p.lid?.style || '', tape: p.tape, lining: p.lining, pull: p.pull, sides: p.sides };
+    lidType: p.lid?.type ?? 'flat', flapH: p.lid?.flapH, lidH: p.lid?.lidH, lidMat: p.lid?.mat ?? 'board', lidFit: p.lid?.fit ?? 'over', wallT: p.wallT ?? p.thick ?? 2, flute: p.flute || '', style: p.lid?.style || '', tape: p.tape, lining: p.lining, bookFlat: !!p.bookFlat, pull: p.pull, sides: p.sides };
   if (p.bag) applyBagPreset(o, p);
   if (p.dome) applyDomePreset(o, p);
   if (p.tray) applyTrayPreset(o, p);
@@ -222,7 +222,8 @@ function faceMM(o, k) {
     return k === 'wrap' ? [X.P, h] : k === 'lidWrap' ? [X.PL, X.lh] : k === 'top' ? [w + g, d + g] : [w, d];
   }
   if (o.lidType === 'casket' && (LID_WALLS.includes(k) || ['front', 'back', 'left', 'right'].includes(k))) { const lh = casketLidH(o), hh = LID_WALLS.includes(k) ? lh : h - lh; return [k === 'left' || k === 'right' || k === 'lidLeft' || k === 'lidRight' ? d : w, hh]; }
-  if (o.lidType === 'book' && (k === 'front' || k === 'trayFront' || k === 'left' || k === 'right')) { const B = bookDims(o); return k === 'front' ? [w, h - B.t] : k === 'trayFront' ? [B.tw, B.th] : [B.td, B.th]; }
+  if (o.lidType === 'book' && (k === 'front' || k === 'trayFront' || k === 'left' || k === 'right')) { const B = bookDims(o); return k === 'front' ? [w, h - B.t] : k === 'trayFront' ? [B.tw, B.th] : [B.sd, B.th]; }
+  if (o.lidType === 'book' && o.bookFlat && k === 'bottom') return [w, bookDims(o).bd];
   if (k === 'front' || k === 'back') return [w, h];
   if (k === 'left' || k === 'right') return [d, h];
   const tele = o.lidType === 'telescope', inLid = tele && o.lidMat === 'clear' && o.lidFit === 'inside';

@@ -89,6 +89,7 @@ const PRESETS = [
   { id: 'shipping', label: 'Гофрокороб FEFCO 0201', type: 'box', dims: { w: 400, h: 300, d: 300 }, finish: 'kraft', edge: '#a87f50', thick: 4, flute: 'C', lid: { type: 'f0201' }, tape: 'clear' },
   { id: 'bookMagnet', label: 'Коробка-книжка на магните', type: 'box', dims: { w: 220, h: 70, d: 160 }, finish: 'soft', edge: '#1f2a36', thick: 2, board: '#1f2a36', whiteInside: false, lid: { type: 'book' } },
   { id: 'bookMagnetWhite', label: 'Коробка-книжка белая 300×100×220', type: 'box', dims: { w: 300, h: 100, d: 220 }, finish: 'matte', edge: '#f4f1e9', thick: 2, board: '#f4f1e9', lid: { type: 'book' } },
+  { id: 'bookFlat', label: 'Коробка-книжка сборная (плоская)', type: 'box', dims: { w: 220, h: 70, d: 160 }, finish: 'soft', edge: '#1f2a36', thick: 2, board: '#1f2a36', whiteInside: false, bookFlat: true, lid: { type: 'book' } },
   { id: 'casket', label: 'Шкатулка с бархатом 160×120×60', type: 'box', dims: { w: 160, h: 60, d: 120 }, finish: 'soft', edge: '#2a2a2e', thick: 2, board: '#2a2a2e', lining: '#5b1a2a', lid: { type: 'casket', lidH: 22 } },
   { id: 'drawerBox', label: 'Коробка с выдвижным ящиком 200×140×60', type: 'box', dims: { w: 200, h: 60, d: 140 }, finish: 'matte', edge: '#f4f1e9', thick: 1.5, board: '#f4f1e9', pull: 'ribbon', lid: { type: 'drawer' } },
   { id: 'pillow', label: 'Коробка-подушка 100×180×35', type: 'box', dims: { w: 100, h: 35, d: 180 }, finish: 'matte', edge: '#e2ddd4', thick: .4, board: '#f2a9b4', lid: { type: 'pillow' } },
