@@ -236,6 +236,8 @@ function faceMM(o, k) {
     return k === 'flap' ? [ld.wl, ld.fh] : k.startsWith('ear') ? [ld.el, ld.fh] : [ld.wl, ld.dl];
   }
   if (k === 'flap' && o.lidType === 'f0427') { const m = mailerDims(o); return [m.fw, m.fh]; }
+  // the mailer's lid ends at the front wall's inner face
+  if ((k === 'top' || k === 'inside') && o.lidType === 'f0427') return [w, d - mailerDims(o).wf];
   if (k === 'flap') return [w, clamp(o.flapH, 3, h)];
   const lh = clamp(o.lidH, 3, o.lidMat === 'clear' ? 1000 : h);
   if (k === 'lidFront' || k === 'lidBack') return [lw, lh];
