@@ -9,8 +9,9 @@ import { netLayout } from '../core/model.js';
 /* FEFCO 0427, the folding mailer: one blank, no glue. The bottom is in the middle. The side walls are double: the
    outer wall rises from the bottom, rolls over at the top and comes down inside, its locks going into slots in the
    bottom; the ears of the front and back walls are held between the two layers. The front wall is double too
-   (rolled in, locked into the bottom). The back wall is single and carries the lid. The lid's front edge is rolled
-   under, and the tuck flap goes down inside the front wall, its dust ears inside the side walls.
+   (rolled in, locked into the bottom). The back wall is single and carries the lid. The lid ends at the front wall's
+   inner face (the wall's rolled top shows in front of it); the tuck flap is creased off the lid's front edge and goes
+   down inside the front wall, its dust ears inside the side walls.
    Lengths in mm; the outside of the box is o.dims. */
 function mailerDims(o) {
   const { w, h, d } = o.dims, t = clamp(o.thickness, .3, Math.min(w, h, d) / 8);
@@ -36,7 +37,7 @@ function buildMailer(o, rt, { addG, add }) {
   addG(g, planeGeo(iw, ih, back && notchPts(iw, ih, ww / 2, wbH, wbR, 'top'), 'top'), rt.innerMat, [0, iy, -D / 2 + WB], [0, 0, 0], { face: 'inside', wall: true });
   for (const sx of [-1, 1]) add(g, sd, ih, rt.foldMat, [sx * (W / 2 - WS), iy, sz], [0, -sx * P / 2, 0], { face: 'inside', wall: true });
   add(g, iw, D - WF - WB, F('insideBottom'), [0, T, (WB - WF) / 2], [-P / 2, 0, 0], { face: 'insideBottom' });
-  // the rolled tops of the walls and the crease of the lid
+  // the rolled tops of the walls (the front one shows in front of the closed lid) and the crease of the lid
   add(g, iw, WF, rt.foldMat, [0, H, D / 2 - WF / 2], [-P / 2, 0, 0], { support: 'rimFront' });
   if (back) {
     // the back wall's crease to the lid, split by the window, and the window's edge through the board
@@ -46,29 +47,33 @@ function buildMailer(o, rt, { addG, add }) {
     film(g, notch, [0, H / 2, -D / 2 + WB / 2], [0, P, 0]);
   } else add(g, iw, WB, rt.foldMat, [0, H, -D / 2 + WB / 2], [-P / 2, 0, 0], { support: 'rimBack' });
   for (const sx of [-1, 1]) add(g, WS, D, rt.foldMat, [sx * (W / 2 - WS / 2), H, 0], [-P / 2, 0, 0], { support: sx > 0 ? 'rimRight' : 'rimLeft' });
-  // the lid, hinged at the top of the back wall
-  const pivot = new THREE.Group(); pivot.position.set(0, H, -D / 2); g.add(pivot); rt.lidPivot = pivot; rt.lidGroup = null; rt.contact = [];
+  // the lid, hinged at the top of the back wall; it ends at the inner face of the double front wall (LD deep). It turns
+  // about the crease's inner corner, as the fold rig has it: opened 90°, its print is flush with the back wall's
+  const hinge = new THREE.Group(); hinge.position.set(0, H, -D / 2 + T); g.add(hinge); rt.lidPivot = hinge; rt.lidGroup = null; rt.contact = [];
+  const pivot = new THREE.Group(); pivot.position.z = -T; hinge.add(pivot);
+  const LD = D - WF, FH = M.fh * S, FW = M.fw * S;
   const hole = win?.place === 'lid' && [rrectPts(0, -win.off * S, win.ww * S, win.wd * S, win.r * S)], holeIn = hole && hole.map(q => q.map(v => V2(v.x, -v.y)));
-  const wd = back ? back.wd * S : 0, lidNotch = back && notchPts(W, D, ww / 2, wd, wr, 'top');
-  addG(pivot, hole ? planeGeoHole(W, D, hole) : planeGeo(W, D, lidNotch, 'top'), F('top'), [0, T, D / 2], [-P / 2, 0, 0], { face: 'top' });
-  addG(pivot, holeIn ? planeGeoHole(W, D, holeIn) : planeGeo(W, D, back && notchPts(W, D, ww / 2, wd, wr, 'bottom'), 'bottom'), F('inside'), [0, 0, D / 2], [P / 2, 0, 0], { face: 'inside' });
+  const wd = back ? back.wd * S : 0, lidNotch = back && notchPts(W, LD, ww / 2, wd, wr, 'top');
+  addG(pivot, hole ? planeGeoHole(W, LD, hole) : planeGeo(W, LD, lidNotch, 'top'), F('top'), [0, T, LD / 2], [-P / 2, 0, 0], { face: 'top' });
+  addG(pivot, holeIn ? planeGeoHole(W, LD, holeIn) : planeGeo(W, LD, back && notchPts(W, LD, ww / 2, wd, wr, 'bottom'), 'bottom'), F('inside'), [0, 0, LD / 2], [P / 2, 0, 0], { face: 'inside' });
   if (hole) {
     const loop = [...hole[0], hole[0][0]];
-    addG(pivot, ribbonGeo(loop.map(v => [v.x, T, D / 2 - v.y]), loop.map(v => [v.x, 0, D / 2 - v.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+    addG(pivot, ribbonGeo(loop.map(v => [v.x, T, LD / 2 - v.y]), loop.map(v => [v.x, 0, LD / 2 - v.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
     const film = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(hole[0])), rt.filmMat);
-    film.position.set(0, T / 2, D / 2); film.rotation.set(-P / 2, 0, 0); film.renderOrder = 2; film.raycast = () => {}; pivot.add(film);
+    film.position.set(0, T / 2, LD / 2); film.rotation.set(-P / 2, 0, 0); film.renderOrder = 2; film.raycast = () => {}; pivot.add(film);
   }
-  // the rolled front edge, the hinge, the cut sides
-  add(pivot, W, T, rt.foldMat, [0, T / 2, D], [0, 0, 0]);
+  // the front edge: the crease to the flap, cut beside it (where the dust ears come off the flap); the hinge, the cut sides
+  add(pivot, FW, T, rt.foldMat, [0, T / 2, LD], [0, 0, 0]);
+  for (const sx of [-1, 1]) add(pivot, (W - FW) / 2, T, rt.edgeMat, [sx * (W + FW) / 4, T / 2, LD], [0, 0, 0]);
   if (lidNotch) {
     const sw = (W - ww) / 2;
     for (const sx of [-1, 1]) add(pivot, sw, T, rt.foldMat, [sx * (ww / 2 + sw / 2), T / 2, 0], [0, P, 0]);
-    addG(pivot, ribbonGeo(lidNotch.map(p => [p.x, T, D / 2 - p.y]), lidNotch.map(p => [p.x, 0, D / 2 - p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
-    film(pivot, lidNotch, [0, T / 2, D / 2], [-P / 2, 0, 0]);
+    addG(pivot, ribbonGeo(lidNotch.map(p => [p.x, T, LD / 2 - p.y]), lidNotch.map(p => [p.x, 0, LD / 2 - p.y])), rt.edgeMat, [0, 0, 0], [0, 0, 0]);
+    film(pivot, lidNotch, [0, T / 2, LD / 2], [-P / 2, 0, 0]);
   } else add(pivot, W, T, rt.foldMat, [0, T / 2, 0], [0, P, 0]);
-  for (const sx of [-1, 1]) add(pivot, D, T, rt.edgeMat, [sx * W / 2, T / 2, D / 2], [0, sx * P / 2, 0]);
-  // the tuck flap inside the front wall, its print toward the wall
-  const FH = M.fh * S, FW = M.fw * S, z = D - WF, fp = new THREE.Group(); fp.position.set(0, 0, z); pivot.add(fp); rt.tuck = { g: fp, fh: M.fh, reach: o.dims.d - M.wf };
+  for (const sx of [-1, 1]) add(pivot, LD, T, rt.edgeMat, [sx * W / 2, T / 2, LD / 2], [0, sx * P / 2, 0]);
+  // the tuck flap off the lid's front edge, inside the front wall, its print toward the wall
+  const fp = new THREE.Group(); fp.position.set(0, 0, LD); pivot.add(fp); rt.tuck = { g: fp, fh: M.fh, reach: o.dims.d - M.wf - M.t };
   add(fp, FW, FH, F('flap'), [0, -FH / 2, 0], [0, 0, 0], { face: 'flap' });
   add(fp, FW, FH, rt.innerMat, [0, -FH / 2, -T], [0, P, 0], { face: 'inside', wall: true });
   add(fp, FW, T, rt.edgeMat, [0, -FH, -T / 2], [P / 2, 0, 0]);
@@ -90,7 +95,7 @@ function buildMailer(o, rt, { addG, add }) {
 
 /* the blank: the bottom in the middle (with the slots for the locks), the walls round it, each double wall rolled
    beyond its outer wall (the rim, the inner wall, the locks); the ears on the ends of the front and back walls; the
-   lid off the back wall, its rolled front edge, the tuck flap and the flap's dust ears */
+   lid off the back wall (as deep as the box less the front wall's rim), the tuck flap on its front edge and the flap's dust ears */
 function mailerNet(o) {
   const { w, h, d } = o.dims, { t, wf, ws, fh, fw, el, dl } = mailerDims(o), panels = [];
   const ih = h - t, lk = 2 * t + 2, slot = t + .6, rect = (x, y, W, H) => [[x, y], [x + W, y], [x + W, y + H], [x, y + H]];
@@ -108,8 +113,8 @@ function mailerNet(o) {
   // the back wall and its lid
   panels.push({ key: 'back', x: 0, y: d, w, h, q: 2 });
   const ly = d + h;
-  panels.push({ key: 'top', x: 0, y: ly, w, h: d, q: 0 }, { key: 'fold', fold: true, x: 0, y: ly + d, w, h: wf });
-  const fx = (w - fw) / 2, fy = ly + d + wf, c = Math.min(fh * .35, 8);
+  panels.push({ key: 'top', x: 0, y: ly, w, h: d - wf, q: 0 });
+  const fx = (w - fw) / 2, fy = ly + d - wf, c = Math.min(fh * .35, 8);
   panels.push({ key: 'flap', x: fx, y: fy, w: fw, h: fh, q: 0, poly: [[fx, fy], [fx + fw, fy], [fx + fw, fy + fh - c], [fx + fw - c, fy + fh], [fx + c, fy + fh], [fx, fy + fh - c]] });
   const dc = Math.min(fh, dl) * .45;
   panels.push({ key: 'dust', blank: 'ушко', fs: 4, joins: ['flap'], x: fx - dl, y: fy, w: dl, h: fh, poly: [[fx - dl, fy], [fx, fy], [fx, fy + fh], [fx - dl + dc, fy + fh], [fx - dl, fy + fh - dc]] },
@@ -143,8 +148,8 @@ function mailerNet(o) {
 /* how the blank folds (carriers/fold-rig.js): ang is the turn of a panel from its parent in degrees, positive away from
    the print side, negative toward it; a shifts the crease from the print side by that many mm (+ toward the back of the
    board: a panel that lies on top of its parent, - the other way: a panel that lands inside it). Every crease is 90°
-   but the lid's rolled lip (180°, under the lid), the tuck flap (hangs down from the lip, toward its print), and the
-   locks, which stay straight and go through the slots in the bottom */
+   but the locks, which stay straight and go through the slots in the bottom. The tuck flap turns down off the lid's
+   front edge, its print flush with it, and starts below the lid's board (d), as the model has it */
 const mailerFold = {
   T: o => mailerDims(o).t,
   roots: ps => [ps.findIndex(p => p.key === 'bottom')],
@@ -153,8 +158,7 @@ const mailerFold = {
     if (k === 'lock') return { ang: 0, a: 0 };
     if (k === 'ear') return { ang: 90, a: -T };
     if (k === 'top') return { ang: 90, a: T, d: T };
-    if (k === 'flap') { const M = mailerDims(o); return { ang: -90, a: 0, d: T, opens: lid => tuckOpen(lid, M.fh, o.dims.d - M.wf) }; }
-    if (k === 'fold') return par.key === 'top' ? { ang: 180, a: T } : { ang: 90, a: 0 };
+    if (k === 'flap') { const M = mailerDims(o); return { ang: 90, a: 0, d: -T, opens: lid => -tuckOpen(lid, M.fh, o.dims.d - M.wf - M.t) }; }
     return { ang: 90, a: 0 };
   },
 };
